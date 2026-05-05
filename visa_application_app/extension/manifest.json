@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Visa Application Autofill",
+  "version": "0.1.0",
+  "description": "申請情報を在留申請オンラインシステムのフォームへ自動入力します。",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": [
+    "https://www.rasens-immi.moj.go.jp/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Visa Autofill"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.rasens-immi.moj.go.jp/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["application_data.json"],
+      "matches": ["https://www.rasens-immi.moj.go.jp/*"]
+    }
+  ]
+}
