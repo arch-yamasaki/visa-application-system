@@ -1,0 +1,83 @@
+# Local secrets
+.secret
+.env
+.env.*
+.credentials
+.secrets/
+
+# macOS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Extracted/source application data
+visa_application_app/data/
+visa_application_app/reference/
+visa_test/
+
+# Sensitive generated extension data
+visa_application_app/extension/application_data.json
+
+# Source documents and tabular exports
+*.pdf
+*.doc
+*.docx
+*.ppt
+*.pptx
+*.odt
+*.rtf
+*.csv
+*.tsv
+*.xlsx
+*.xls
+*.xlsm
+*.mhtml
+*.msg
+*.eml
+
+# Images and screen captures
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.heic
+*.heif
+*.tif
+*.tiff
+
+# Archives and binary exports
+*.zip
+*.7z
+*.rar
+*.tar
+*.gz
+*.tgz
+*.bz2
+*.xz
+
+# Audio / video / recordings
+*.mp3
+*.wav
+*.m4a
+*.mp4
+*.mov
+*.avi
+*.mkv
+
+# Logs and caches
+*.log
+.history/
+.idea/
+.vscode/
+.cache/
+.pytest_cache/
+__pycache__/
+node_modules/
+*.sqlite
+*.sqlite3
+*.db
+*.bak
+*.tmp
+*.swp
+*~
