@@ -1,0 +1,147 @@
+{
+  "schema_version": "1.0",
+  "case": {
+    "case_id": "demo-gijinkoku-001",
+    "intake_channel": "recruiting_agency",
+    "source_organization": "Demo Recruiting Agency",
+    "application_type": "certificate_of_eligibility",
+    "target_status": "engineer_humanities_international",
+    "workflow_state": "ready_to_fill",
+    "routed_to_human_reason": []
+  },
+  "application": {
+    "desired_status_label": "技術・人文知識・国際業務",
+    "purpose_of_entry": "技術・人文知識・国際業務",
+    "planned_entry_date": "2026-08-01",
+    "planned_port": "関西国際空港",
+    "planned_period_years": "5",
+    "planned_period_months": "0",
+    "visa_application_location": "ハノイ",
+    "activity_details": "技術総合職として、製造設備の制御設計、品質管理、工程改善に関する資料作成及び海外拠点との技術連絡業務に従事します。",
+    "activity_details_structured": {
+      "department": "技術管理部",
+      "role": "技術総合職",
+      "duties": ["制御設計補助", "品質管理", "工程改善資料作成", "海外拠点との技術連絡"],
+      "simple_labor_risk_terms": []
+    }
+  },
+  "applicant": {
+    "nationality_region": "ベトナム Viet Nam",
+    "birth_date": "2000-04-15",
+    "name_roman": "NGUYEN VAN DEMO",
+    "name_kanji": "",
+    "sex": "male",
+    "birth_place": "HANOI",
+    "marital_status": "single",
+    "occupation": "会社員",
+    "home_country_address": "Hanoi, Viet Nam",
+    "japan_contact": {
+      "postal_code": "5300001",
+      "address": "大阪府大阪市北区梅田1-1-1",
+      "phone": "0660000000",
+      "mobile": "09000000000",
+      "email": "demo.applicant@example.com"
+    }
+  },
+  "passport": {
+    "number": "P0000000",
+    "expiry_date": "2030-04-14"
+  },
+  "residence_card": {
+    "number": "",
+    "status": "",
+    "expiry_date": ""
+  },
+  "family": {
+    "has_accompanying_members": false,
+    "has_japan_relatives_or_cohabitants": false,
+    "japan_relatives_or_cohabitants": []
+  },
+  "immigration_history": {
+    "has_entries": true,
+    "entries_count": 1,
+    "latest_entry": {
+      "start_date": "2024-06-01",
+      "end_date": "2024-06-10"
+    },
+    "prior_coe_applications": {
+      "has_history": false,
+      "count": 0,
+      "denial_count": 0
+    },
+    "criminal_record": false,
+    "deportation_or_departure_order": false
+  },
+  "education": [
+    {
+      "id": "edu_01",
+      "level": "university",
+      "school_name": "Demo University of Technology",
+      "major": "Mechanical Engineering",
+      "graduation_date": "2023-03-31",
+      "source_refs": ["demo_transcript.pdf#p1"]
+    }
+  ],
+  "transcript_subjects": [
+    { "name": "Control Engineering", "matched_duty": "制御設計補助" },
+    { "name": "Quality Management", "matched_duty": "品質管理" }
+  ],
+  "employment_history": [
+    {
+      "id": "emp_01",
+      "country_region": "ベトナム Viet Nam",
+      "start_date": "2023-04",
+      "end_date": "2026-03",
+      "company_name_en": "Demo Engineering Co., Ltd.",
+      "company_name_local": "Demo Engineering Co., Ltd.",
+      "duties": ["製造設備の設計補助", "品質管理資料作成"]
+    }
+  ],
+  "qualifications": [
+    {
+      "type": "language",
+      "name": "JLPT",
+      "level": "N2",
+      "issue_date": "2025-01-31"
+    }
+  ],
+  "employer": {
+    "name": "デモテクノロジー株式会社",
+    "corporate_number": "1234567890123",
+    "office_name": "大阪本社",
+    "employment_insurance_office_number": "2700-000000-0",
+    "industry_primary": "製造業",
+    "postal_code": "5300001",
+    "address": "大阪府大阪市北区梅田1-1-1",
+    "phone": "0660000000",
+    "capital_jpy": 10000000,
+    "annual_sales_jpy": 250000000,
+    "employee_count": 80,
+    "foreign_employee_count": 8,
+    "technical_intern_count": 0,
+    "category": "category_3"
+  },
+  "proxy": {
+    "name": "デモ 太郎",
+    "relationship": "取次者",
+    "postal_code": "5300001",
+    "address": "大阪府大阪市北区梅田1-1-1",
+    "phone": "0660000000",
+    "mobile": "09000000000"
+  },
+  "supporting_documents": [
+    { "document_type": "passport", "status": "received", "source": "demo_passport.pdf" },
+    { "document_type": "resume", "status": "received", "source": "demo_resume.pdf" },
+    { "document_type": "graduation_certificate", "status": "received", "source": "demo_graduation.pdf" },
+    { "document_type": "transcript", "status": "received", "source": "demo_transcript.pdf" },
+    { "document_type": "employment_contract", "status": "received", "source": "demo_employment_contract.pdf" }
+  ],
+  "assessments": [
+    {
+      "type": "gijinkoku_fit",
+      "status": "ok",
+      "summary": "専攻科目と活動内容の対応があり、単純労働リスク語は検出されていない。"
+    }
+  ],
+  "field_metadata": {}
+}

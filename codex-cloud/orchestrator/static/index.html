@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Codex Runner</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+  background: #fafafa;
+  color: #222;
+}
+.wrap { max-width: 720px; margin: 48px auto; padding: 0 16px; }
+textarea {
+  width: 100%;
+  min-height: 100px;
+  padding: 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 14px;
+  resize: vertical;
+}
+textarea:focus { outline: none; border-color: #333; }
+.bar { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+button {
+  padding: 8px 20px;
+  border: none;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  background: #222;
+  color: #fff;
+}
+button:hover { background: #444; }
+button:disabled { background: #aaa; cursor: default; }
+.status { font-size: 13px; color: #888; }
+.status .dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.dot-queued { background: #bbb; }
+.dot-running { background: #4a90d9; animation: pulse 1s infinite; }
+.dot-completed { background: #4caf50; }
+.dot-failed { background: #e53935; }
+@keyframes pulse { 50% { opacity: .4; } }
+.result {
+  margin-top: 24px;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 14px;
+  line-height: 1.7;
+  max-height: 60vh;
+  overflow-y: auto;
+  display: none;
+}
+.err {
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: #fde8e8;
+  color: #c62828;
+  border-radius: 4px;
+  font-size: 13px;
+  display: none;
+}
+.history { margin-top: 40px; border-top: 1px solid #e0e0e0; padding-top: 20px; }
+.history h3 { font-size: 13px; color: #999; font-weight: 500; margin-bottom: 8px; }
+.history ul { list-style: none; }
+.history li {
+  padding: 6px 0;
+  font-size: 13px;
+  color: #555;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.history li:hover { color: #000; }
+.history .prompt-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <textarea id="input" placeholder="Codex に実行させたいことを書く"></textarea>
+  <div class="bar">
+    <button id="btn" onclick="submit()">Run</button>
+    <span id="status" class="status"></span>
+  </div>
+  <div id="err" class="err"></div>
+  <pre id="result" class="result"></pre>
+  <div id="files" style="display:none; margin-top:16px;">
+    <div style="font-size:13px; color:#999; margin-bottom:6px;">生成ファイル</div>
+    <ul id="file-list" style="list-style:none; font-size:13px;"></ul>
+  </div>
+  <div class="history">
+    <h3>履歴</h3>
+    <ul id="hist"></ul>
+  </div>
+</div>
+<script>
+const API = "";
+let poll = null;
+
+async function submit() {
+  const input = document.getElementById("input");
+  const prompt = input.value.trim();
+  if (!prompt) return;
+  const btn = document.getElementById("btn");
+  btn.disabled = true;
+  hide("err"); hide("result"); hide("files");
+  setStatus("queued");
+  try {
+    const r = await fetch(`${API}/sessions`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({prompt})
+    });
+    if (!r.ok) throw new Error(`${r.status}`);
+    const d = await r.json();
+    startPoll(d.session_id);
+  } catch(e) { showErr(e.message); btn.disabled = false; }
+}
+
+function startPoll(id) {
+  if (poll) clearInterval(poll);
+  poll = setInterval(() => checkSession(id), 3000);
+}
+
+async function checkSession(id) {
+  try {
+    const r = await fetch(`${API}/sessions/${id}`);
+    const d = await r.json();
+    const s = d.status || "queued";
+    setStatus(s);
+    if (s === "completed") {
+      stop(); await showResult(id); loadHist();
+      document.getElementById("btn").disabled = false;
+    } else if (s === "failed" || s === "launch_failed") {
+      stop(); showErr("failed"); loadHist();
+      document.getElementById("btn").disabled = false;
+    }
+  } catch(e) { stop(); showErr(e.message); document.getElementById("btn").disabled = false; }
+}
+
+async function showResult(id) {
+  const r = await fetch(`${API}/sessions/${id}/result`);
+  const d = await r.json();
+  const el = document.getElementById("result");
+  el.textContent = d.result || "(no output)";
+  el.style.display = "block";
+  await showFiles(id);
+}
+
+async function showFiles(id) {
+  try {
+    const r = await fetch(`${API}/sessions/${id}/files`);
+    if (!r.ok) { document.getElementById("files").style.display = "none"; return; }
+    const d = await r.json();
+    if (!d.files || !d.files.length) { document.getElementById("files").style.display = "none"; return; }
+    const ul = document.getElementById("file-list");
+    ul.innerHTML = d.files.map(f => {
+      const url = `${API}/sessions/${id}/files/${encodeURIComponent(f)}`;
+      return `<li style="margin:4px 0"><a href="${url}" download style="color:#4a90d9;text-decoration:none;">${esc(f)}</a></li>`;
+    }).join("");
+    document.getElementById("files").style.display = "block";
+  } catch(e) { document.getElementById("files").style.display = "none"; }
+}
+
+async function viewSession(id) {
+  hide("err"); hide("result"); hide("files");
+  setStatus("...");
+  const r = await fetch(`${API}/sessions/${id}`);
+  const d = await r.json();
+  const s = d.status || "queued";
+  setStatus(s);
+  if (s === "completed") await showResult(id);
+  else if (s === "running" || s === "queued") startPoll(id);
+}
+
+async function loadHist() {
+  try {
+    const r = await fetch(`${API}/sessions`);
+    const list = await r.json();
+    const ul = document.getElementById("hist");
+    if (!list.length) { ul.innerHTML = '<li style="color:#bbb">-</li>'; return; }
+    ul.innerHTML = list.map(s => {
+      const t = esc(s.prompt_preview || s.session_id || "-");
+      const short = t.length > 60 ? t.slice(0,60)+"..." : t;
+      const cls = "dot-" + (s.status || "queued");
+      return `<li onclick="viewSession('${esc(s.session_id)}')"><span class="dot ${cls}"></span><span class="prompt-text">${short}</span></li>`;
+    }).join("");
+  } catch(e) {}
+}
+
+function setStatus(s) {
+  const cls = "dot-" + s;
+  document.getElementById("status").innerHTML = `<span class="dot ${cls}"></span>${s}`;
+}
+function showErr(m) { const e=document.getElementById("err"); e.textContent=m; e.style.display="block"; }
+function hide(id) { document.getElementById(id).style.display="none"; }
+function stop() { if(poll){clearInterval(poll);poll=null;} }
+function esc(t) { const d=document.createElement("div"); d.textContent=t; return d.innerHTML; }
+
+document.getElementById("input").addEventListener("keydown", e => {
+  if ((e.ctrlKey||e.metaKey) && e.key==="Enter") { e.preventDefault(); submit(); }
+});
+loadHist();
+</script>
+</body>
+</html>

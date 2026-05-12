@@ -10,13 +10,21 @@
 Thumbs.db
 Desktop.ini
 
-# Extracted/source application data
-visa_application_app/data/
-visa_application_app/reference/
-visa_test/
+# Local/restricted evaluation workspace
+visa-eval/raw/
+visa-eval/catalog.json
+visa-eval/fixtures_single/*
+!visa-eval/fixtures_single/README.md
+visa-eval/runs/
+visa-eval/**/generated/
+rasens-autofill/reference/
+
+# Local captures / one-off exports
+rasens-autofill/data/application_data.csv
+rasens-autofill/data/pdf_pages/
 
 # Sensitive generated extension data
-visa_application_app/extension/application_data.json
+rasens-autofill/extension/application_data.json
 
 # Source documents and tabular exports
 *.pdf

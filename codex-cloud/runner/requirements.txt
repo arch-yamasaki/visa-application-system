@@ -1,0 +1,32 @@
+# --- GCP integration (existing) ---
+google-cloud-storage
+google-cloud-firestore
+
+# --- Document generation ---
+python-pptx          # PowerPoint
+python-docx          # Word
+openpyxl             # Excel read/write
+reportlab            # PDF generation (vector)
+fpdf2                # lightweight PDF generation
+
+# --- PDF reading ---
+PyPDF2               # PDF text extraction / merge / split
+pdfplumber           # PDF table & layout extraction
+
+# --- Data processing ---
+pandas
+numpy
+
+# --- Image ---
+Pillow               # image manipulation, also needed by reportlab/matplotlib
+
+# --- Charts / visualization ---
+matplotlib
+
+# --- Templating & serialization ---
+jinja2
+pyyaml
+
+# --- Web / API ---
+requests
+httpx

@@ -1,0 +1,28 @@
+{
+  "schema_version": "0.1.0",
+  "suite_id": "single_smoke",
+  "fixture_family": "single",
+  "description": "fixtures_single を使って、1申請人=1フォームの入力生成を最低限確認する。",
+  "cases": [
+    "gijinkoku_a_company_round1__kushang_subba_limbu",
+    "gijinkoku_a_company_round1__prashamsa_g_c",
+    "gijinkoku_a_company_round1__manoj_mukhiya",
+    "gijinkoku_a_company_round1__amit_tamang",
+    "gijinkoku_a_company_round1__bhawana_khanal",
+    "gijinkoku_a_company_round1__dipak_bishwakarma",
+    "gijinkoku_a_company_round1__shekhar_dahal",
+    "gijinkoku_a_company_round1__damu_gubhaju",
+    "gijinkoku_a_company_round2_family_japan__sanjay_gautam",
+    "gijinkoku_a_company_round2_family_japan__bandana_joshi",
+    "gijinkoku_a_company_round2_family_japan__mukesh_chapagain",
+    "gijinkoku_a_company_round2_family_japan__keshav_bishwokarma",
+    "gijinkoku_a_company_round2_family_japan__rabin_raj_neupane"
+  ],
+  "checks": [
+    "input_documents_loadable",
+    "case_data_schema_loadable",
+    "review_output_present",
+    "application_data_output_present",
+    "single_applicant_form_generation"
+  ]
+}

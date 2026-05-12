@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "input_documents.schema.json",
+  "title": "Blind input documents manifest",
+  "type": "object",
+  "required": ["schema_version", "case_id", "documents"],
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": {
+      "type": "string"
+    },
+    "case_id": {
+      "type": "string"
+    },
+    "base_case_id": {
+      "type": ["string", "null"]
+    },
+    "applicant_id": {
+      "type": ["string", "null"]
+    },
+    "documents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["document_id", "document_role", "path", "file_name", "use_as_input"],
+        "additionalProperties": true,
+        "properties": {
+          "document_id": {
+            "type": "string"
+          },
+          "document_role": {
+            "type": "string",
+            "enum": [
+              "applicant_document_bundle",
+              "employment_terms",
+              "company_documents",
+              "intake_spreadsheet",
+              "email_context",
+              "submitted_application_bundle",
+              "not_attached_reference",
+              "unused_resume",
+              "other"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "file_name": {
+            "type": "string"
+          },
+          "extension": {
+            "type": "string"
+          },
+          "use_as_input": {
+            "type": "boolean"
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "blind_run_policy": {
+      "type": "object"
+    }
+  }
+}
