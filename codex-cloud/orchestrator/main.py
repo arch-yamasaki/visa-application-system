@@ -1,14 +1,16 @@
 """Codex orchestrator – FastAPI service on Cloud Run."""
 
+import json
 import mimetypes
 import os
 import subprocess
 import tempfile
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from google.cloud import firestore, storage
@@ -52,6 +54,17 @@ class PromptRequest(BaseModel):
     @property
     def prompt_stripped(self) -> str:
         return self.prompt.strip()
+
+
+class CreateCaseRequest(BaseModel):
+    application_type: str = "certificate_of_eligibility"
+    target_status: str = "engineer_humanities_international"
+
+
+class UpdateCaseRequest(BaseModel):
+    case_data: dict | None = None
+    field_metadata: dict | None = None
+    workflow_state: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -303,6 +316,357 @@ def download_file(session_id: str, file_path: str):
     )
 
 
+# ---------------------------------------------------------------------------
+# Case Endpoints
+# ---------------------------------------------------------------------------
+@app.post("/cases")
+def create_case(body: CreateCaseRequest):
+    case_id = f"case_{uuid.uuid4().hex[:12]}"
+    now = _now_iso()
+
+    case_data = {
+        "schema_version": "1.0",
+        "case": {
+            "case_id": case_id,
+            "application_type": body.application_type,
+            "target_status": body.target_status,
+            "workflow_state": "draft",
+        },
+        "applicant": {},
+        "application": {},
+    }
+
+    doc = {
+        "case_id": case_id,
+        "workflow_state": "draft",
+        "created_at": now,
+        "updated_at": now,
+        "case_data": case_data,
+        "field_metadata": {},
+        "review": {},
+        "document_manifest": {"documents": []},
+        "extraction_session_id": None,
+        "confirmed_at": None,
+    }
+
+    db.collection("cases").document(case_id).set(doc)
+
+    return {"case_id": case_id, "workflow_state": "draft", "created_at": now}
+
+
+@app.get("/cases")
+def list_cases(
+    limit: int = Query(default=20, ge=1, le=100),
+    workflow_state: Optional[str] = Query(default=None),
+):
+    query = db.collection("cases")
+    if workflow_state:
+        query = query.where("workflow_state", "==", workflow_state)
+    query = query.order_by("created_at", direction=firestore.Query.DESCENDING).limit(
+        limit
+    )
+    return [doc.to_dict() for doc in query.stream()]
+
+
+@app.get("/cases/{case_id}")
+def get_case(case_id: str):
+    doc = db.collection("cases").document(case_id).get()
+    if not doc.exists:
+        raise HTTPException(status_code=404, detail="Case not found")
+    return doc.to_dict()
+
+
+@app.patch("/cases/{case_id}")
+def update_case(case_id: str, body: UpdateCaseRequest):
+    ref = db.collection("cases").document(case_id)
+    doc = ref.get()
+    if not doc.exists:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    updates: dict = {"updated_at": _now_iso()}
+
+    if body.case_data is not None:
+        updates["case_data"] = body.case_data
+    if body.field_metadata is not None:
+        updates["field_metadata"] = body.field_metadata
+    if body.workflow_state is not None:
+        updates["workflow_state"] = body.workflow_state
+        if body.workflow_state == "ready_to_fill":
+            updates["confirmed_at"] = _now_iso()
+
+    ref.update(updates)
+
+    return ref.get().to_dict()
+
+
+@app.post("/cases/{case_id}/documents")
+async def upload_case_document(
+    case_id: str,
+    file: UploadFile = File(...),
+    document_role: str = Form(default="applicant_document_bundle"),
+):
+    ref = db.collection("cases").document(case_id)
+    doc = ref.get()
+    if not doc.exists:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    document_id = f"doc_{uuid.uuid4().hex[:8]}"
+    original_filename = file.filename or "upload"
+    gcs_path = f"cases/{case_id}/documents/{document_id}_{original_filename}"
+
+    bucket = gcs.bucket(GCS_BUCKET)
+    blob = bucket.blob(gcs_path)
+
+    content = await file.read()
+    blob.upload_from_string(
+        content,
+        content_type=file.content_type or "application/octet-stream",
+    )
+
+    doc_entry = {
+        "document_id": document_id,
+        "file_name": original_filename,
+        "gcs_path": gcs_path,
+        "document_role": document_role,
+        "uploaded_at": _now_iso(),
+    }
+
+    ref.update(
+        {
+            "document_manifest.documents": firestore.ArrayUnion([doc_entry]),
+            "updated_at": _now_iso(),
+        }
+    )
+
+    return {
+        "document_id": document_id,
+        "file_name": original_filename,
+        "gcs_path": gcs_path,
+        "document_role": document_role,
+    }
+
+
+@app.get("/cases/{case_id}/documents")
+def list_case_documents(case_id: str):
+    doc = db.collection("cases").document(case_id).get()
+    if not doc.exists:
+        raise HTTPException(status_code=404, detail="Case not found")
+    data = doc.to_dict()
+    return data.get("document_manifest", {"documents": []})
+
+
+@app.get("/cases/{case_id}/documents/{document_id}/url")
+def get_document_url(case_id: str, document_id: str):
+    doc = db.collection("cases").document(case_id).get()
+    if not doc.exists:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    data = doc.to_dict()
+    manifest = data.get("document_manifest", {})
+    documents = manifest.get("documents", [])
+
+    target_doc = None
+    for d in documents:
+        if d.get("document_id") == document_id:
+            target_doc = d
+            break
+
+    if not target_doc:
+        raise HTTPException(status_code=404, detail="Document not found in manifest")
+
+    gcs_path = target_doc["gcs_path"]
+    bucket = gcs.bucket(GCS_BUCKET)
+    blob = bucket.blob(gcs_path)
+
+    try:
+        signed_url = blob.generate_signed_url(
+            expiration=timedelta(minutes=15), method="GET"
+        )
+        return {
+            "signed_url": signed_url,
+            "document_id": document_id,
+            "file_name": target_doc.get("file_name"),
+        }
+    except Exception:
+        return {
+            "signed_url": None,
+            "gcs_path": gcs_path,
+            "document_id": document_id,
+            "file_name": target_doc.get("file_name"),
+            "note": "Signed URL generation failed. Use gcs_path to access the file directly.",
+        }
+
+
+@app.post("/cases/{case_id}/extract")
+def start_extraction(case_id: str):
+    ref = db.collection("cases").document(case_id)
+    doc = ref.get()
+    if not doc.exists:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    data = doc.to_dict()
+    manifest = data.get("document_manifest", {})
+    documents = manifest.get("documents", [])
+
+    if not documents:
+        raise HTTPException(
+            status_code=400, detail="No documents uploaded for this case"
+        )
+
+    # Build extraction prompt
+    doc_list_text = "\n".join(
+        f"- {d['file_name']} (role: {d['document_role']}, gcs: gs://{GCS_BUCKET}/{d['gcs_path']})"
+        for d in documents
+    )
+    prompt = (
+        f"You are a visa application document extractor.\n"
+        f"Case ID: {case_id}\n"
+        f"Application type: {data.get('case_data', {}).get('case', {}).get('application_type', 'unknown')}\n"
+        f"Target status: {data.get('case_data', {}).get('case', {}).get('target_status', 'unknown')}\n\n"
+        f"Documents:\n{doc_list_text}\n\n"
+        f"Extract all relevant fields from these documents.\n"
+        f"Output the following JSON files in the generated/ directory:\n"
+        f"- generated/case_data.json\n"
+        f"- generated/review.json\n"
+        f"- generated/field_metadata.json\n"
+    )
+
+    session_id = _make_session_id()
+    run_id = _make_run_id()
+    now = _now_iso()
+
+    prompt_gcs_uri = _upload_prompt(session_id, run_id, prompt)
+    firestore_doc_path = f"sessions/{session_id}/runs/{run_id}"
+
+    # Write session document
+    session_ref = db.collection("sessions").document(session_id)
+    run_ref = session_ref.collection("runs").document(run_id)
+
+    session_ref.set(
+        {
+            "session_id": session_id,
+            "status": "queued",
+            "created_at": now,
+            "updated_at": now,
+            "latest_run_id": run_id,
+            "prompt_preview": prompt[:200],
+            "linked_case_id": case_id,
+        }
+    )
+
+    run_ref.set(
+        {
+            "run_id": run_id,
+            "status": "queued",
+            "created_at": now,
+            "prompt_gcs_uri": prompt_gcs_uri,
+        }
+    )
+
+    # Update case with extraction session
+    ref.update(
+        {
+            "extraction_session_id": session_id,
+            "workflow_state": "extracting",
+            "updated_at": now,
+        }
+    )
+
+    # Launch the job
+    try:
+        _launch_job(session_id, run_id, prompt_gcs_uri, firestore_doc_path)
+    except Exception as exc:
+        run_ref.update({"status": "launch_failed", "error": str(exc)})
+        session_ref.update({"status": "launch_failed", "updated_at": _now_iso()})
+        ref.update({"workflow_state": "extraction_failed", "updated_at": _now_iso()})
+        return {
+            "session_id": session_id,
+            "status": "launch_failed",
+            "error": str(exc),
+        }
+
+    return {"session_id": session_id, "status": "running"}
+
+
+@app.get("/cases/{case_id}/extraction-status")
+def get_extraction_status(case_id: str):
+    ref = db.collection("cases").document(case_id)
+    doc = ref.get()
+    if not doc.exists:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    data = doc.to_dict()
+    session_id = data.get("extraction_session_id")
+    if not session_id:
+        raise HTTPException(
+            status_code=404, detail="No extraction session found for this case"
+        )
+
+    # Look up session status
+    session_doc = db.collection("sessions").document(session_id).get()
+    if not session_doc.exists:
+        raise HTTPException(status_code=404, detail="Extraction session not found")
+
+    session_data = session_doc.to_dict()
+    status = session_data.get("status", "unknown")
+
+    # If completed and case is still extracting, try to harvest results
+    if status == "completed" and data.get("workflow_state") == "extracting":
+        latest_run_id = session_data.get("latest_run_id")
+        if latest_run_id:
+            _harvest_extraction_results(case_id, ref, session_id, latest_run_id)
+
+    return {"status": status, "session_id": session_id}
+
+
+def _harvest_extraction_results(
+    case_id: str,
+    case_ref,
+    session_id: str,
+    run_id: str,
+):
+    """Extract case_data.json, review.json, field_metadata.json from workspace tarball."""
+    blob_path = f"sessions/{session_id}/runs/{run_id}/workspace.tar.zst"
+    bucket = gcs.bucket(GCS_BUCKET)
+    blob = bucket.blob(blob_path)
+
+    if not blob.exists():
+        return
+
+    with tempfile.TemporaryDirectory() as tmp:
+        archive_path = os.path.join(tmp, "workspace.tar.zst")
+        blob.download_to_filename(archive_path)
+        extract_dir = os.path.join(tmp, "out")
+        os.makedirs(extract_dir)
+        subprocess.run(
+            ["tar", "--zstd", "-xf", archive_path, "-C", extract_dir],
+            check=True,
+        )
+
+        updates: dict = {"updated_at": _now_iso(), "workflow_state": "needs_review"}
+
+        # Look for generated/ files
+        for name, field in [
+            ("case_data.json", "case_data"),
+            ("review.json", "review"),
+            ("field_metadata.json", "field_metadata"),
+        ]:
+            # Search for the file in the extracted workspace
+            matches = list(Path(extract_dir).rglob(f"generated/{name}"))
+            if matches:
+                try:
+                    content = matches[0].read_text(encoding="utf-8")
+                    parsed = json.loads(content)
+                    updates[field] = parsed
+                except (json.JSONDecodeError, OSError):
+                    pass
+
+        case_ref.update(updates)
+
+
+# ---------------------------------------------------------------------------
+# Frontend
+# ---------------------------------------------------------------------------
 @app.get("/")
 def serve_frontend():
     return FileResponse("static/index.html")
