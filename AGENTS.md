@@ -20,9 +20,7 @@
 | `codex-cloud/` | codex-cloud | Codex実行基盤、Cloud Run Jobs |
 | `docs/shared/` | (共通) | ヒアリング、MVP設計、AIエージェント基盤調査 |
 
-## 重要ファイル
-
-### 共通ドキュメント (docs/shared/)
+## 共通ドキュメント (docs/shared/)
 
 - `docs/shared/001_hearing_notes/raw/2026-05-01_業務ヒアリング.txt`: 元のヒアリング transcript
 - `docs/shared/001_hearing_notes/2026-05-01_ヒアリング要約.md`: 論点要約
@@ -30,28 +28,7 @@
 - `docs/shared/002_mvp_design/AIエージェント要件.md`: AIエージェントのMVP要件
 - `docs/shared/006_ai_agent_infrastructure/README.md`: 汎用AIエージェント基盤の調査
 
-### rasens-autofill (rasens-autofill/)
-
-- `rasens-autofill/docs/データ設計.md`: 正規case_data、フォーム台帳、投入用JSONの関係
-- `rasens-autofill/docs/Chrome_DevTools_MCP_autoConnect.md`: Chrome拡張とブラウザ運用メモ
-- `rasens-autofill/data/cases/demo_case_data.json`: 架空デモ案件の正本
-- `rasens-autofill/data/form_definitions/rasens_offer_fields.json`: 在留申請オンラインシステムのフォーム項目台帳
-- `rasens-autofill/data/mappings/rasens_offer_mapping.json`: 正規case_dataからフォーム項目への変換ルール
-- `rasens-autofill/data/generated/demo_application_data.json`: デモ案件から生成したChrome拡張投入用JSON
-
-### visa-eval (visa-eval/)
-
-- `visa-eval/docs/テスト設計.md`: raw資料、input_documents、golden expected、generated出力のテスト構成
-- `visa-eval/docs/単票評価ワークフローまとめ.md`: 単票fixture、expected、Chrome拡張投入までの全体像
-- `visa-eval/docs/AIブラインド抽出実行手順.md`: expected/goldenを見せずにAI抽出を実行する手順
-- `visa-eval/docs/フォルダ整理案.md`: fixtures_single、runs、evalの役割分担案
-- `visa-eval/README.md`: Codex/AIエージェントで実資料読み取りテストをするための入口
-- `visa-eval/eval/suites/*.json`: 共有可能な評価スイート定義
-
-### codex-cloud (codex-cloud/)
-
-- `codex-cloud/docs/README.md`: Codex 実行基盤の設計
-- `codex-cloud/docs/option3_codex_exec_json_cloud_run_jobs.md`: Cloud Run Jobs 方式
+各プロジェクトの詳細は各ディレクトリの `AGENTS.md` を参照。
 
 ## 開発時の注意
 
