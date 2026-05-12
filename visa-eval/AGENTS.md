@@ -43,3 +43,24 @@ visa-eval/
 2. Codex/AIエージェントで `blind_runs_from_test_cases/<run_id>/` 内の資料から `case_data.json`, `review.json` を抽出
 3. `rasens-autofill/scripts/build_application_data.py` で `application_data.json` を決定論的に生成
 4. `expected/*.golden.json` と比較して精度を検証
+
+### codex exec によるローカル実行例
+
+```bash
+# 1. blind run を作成
+python3 rasens-autofill/scripts/prepare_blind_eval_run.py \
+  visa-eval/test_cases_from_raw/gijinkoku_a_company_round1/amit_tamang
+
+# 2. codex exec で AI 抽出を実行
+codex exec \
+  -C visa-eval/blind_runs_from_test_cases/<run_id> \
+  "$(cat visa-eval/blind_runs_from_test_cases/<run_id>/AGENT_TASK.md)"
+
+# 3. application_data を生成
+python3 rasens-autofill/scripts/build_application_data.py \
+  visa-eval/blind_runs_from_test_cases/<run_id>/generated/case_data.json \
+  rasens-autofill/data/mappings/rasens_offer_mapping.json \
+  visa-eval/blind_runs_from_test_cases/<run_id>/generated/application_data.json
+```
+
+`<run_id>` は手順1で生成されるディレクトリ名に置き換える。

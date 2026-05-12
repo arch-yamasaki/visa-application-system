@@ -75,7 +75,32 @@ visa-eval/blind_runs_from_test_cases/20260509_153000_gijinkoku_a_company_round1_
 
 run用の `scenario.json` からは、`expected_case_data`、`expected_application_data`、`expected_review` の参照を落とします。fixture本体の `scenario.json` にはexpectedパスが入っているため、AIにはfixture本体を渡さないでください。
 
-## 2. AIに渡すもの
+## 2. codex exec でローカル実行する
+
+`codex exec` を使うと、ブラインド run ディレクトリを作業ディレクトリとして AI 抽出をローカルで実行できる。
+
+```bash
+# 1. blind run を作成
+python3 rasens-autofill/scripts/prepare_blind_eval_run.py \
+  visa-eval/test_cases_from_raw/gijinkoku_a_company_round1/amit_tamang
+
+# 2. codex exec で AI 抽出を実行
+codex exec \
+  -C visa-eval/blind_runs_from_test_cases/<run_id> \
+  "$(cat visa-eval/blind_runs_from_test_cases/<run_id>/AGENT_TASK.md)"
+
+# 3. application_data を生成
+python3 rasens-autofill/scripts/build_application_data.py \
+  visa-eval/blind_runs_from_test_cases/<run_id>/generated/case_data.json \
+  rasens-autofill/data/mappings/rasens_offer_mapping.json \
+  visa-eval/blind_runs_from_test_cases/<run_id>/generated/application_data.json
+```
+
+`<run_id>` は手順1で生成されるディレクトリ名（例: `20260512_114953_gijinkoku_a_company_round1__amit_tamang`）に置き換える。
+
+`-C` オプションで run ディレクトリを作業ディレクトリに指定するため、AI は `expected/` にアクセスできない。
+
+## 3. AIに渡すもの
 
 AIに渡す入口は、runディレクトリの `AGENT_TASK.md` です。
 
@@ -115,7 +140,7 @@ AIに渡してはいけないファイル:
 
 提出済み申請書PDF（`submitted_application_pdf`）はAIブラインド抽出のインプットではない。これはgolden正解データの根拠として使用するものであり、AIには読ませない。`document_manifest.json` で `"use_as_input": false` が設定されており、`prepare_blind_eval_run.py` はこれらをrunディレクトリの `documents/` にコピーしない。
 
-## 3. AIが作る出力
+## 4. AIが作る出力
 
 AIが作るのは次の3ファイルです。
 
@@ -133,7 +158,7 @@ generated/run_notes.md
 
 AIに `generated/application_data.json` を手作業で作らせません。フォーム投入用JSONは deterministic に生成します。
 
-## 4. application_dataを生成する
+## 5. application_dataを生成する
 
 AIが `generated/case_data.json` を作った後、人間またはスクリプトで次を実行します。
 
@@ -146,7 +171,7 @@ python3 rasens-autofill/scripts/build_application_data.py \
 
 これで、Chrome拡張と同じ形式のフォーム投入用行配列ができます。
 
-## 5. 人間レビューでgoldenと比較する
+## 6. 人間レビューでgoldenと比較する
 
 比較はAIが終わった後に、人間が行います。
 
@@ -170,7 +195,7 @@ python3 rasens-autofill/scripts/build_application_data.py \
 - 技人国として、学歴・職務・活動内容のつながりを確認しているか。
 - `application_data.json` の行がフォーム台帳・マッピングに沿っているか。
 
-## 6. 漏えい防止チェック
+## 7. 漏えい防止チェック
 
 AI実行前:
 
@@ -193,7 +218,7 @@ AI実行後:
 - Chrome確認に使ったら `chrome.storage.local` を削除する。
 - bug報告では実値をマスクする。
 
-## 7. 推奨するAI依頼文
+## 8. 推奨するAI依頼文
 
 ```text
 あなたは在留資格申請の単票ケースを抽出するAIエージェントです。
@@ -219,7 +244,7 @@ AI実行後:
 6. application_data.json は手作業で作らない。
 ```
 
-## 8. 失敗パターン
+## 9. 失敗パターン
 
 | 失敗 | 何が問題か | 対策 |
 | --- | --- | --- |
@@ -230,7 +255,7 @@ AI実行後:
 | Consoleやチャットに実値を貼る | PII漏えい | 出力JSON内だけに保持し、共有時はマスクする。 |
 | Chrome拡張に実データを残す | 次案件へ混線する | 専用Chromeプロファイルと `chrome.storage.local` 削除を徹底する。 |
 
-## 9. expected_* パスの分離設計
+## 10. expected_* パスの分離設計
 
 `scenario.json` には `expected_case_data`、`expected_application_data`、`expected_review` のパスを含めない設計に変更した。
 
