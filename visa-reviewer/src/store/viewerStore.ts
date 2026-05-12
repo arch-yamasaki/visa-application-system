@@ -7,12 +7,14 @@ interface ViewerState {
   currentPage: number
   highlightText: string | null
   signedUrls: Record<string, string>
+  activeFieldPath: string | null
 
   setDocuments: (docs: DocumentEntry[]) => void
   setSignedUrl: (docId: string, url: string) => void
   navigateToSource: (ref: SourceRef) => void
   setPage: (page: number) => void
   clearHighlight: () => void
+  setActiveFieldPath: (path: string | null) => void
 }
 
 export const useViewerStore = create<ViewerState>((set) => ({
@@ -21,6 +23,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
   currentPage: 1,
   highlightText: null,
   signedUrls: {},
+  activeFieldPath: null,
 
   setDocuments: (docs) =>
     set({ documents: docs, currentDocumentId: docs[0]?.document_id ?? null }),
@@ -38,4 +41,6 @@ export const useViewerStore = create<ViewerState>((set) => ({
   setPage: (page) => set({ currentPage: page, highlightText: null }),
 
   clearHighlight: () => set({ highlightText: null }),
+
+  setActiveFieldPath: (path) => set({ activeFieldPath: path }),
 }))

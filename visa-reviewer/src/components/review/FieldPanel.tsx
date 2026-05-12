@@ -8,9 +8,10 @@ interface Props {
   fieldMetadata: FieldMetadataMap
   review: Review
   onFieldUpdate: (fieldPath: string, value: string) => void
+  onMarkSectionReviewed?: (paths: string[]) => void
 }
 
-export default function FieldPanel({ caseData, fieldMetadata, review, onFieldUpdate }: Props) {
+export default function FieldPanel({ caseData, fieldMetadata, review, onFieldUpdate, onMarkSectionReviewed }: Props) {
   const fields = flattenCaseData(caseData)
 
   // Build set of flagged paths
@@ -39,22 +40,35 @@ export default function FieldPanel({ caseData, fieldMetadata, review, onFieldUpd
   }
 
   return (
-    <div>
-      {Array.from(sections.entries()).map(([section, fields]) => (
-        <FieldSection key={section} title={section}>
-          {fields.map((f) => (
-            <FieldRow
-              key={f.path}
-              label={getFieldLabel(f.path)}
-              fieldPath={f.path}
-              value={f.value}
-              meta={fieldMetadata[f.path]}
-              flagType={getFlagType(f.path)}
-              onUpdate={onFieldUpdate}
-            />
-          ))}
-        </FieldSection>
-      ))}
+    <div data-field-panel>
+      {Array.from(sections.entries()).map(([section, sectionFields]) => {
+        const reviewedCount = sectionFields.filter((f) => fieldMetadata[f.path]?.human_reviewed).length
+        return (
+          <FieldSection
+            key={section}
+            title={section}
+            fieldCount={sectionFields.length}
+            reviewedCount={reviewedCount}
+            onMarkAllReviewed={
+              onMarkSectionReviewed
+                ? () => onMarkSectionReviewed(sectionFields.map((f) => f.path))
+                : undefined
+            }
+          >
+            {sectionFields.map((f) => (
+              <FieldRow
+                key={f.path}
+                label={getFieldLabel(f.path)}
+                fieldPath={f.path}
+                value={f.value}
+                meta={fieldMetadata[f.path]}
+                flagType={getFlagType(f.path)}
+                onUpdate={onFieldUpdate}
+              />
+            ))}
+          </FieldSection>
+        )
+      })}
     </div>
   )
 }

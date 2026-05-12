@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { apiClient } from '../api/client'
 import FieldPanel from '../components/review/FieldPanel'
@@ -12,6 +12,9 @@ export default function ReviewPage() {
   const [caseDoc, setCaseDoc] = useState<CaseDocument | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [splitRatio, setSplitRatio] = useState(0.45)
+  const [dragging, setDragging] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
   const setDocuments = useViewerStore((s) => s.setDocuments)
 
   useEffect(() => {
@@ -29,7 +32,6 @@ export default function ReviewPage() {
     setCaseDoc((prev) => {
       if (!prev) return prev
       const updated = { ...prev }
-      // Update the value in case_data using dot-path
       const parts = fieldPath.split('.')
       let obj: Record<string, unknown> = { ...updated.case_data } as unknown as Record<string, unknown>
       updated.case_data = obj as unknown as CaseDocument['case_data']
@@ -40,7 +42,6 @@ export default function ReviewPage() {
       }
       obj[parts[parts.length - 1]] = value
 
-      // Mark as human-edited in field_metadata
       const fm = { ...updated.field_metadata }
       fm[fieldPath] = {
         ...fm[fieldPath],
@@ -49,6 +50,17 @@ export default function ReviewPage() {
       }
       updated.field_metadata = fm
       return updated
+    })
+  }
+
+  const handleMarkSectionReviewed = (paths: string[]) => {
+    setCaseDoc((prev) => {
+      if (!prev) return prev
+      const fm = { ...prev.field_metadata }
+      for (const path of paths) {
+        fm[path] = { ...fm[path], human_reviewed: true }
+      }
+      return { ...prev, field_metadata: fm }
     })
   }
 
@@ -67,6 +79,28 @@ export default function ReviewPage() {
     }
   }
 
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    setDragging(true)
+  }, [])
+
+  useEffect(() => {
+    if (!dragging) return
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!containerRef.current) return
+      const rect = containerRef.current.getBoundingClientRect()
+      const ratio = (e.clientX - rect.left) / rect.width
+      setSplitRatio(Math.max(0.25, Math.min(0.75, ratio)))
+    }
+    const handleMouseUp = () => setDragging(false)
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [dragging])
+
   if (loading) {
     return <div className="p-6 text-gray-500">Loading case...</div>
   }
@@ -84,19 +118,31 @@ export default function ReviewPage() {
         review={caseDoc.review}
       />
 
-      <div className="flex flex-1 overflow-hidden">
+      <div ref={containerRef} className="flex flex-1 overflow-hidden relative">
         {/* Left: Field Panel */}
-        <div className="w-1/2 border-r border-gray-200 overflow-y-auto">
+        <div
+          className="border-r border-gray-200 overflow-y-auto"
+          style={{ width: `${splitRatio * 100}%` }}
+        >
           <FieldPanel
             caseData={caseDoc.case_data}
             fieldMetadata={caseDoc.field_metadata}
             review={caseDoc.review}
             onFieldUpdate={handleFieldUpdate}
+            onMarkSectionReviewed={handleMarkSectionReviewed}
           />
         </div>
 
+        {/* Drag handle */}
+        <div
+          className={`w-1 cursor-col-resize hover:bg-blue-300 active:bg-blue-400 transition-colors ${
+            dragging ? 'bg-blue-400' : 'bg-gray-200'
+          }`}
+          onMouseDown={handleMouseDown}
+        />
+
         {/* Right: Document Viewer */}
-        <div className="w-1/2 overflow-hidden">
+        <div className="flex-1 overflow-hidden">
           <DocumentViewer caseId={caseDoc.case_id} />
         </div>
       </div>
@@ -105,15 +151,15 @@ export default function ReviewPage() {
       <div className="border-t border-gray-200 bg-white px-6 py-3 flex items-center justify-between">
         <span className="text-sm text-gray-500">
           {caseDoc.workflow_state === 'ready_to_fill'
-            ? 'Confirmed and ready for form fill'
-            : 'Review all fields before confirming'}
+            ? '確認済み — フォーム入力の準備ができています'
+            : '全フィールドを確認してから完了してください'}
         </span>
         <button
           onClick={handleConfirm}
           disabled={saving || caseDoc.workflow_state === 'ready_to_fill'}
-          className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-sm font-medium"
+          className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-sm font-medium transition-colors"
         >
-          {saving ? 'Saving...' : caseDoc.workflow_state === 'ready_to_fill' ? 'Confirmed' : 'Confirm & Complete'}
+          {saving ? '保存中...' : caseDoc.workflow_state === 'ready_to_fill' ? '確認済み' : '確認して完了'}
         </button>
       </div>
     </div>

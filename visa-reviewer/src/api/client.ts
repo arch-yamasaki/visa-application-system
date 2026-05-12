@@ -1,6 +1,16 @@
 import type { CaseDocument, CaseSummary, DocumentEntry } from '../types/caseData'
+import { mockApi } from './mockData'
 
 const BASE = '/api'
+
+function isDemoMode(): boolean {
+  if (import.meta.env.VITE_DEMO === 'true') return true
+  if (typeof window !== 'undefined') {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('demo') === 'true') return true
+  }
+  return false
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -20,6 +30,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const apiClient = {
   // Cases
   createCase(params: { application_type: string; target_status: string }) {
+    if (isDemoMode()) return mockApi.createCase(params)
     return request<{ case_id: string; workflow_state: string; created_at: string }>(
       '/cases',
       { method: 'POST', body: JSON.stringify(params) },
@@ -27,10 +38,12 @@ export const apiClient = {
   },
 
   listCases(): Promise<CaseSummary[]> {
+    if (isDemoMode()) return mockApi.listCases()
     return request('/cases')
   },
 
   getCase(caseId: string): Promise<CaseDocument> {
+    if (isDemoMode()) return mockApi.getCase(caseId)
     return request(`/cases/${caseId}`)
   },
 
@@ -38,6 +51,7 @@ export const apiClient = {
     caseId: string,
     updates: { case_data?: unknown; field_metadata?: unknown; workflow_state?: string },
   ) {
+    if (isDemoMode()) return mockApi.updateCase(caseId, updates)
     return request<CaseDocument>(`/cases/${caseId}`, {
       method: 'PATCH',
       body: JSON.stringify(updates),
@@ -46,6 +60,7 @@ export const apiClient = {
 
   // Documents
   async uploadDocument(caseId: string, file: File, role = 'applicant_document_bundle'): Promise<DocumentEntry> {
+    if (isDemoMode()) return mockApi.uploadDocument(caseId, file, role)
     const form = new FormData()
     form.append('file', file)
     form.append('document_role', role)
@@ -56,23 +71,27 @@ export const apiClient = {
   },
 
   listDocuments(caseId: string): Promise<DocumentEntry[]> {
+    if (isDemoMode()) return mockApi.listDocuments(caseId)
     return request<{ documents: DocumentEntry[] }>(`/cases/${caseId}/documents`).then(
       (r) => r.documents ?? [],
     )
   },
 
   getDocumentUrl(caseId: string, documentId: string): Promise<{ signed_url: string }> {
+    if (isDemoMode()) return mockApi.getDocumentUrl(caseId, documentId)
     return request(`/cases/${caseId}/documents/${documentId}/url`)
   },
 
   // Extraction
   startExtraction(caseId: string) {
+    if (isDemoMode()) return mockApi.startExtraction(caseId)
     return request<{ session_id: string; status: string }>(`/cases/${caseId}/extract`, {
       method: 'POST',
     })
   },
 
   getExtractionStatus(caseId: string) {
+    if (isDemoMode()) return mockApi.getExtractionStatus(caseId)
     return request<{ status: string; session_id?: string }>(`/cases/${caseId}/extraction-status`)
   },
 }
