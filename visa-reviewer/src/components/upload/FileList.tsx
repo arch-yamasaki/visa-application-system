@@ -1,11 +1,11 @@
 import type { DocumentEntry } from '../../types/caseData'
 
 const roleLabels: Record<string, string> = {
-  applicant_document_bundle: 'Applicant Documents',
-  employment_terms: 'Employment Terms',
-  company_documents: 'Company Documents',
-  intake_spreadsheet: 'Intake Sheet',
-  other: 'Other',
+  applicant_document_bundle: '申請人書類',
+  employment_terms: '雇用条件通知書',
+  company_documents: '会社書類',
+  intake_spreadsheet: '受付シート',
+  other: 'その他',
 }
 
 interface Props {
@@ -18,7 +18,7 @@ export default function FileList({ documents }: Props) {
   return (
     <div className="mt-4">
       <h3 className="text-sm font-medium text-gray-700 mb-2">
-        Uploaded Files ({documents.length})
+        アップロード済み ({documents.length})
       </h3>
       <ul className="space-y-1">
         {documents.map((doc) => (

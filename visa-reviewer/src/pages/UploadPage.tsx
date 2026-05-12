@@ -63,16 +63,16 @@ export default function UploadPage() {
   return (
     <div className="max-w-3xl mx-auto p-6">
       <h2 className="text-xl font-semibold text-gray-800 mb-1">
-        Upload Documents
+        書類アップロード
       </h2>
       <p className="text-sm text-gray-500 mb-6">
-        Case: <span className="font-mono">{caseId}</span>
+        案件: <span className="font-mono">{caseId}</span>
       </p>
 
       <DropZone onFilesSelected={handleFilesSelected} disabled={uploading || extracting} />
 
       {uploading && (
-        <p className="text-sm text-blue-600 mt-3">Uploading...</p>
+        <p className="text-sm text-blue-600 mt-3">アップロード中...</p>
       )}
 
       <FileList documents={documents} />
@@ -83,14 +83,14 @@ export default function UploadPage() {
           disabled={extracting || documents.length === 0}
           className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-sm font-medium"
         >
-          {extracting ? 'Extracting...' : 'Start Extraction'}
+          {extracting ? '抽出中...' : '抽出開始'}
         </button>
         {documents.length > 0 && !extracting && (
           <button
             onClick={() => navigate(`/cases/${caseId}/review`)}
             className="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm"
           >
-            Skip to Review
+            レビューへ
           </button>
         )}
       </div>

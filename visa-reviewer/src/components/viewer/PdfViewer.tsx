@@ -75,17 +75,17 @@ export default function PdfViewer({ url, page, highlightText }: Props) {
             disabled={page <= 1}
             className="px-2 py-1 text-xs bg-white border rounded disabled:opacity-30"
           >
-            Prev
+            前へ
           </button>
           <span className="text-xs text-gray-500">
-            Page {page} / {numPages}
+            {page} / {numPages} ページ
           </span>
           <button
             onClick={() => setPage(Math.min(numPages, page + 1))}
             disabled={page >= numPages}
             className="px-2 py-1 text-xs bg-white border rounded disabled:opacity-30"
           >
-            Next
+            次へ
           </button>
         </div>
       )}

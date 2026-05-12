@@ -102,11 +102,11 @@ export default function ReviewPage() {
   }, [dragging])
 
   if (loading) {
-    return <div className="p-6 text-gray-500">Loading case...</div>
+    return <div className="p-6 text-gray-500">案件を読み込み中...</div>
   }
 
   if (!caseDoc) {
-    return <div className="p-6 text-red-500">Case not found</div>
+    return <div className="p-6 text-red-500">案件が見つかりません</div>
   }
 
   return (

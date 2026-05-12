@@ -21,12 +21,12 @@ export default function CaseListPage() {
   }
 
   const stateLabel: Record<string, string> = {
-    draft: 'draft',
-    uploading: 'uploading',
-    extracting: 'extracting...',
-    needs_review: 'needs review',
-    ready_to_fill: 'ready',
-    archived: 'archived',
+    draft: '下書き',
+    uploading: 'アップロード中',
+    extracting: '抽出中...',
+    needs_review: '要レビュー',
+    ready_to_fill: '入力準備完了',
+    archived: 'アーカイブ',
   }
 
   const stateColor: Record<string, string> = {
@@ -41,21 +41,21 @@ export default function CaseListPage() {
   return (
     <div className="max-w-4xl mx-auto p-6">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-semibold text-gray-800">Cases</h2>
+        <h2 className="text-xl font-semibold text-gray-800">案件一覧</h2>
         <button
           onClick={handleCreate}
           className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
         >
-          + New Case
+          + 新規案件
         </button>
       </div>
 
       {loading ? (
-        <p className="text-gray-500">Loading...</p>
+        <p className="text-gray-500">読込中...</p>
       ) : cases.length === 0 ? (
         <div className="text-center py-16 text-gray-400">
-          <p className="text-lg mb-2">No cases yet</p>
-          <p className="text-sm">Create a new case to get started</p>
+          <p className="text-lg mb-2">案件がありません</p>
+          <p className="text-sm">新規案件を作成してください</p>
         </div>
       ) : (
         <div className="space-y-2">

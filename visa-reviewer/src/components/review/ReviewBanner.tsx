@@ -51,7 +51,9 @@ export default function ReviewBanner({ caseId, workflowState, fieldMetadata, rev
               style={{ width: `${Math.round(progress * 100)}%` }}
             />
           </div>
-          <span className="text-[10px] text-gray-400">{Math.round(progress * 100)}%</span>
+          <span className="text-[10px] text-gray-400">
+            {progress === 0 ? '未確認' : progress >= 1 ? '完了' : `${Math.round(progress * 100)}%`}
+          </span>
         </div>
 
         {flaggedCount > 0 && (

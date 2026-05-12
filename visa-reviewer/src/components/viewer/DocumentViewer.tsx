@@ -36,7 +36,7 @@ export default function DocumentViewer({ caseId }: Props) {
   if (documents.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-gray-400 text-sm">
-        No documents uploaded
+        書類がアップロードされていません
       </div>
     )
   }
@@ -71,7 +71,7 @@ export default function DocumentViewer({ caseId }: Props) {
       <div className="flex-1 overflow-auto bg-gray-100">
         {!url ? (
           <div className="flex items-center justify-center h-full text-gray-400 text-sm">
-            Loading document...
+            書類を読み込み中...
           </div>
         ) : isPdf ? (
           <PdfViewer url={url} page={currentPage} highlightText={highlightText} />
@@ -79,7 +79,7 @@ export default function DocumentViewer({ caseId }: Props) {
           <ImageViewer url={url} />
         ) : (
           <div className="flex items-center justify-center h-full text-gray-400 text-sm">
-            Unsupported file type: .{ext}
+            未対応のファイル形式: .{ext}
           </div>
         )}
       </div>

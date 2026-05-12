@@ -40,13 +40,13 @@ export default function DropZone({ onFilesSelected, disabled }: Props) {
       `}
     >
       <p className="text-gray-500 mb-2">
-        Drag & drop files here
+        ここにファイルをドラッグ＆ドロップ
       </p>
       <p className="text-sm text-gray-400 mb-3">
-        PDF, Excel, Word, images
+        PDF、Excel、Word、画像ファイル
       </p>
       <label className="inline-block px-4 py-2 bg-blue-50 text-blue-600 rounded-lg text-sm font-medium cursor-pointer hover:bg-blue-100">
-        Browse Files
+        ファイルを選択
         <input
           type="file"
           multiple

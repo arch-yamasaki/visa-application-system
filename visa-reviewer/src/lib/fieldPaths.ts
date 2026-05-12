@@ -62,6 +62,30 @@ export function getSectionForPath(path: string): string {
 
 /** Convert a dot-path to a human-friendly label. */
 const labelOverrides: Record<string, string> = {
+  // 案件情報
+  'case.case_id': '案件ID',
+  'case.application_type': '申請種別',
+  'case.target_status': '対象在留資格',
+  'case.workflow_state': 'ワークフロー状態',
+  'case.intake_channel': '受付経路',
+  'case.source_organization': '送出機関',
+  'case.routed_to_human_reason': '人的判断理由',
+
+  // 申請内容
+  'application.desired_status_label': '希望する在留資格',
+  'application.purpose_of_entry': '入国目的',
+  'application.planned_entry_date': '入国予定日',
+  'application.planned_port': '入国予定港',
+  'application.planned_period_years': '希望期間（年）',
+  'application.planned_period_months': '希望期間（月）',
+  'application.visa_application_location': '査証申請予定地',
+  'application.activity_details': '活動内容詳細',
+  'application.activity_details_structured.department': '配属部署',
+  'application.activity_details_structured.role': '職種',
+  'application.activity_details_structured.duties': '職務内容',
+  'application.activity_details_structured.simple_labor_risk_terms': '単純労働リスク語',
+
+  // 申請人
   'applicant.name_roman': '氏名（ローマ字）',
   'applicant.name_kanji': '氏名（漢字）',
   'applicant.nationality_region': '国籍・地域',
@@ -76,45 +100,111 @@ const labelOverrides: Record<string, string> = {
   'applicant.japan_contact.phone': '電話番号',
   'applicant.japan_contact.mobile': '携帯番号',
   'applicant.japan_contact.email': 'メール',
+
+  // 旅券
   'passport.number': '旅券番号',
   'passport.expiry_date': '旅券有効期限',
-  'application.desired_status_label': '希望する在留資格',
-  'application.planned_entry_date': '入国予定日',
-  'application.planned_port': '入国予定港',
-  'application.planned_period_years': '希望期間（年）',
-  'application.planned_period_months': '希望期間（月）',
-  'application.activity_details': '活動内容詳細',
-  'application.purpose_of_entry': '入国目的',
-  'application.visa_application_location': '査証申請予定地',
-  'employer.name': '所属機関名',
-  'employer.corporate_number': '法人番号',
-  'employer.employee_count': '従業員数',
-  'employer.capital_jpy': '資本金（円）',
-  'employer.industry': '業種',
-  'employer.address': '所在地',
-  'employer.phone': '電話番号',
-  'employer.representative_name': '代表者氏名',
-  'employer.representative_title': '代表者役職',
-  'employer.annual_sales_jpy': '年間売上（円）',
-  'employer.branch_office': '事業所',
-  'case.case_id': '案件ID',
-  'case.application_type': '申請種別',
-  'case.target_status': '対象在留資格',
-  'case.workflow_state': 'ワークフロー状態',
-  'case.intake_channel': '受付経路',
-  'case.source_organization': '送出機関',
-  'case.routed_to_human_reason': '人的判断理由',
+
+  // 在留カード
   'residence_card.number': '在留カード番号',
   'residence_card.status': '在留資格',
   'residence_card.expiry_date': '有効期限',
-  'immigration_history.has_entries': '入国歴の有無',
-  'immigration_history.entries_count': '入国回数',
+
+  // 家族
   'family.has_accompanying_members': '同伴家族の有無',
   'family.has_japan_relatives_or_cohabitants': '在日親族の有無',
+  'family.japan_relatives_or_cohabitants': '在日親族・同居者',
+
+  // 出入国歴
+  'immigration_history.has_entries': '入国歴の有無',
+  'immigration_history.entries_count': '入国回数',
+  'immigration_history.latest_entry.start_date': '直近入国日',
+  'immigration_history.latest_entry.end_date': '直近出国日',
+  'immigration_history.prior_coe_applications.has_history': '在留資格認定証明書申請歴',
+  'immigration_history.prior_coe_applications.count': '申請回数',
+  'immigration_history.prior_coe_applications.denial_count': '不交付回数',
+  'immigration_history.criminal_record': '犯罪歴の有無',
+  'immigration_history.deportation_or_departure_order': '退去強制・出国命令歴',
+
+  // 学歴（配列項目）
+  'education.id': '学歴ID',
+  'education.level': '学歴区分',
+  'education.school_name': '学校名',
+  'education.major': '専攻・学科',
+  'education.graduation_date': '卒業年月日',
+  'education.source_refs': '証跡',
+
+  // 成績科目（配列項目）
+  'transcript_subjects.name': '科目名',
+  'transcript_subjects.matched_duty': '対応職務',
+
+  // 職歴（配列項目）
+  'employment_history.id': '職歴ID',
+  'employment_history.country_region': '勤務国・地域',
+  'employment_history.start_date': '入社年月',
+  'employment_history.end_date': '退社年月',
+  'employment_history.company_name_en': '会社名（英語）',
+  'employment_history.company_name_local': '会社名（現地語）',
+  'employment_history.duties': '職務内容',
+  'employment_history.source_refs': '証跡',
+
+  // 資格（配列項目）
+  'qualifications.type': '資格種別',
+  'qualifications.name': '資格名',
+  'qualifications.level': '取得級・レベル',
+  'qualifications.issue_date': '取得日',
+
+  // 所属機関
+  'employer.name': '所属機関名',
+  'employer.corporate_number': '法人番号',
+  'employer.office_name': '事業所名',
+  'employer.employment_insurance_office_number': '雇用保険適用事業所番号',
+  'employer.industry_primary': '主たる業種',
+  'employer.postal_code': '郵便番号',
+  'employer.address': '所在地',
+  'employer.phone': '電話番号',
+  'employer.capital_jpy': '資本金（円）',
+  'employer.annual_sales_jpy': '年間売上（円）',
+  'employer.employee_count': '従業員数',
+  'employer.foreign_employee_count': '外国人従業員数',
+  'employer.technical_intern_count': '技能実習生数',
+  'employer.category': 'カテゴリー',
+  'employer.representative_name': '代表者氏名',
+  'employer.representative_title': '代表者役職',
+  'employer.industry': '業種',
+  'employer.branch_office': '事業所',
+
+  // 代理人（配列項目含む）
+  'proxy.name': '氏名',
+  'proxy.relationship': '申請人との関係',
+  'proxy.postal_code': '郵便番号',
+  'proxy.address': '住所',
+  'proxy.phone': '電話番号',
+  'proxy.mobile': '携帯番号',
+
+  // 添付書類（配列項目）
+  'supporting_documents.document_type': '書類種別',
+  'supporting_documents.status': '受領状況',
+  'supporting_documents.source': 'ファイル名',
+  'supporting_documents.file_name': 'ファイル名',
+  'supporting_documents.notes': '備考',
+
+  // 審査結果（配列項目）
+  'assessments.type': '審査種別',
+  'assessments.status': '判定結果',
+  'assessments.summary': '概要',
+}
+
+/** Strip numeric array indices from a path for label lookup.
+ *  e.g. "education.0.school_name" → "education.school_name" */
+function stripIndices(path: string): string {
+  return path.replace(/\.\d+\./g, '.').replace(/\.\d+$/, '')
 }
 
 export function getFieldLabel(path: string): string {
   if (labelOverrides[path]) return labelOverrides[path]
+  const stripped = stripIndices(path)
+  if (labelOverrides[stripped]) return labelOverrides[stripped]
   // Take last segment, replace underscores with spaces, capitalize
   const last = path.split('.').pop() ?? path
   return last.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
