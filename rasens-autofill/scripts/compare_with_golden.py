@@ -249,6 +249,20 @@ def compare_review(gen: dict, exp: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 
+def _form_no_sort_key(no_str: str) -> tuple:
+    """フォーム項目番号でソート（"1", "2", "3.1", "23.5" 等を数値順に）。"""
+    if not no_str:
+        return (9999,)
+    parts = no_str.replace(".", " ").split()
+    result = []
+    for p in parts:
+        try:
+            result.append(float(p))
+        except ValueError:
+            result.append(9999)
+    return tuple(result)
+
+
 def compare_application_data(gen: list, exp: list) -> dict:
     gen_by_id = {it.get("canonical_id"): it for it in gen if it.get("canonical_id")}
     exp_by_id = {it.get("canonical_id"): it for it in exp if it.get("canonical_id")}
@@ -257,7 +271,7 @@ def compare_application_data(gen: list, exp: list) -> dict:
     only_generated: list[str] = []
     compare_keys = ("fill_value", "display_value")
 
-    for cid in sorted(exp_by_id.keys()):
+    for cid in exp_by_id.keys():
         ev_item = exp_by_id[cid]
         if cid in gen_by_id:
             gv_item = gen_by_id[cid]
@@ -270,7 +284,13 @@ def compare_application_data(gen: list, exp: list) -> dict:
         else:
             gv_item = {}
             gv_display = None
-            status = ROW_MISSING
+            # golden に値がなくて AI も出していない → 一致扱い
+            # golden に値があって AI が出していない → 抽出漏れ
+            ev_fill = ev_item.get("fill_value", "")
+            if _normalise(ev_fill) is None:
+                status = ROW_MATCH
+            else:
+                status = ROW_MISSING
 
         # フォーム項目情報: golden 側を優先、なければ generated 側から取得
         form_no = ev_item.get("no", "") or gv_item.get("no", "")
@@ -283,18 +303,23 @@ def compare_application_data(gen: list, exp: list) -> dict:
             "major": major,
             "minor": minor,
             "form_field": form_field,
+            "form_no": form_no,
             "expected": ev_item.get("fill_value", ""),
             "generated": gv_display,
             "status": status,
         })
 
+    # フォーム項目番号順にソート
+    rows.sort(key=lambda r: _form_no_sort_key(r.get("form_no", "")))
+
     for cid in sorted(set(gen_by_id.keys()) - set(exp_by_id.keys())):
         only_generated.append(cid)
 
+    # golden_total: golden の全項目を母数に（空値も含む）
+    golden_total = len(rows)
     match = sum(1 for r in rows if r["status"] == ROW_MATCH)
     mismatch = sum(1 for r in rows if r["status"] == ROW_MISMATCH)
     missing = sum(1 for r in rows if r["status"] == ROW_MISSING)
-    golden_total = match + mismatch + missing
 
     return {
         "file": "application_data",
@@ -314,9 +339,9 @@ def compare_application_data(gen: list, exp: list) -> dict:
 # ---------------------------------------------------------------------------
 
 _FILE_PAIRS = [
+    ("application_data.json", "application_data.golden.json", "application_data", compare_application_data),
     ("case_data.json", "case_data.golden.json", "case_data", compare_case_data),
     ("review.json", "review.golden.json", "review", compare_review),
-    ("application_data.json", "application_data.golden.json", "application_data", compare_application_data),
 ]
 
 
@@ -403,7 +428,6 @@ def format_markdown(results: list[dict]) -> str:
         lines.append(f"| ✅ 一致 | {m_count} |")
         lines.append(f"| ❌ 値の間違い | {mm_count} |")
         lines.append(f"| ⚠️ 抽出漏れ | {oe_count} |")
-        lines.append(f"| ➕ 過剰抽出 | {og_count} |")
         lines.append("")
 
         # Full detail table for golden fields
@@ -430,15 +454,6 @@ def format_markdown(results: list[dict]) -> str:
 
         lines.append("")
 
-        # Extra items (not in golden)
-        if r.get("only_generated"):
-            lines.append("### 過剰抽出（正解にない項目）\n")
-            lines.append("| 項目 |")
-            lines.append("|---|")
-            for p in r["only_generated"]:
-                lines.append(f"| {_escape_md(p)} |")
-            lines.append("")
-
     # Overall summary
     lines.append("---\n")
     lines.append("## 全体サマリ\n")
@@ -453,7 +468,6 @@ def format_markdown(results: list[dict]) -> str:
     lines.append(f"| ✅ 一致 | {agg_match} |")
     lines.append(f"| ❌ 値の間違い | {agg_mismatch} |")
     lines.append(f"| ⚠️ 抽出漏れ | {agg_missing} |")
-    lines.append(f"| ➕ 過剰抽出 | {agg_extra} |")
 
     return "\n".join(lines) + "\n"
 
