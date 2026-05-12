@@ -6,6 +6,9 @@ Usage:
         --generated <generated_dir> \
         --expected <expected_dir> \
         [--output <file>] [--json]
+
+If --output is omitted, the report is saved to <generated_dir>/comparison_report.md
+and a summary is printed to stdout.
 """
 
 from __future__ import annotations
@@ -25,7 +28,6 @@ _SKIP_KEYS_CASE_DATA = {"source_refs", "field_metadata", "schema_version"}
 
 
 def _normalise(value: Any) -> Any:
-    """Normalise a scalar so that null / empty / unknown / NA compare equal."""
     if isinstance(value, str):
         v = value.strip().lower()
         if v in _EMPTY_SYNONYMS:
@@ -38,17 +40,25 @@ def _normalise(value: Any) -> Any:
     return value
 
 
+def _display(value: Any, max_len: int = 60) -> str:
+    """Format a value for table display."""
+    if value is None:
+        return ""
+    s = str(value)
+    if len(s) > max_len:
+        return s[:max_len - 3] + "..."
+    return s
+
+
 # ---------------------------------------------------------------------------
 # Flatten nested JSON to dot-path dict
 # ---------------------------------------------------------------------------
 
 
 def _flatten(obj: Any, prefix: str = "", skip_keys: set[str] | None = None) -> dict[str, Any]:
-    """Flatten a nested dict/list into {dot.path: scalar_value}."""
     out: dict[str, Any] = {}
     if skip_keys is None:
         skip_keys = set()
-
     if isinstance(obj, dict):
         for k, v in obj.items():
             if k in skip_keys:
@@ -64,6 +74,73 @@ def _flatten(obj: Any, prefix: str = "", skip_keys: set[str] | None = None) -> d
     return out
 
 
+def _split_path(dot_path: str) -> tuple[str, str]:
+    """Split a dot path into (大項目, 小項目)."""
+    # e.g. "applicant.name_roman" -> ("applicant", "name_roman")
+    # e.g. "education[0].school_name" -> ("education", "[0].school_name")
+    # e.g. "case.case_id" -> ("case", "case_id")
+    parts = dot_path.split(".", 1)
+    if len(parts) == 1:
+        # check for array index at top level
+        if "[" in parts[0]:
+            base = parts[0].split("[", 1)
+            return base[0], "[" + base[1]
+        return parts[0], ""
+    major = parts[0]
+    minor = parts[1]
+    # If major contains array index, split it
+    if "[" in major:
+        base = major.split("[", 1)
+        return base[0], "[" + base[1] + "." + minor
+    return major, minor
+
+
+# ---------------------------------------------------------------------------
+# Unified comparison row
+# ---------------------------------------------------------------------------
+
+ROW_MATCH = "✅ 一致"
+ROW_MISMATCH = "❌ 不一致"
+ROW_MISSING = "⚠️ 抽出漏れ"
+ROW_EXTRA = "➕ 過剰抽出"
+
+
+def _build_golden_rows(gen_flat: dict, exp_flat: dict) -> list[dict]:
+    """Build comparison rows for all golden-expected fields."""
+    rows: list[dict] = []
+
+    # Golden fields (expected): match, mismatch, missing
+    for key in sorted(exp_flat.keys()):
+        ev = exp_flat[key]
+        ev_norm = _normalise(ev)
+        major, minor = _split_path(key)
+
+        if key in gen_flat:
+            gv = gen_flat[key]
+            gv_norm = _normalise(gv)
+            if gv_norm == ev_norm:
+                status = ROW_MATCH
+            else:
+                status = ROW_MISMATCH
+        else:
+            gv = None
+            if ev_norm is None:
+                status = ROW_MATCH  # both empty
+            else:
+                status = ROW_MISSING
+
+        rows.append({
+            "path": key,
+            "major": major,
+            "minor": minor,
+            "expected": ev,
+            "generated": gv,
+            "status": status,
+        })
+
+    return rows
+
+
 # ---------------------------------------------------------------------------
 # case_data comparison
 # ---------------------------------------------------------------------------
@@ -73,46 +150,26 @@ def compare_case_data(gen: dict, exp: dict) -> dict:
     gen_flat = _flatten(gen, skip_keys=_SKIP_KEYS_CASE_DATA)
     exp_flat = _flatten(exp, skip_keys=_SKIP_KEYS_CASE_DATA)
 
-    all_keys = sorted(set(gen_flat) | set(exp_flat))
-    matches: list[str] = []
-    mismatches: list[dict] = []
-    only_expected: list[str] = []
-    only_generated: list[str] = []
+    rows = _build_golden_rows(gen_flat, exp_flat)
+    match = sum(1 for r in rows if r["status"] == ROW_MATCH)
+    mismatch = sum(1 for r in rows if r["status"] == ROW_MISMATCH)
+    missing = sum(1 for r in rows if r["status"] == ROW_MISSING)
 
-    for k in all_keys:
-        in_gen = k in gen_flat
-        in_exp = k in exp_flat
-        if in_gen and in_exp:
-            gv = _normalise(gen_flat[k])
-            ev = _normalise(exp_flat[k])
-            if gv == ev:
-                matches.append(k)
-            else:
-                mismatches.append({"path": k, "generated": gen_flat[k], "expected": exp_flat[k]})
-        elif in_exp and not in_gen:
-            # only count as missing if the expected value is non-empty
-            if _normalise(exp_flat[k]) is not None:
-                only_expected.append(k)
-            else:
-                matches.append(k)  # both effectively empty
-        else:
-            if _normalise(gen_flat[k]) is not None:
-                only_generated.append(k)
-            else:
-                matches.append(k)
+    # Extra: in generated but not in expected (non-empty only)
+    extra_keys = sorted(set(gen_flat.keys()) - set(exp_flat.keys()))
+    extra = [k for k in extra_keys if _normalise(gen_flat[k]) is not None]
 
-    total = len(matches) + len(mismatches) + len(only_expected) + len(only_generated)
+    golden_total = match + mismatch + missing
     return {
         "file": "case_data",
-        "status": "MATCH" if not mismatches and not only_expected and not only_generated else "MISMATCH",
-        "total_fields": total,
-        "match_count": len(matches),
-        "mismatch_count": len(mismatches),
-        "only_expected_count": len(only_expected),
-        "only_generated_count": len(only_generated),
-        "mismatches": mismatches,
-        "only_expected": only_expected,
-        "only_generated": only_generated,
+        "status": "MATCH" if not mismatch and not missing and not extra else "MISMATCH",
+        "golden_total": golden_total,
+        "match_count": match,
+        "mismatch_count": mismatch,
+        "only_expected_count": missing,
+        "only_generated_count": len(extra),
+        "rows": rows,
+        "only_generated": extra,
     }
 
 
@@ -126,9 +183,7 @@ _REVIEW_SKIP_KEYS = {"schema_version", "golden_status", "expected_workflow_state
 
 
 def _set_key(item: Any) -> str:
-    """Build a hashable key for a list item in review arrays."""
     if isinstance(item, dict):
-        # Use path or code as primary key, fall back to sorted JSON
         for k in ("path", "code", "type"):
             if k in item:
                 return f"{k}={item[k]}"
@@ -137,50 +192,54 @@ def _set_key(item: Any) -> str:
 
 
 def compare_review(gen: dict, exp: dict) -> dict:
-    matches: list[str] = []
-    mismatches: list[dict] = []
-    only_expected: list[str] = []
+    rows: list[dict] = []
     only_generated: list[str] = []
 
-    # Exact-match keys
-    for k in _REVIEW_EXACT_KEYS:
+    for k in sorted(_REVIEW_EXACT_KEYS):
         gv = gen.get(k)
         ev = exp.get(k)
-        if _normalise(gv) == _normalise(ev):
-            matches.append(k)
-        else:
-            mismatches.append({"path": k, "generated": gv, "expected": ev})
+        status = ROW_MATCH if _normalise(gv) == _normalise(ev) else ROW_MISMATCH
+        rows.append({"path": k, "major": "review", "minor": k,
+                      "expected": ev, "generated": gv, "status": status})
 
-    # Set-compare array fields
-    for field in _REVIEW_SET_FIELDS:
+    for field in sorted(_REVIEW_SET_FIELDS):
         gen_list = gen.get(field, []) or []
         exp_list = exp.get(field, []) or []
         gen_by_key = {_set_key(it): it for it in gen_list}
         exp_by_key = {_set_key(it): it for it in exp_list}
 
-        for key in sorted(set(gen_by_key) | set(exp_by_key)):
+        for key in sorted(exp_by_key.keys()):
             path = f"{field}[{key}]"
-            if key in gen_by_key and key in exp_by_key:
-                if json.dumps(gen_by_key[key], sort_keys=True) == json.dumps(exp_by_key[key], sort_keys=True):
-                    matches.append(path)
+            ev = exp_by_key[key]
+            if key in gen_by_key:
+                gv = gen_by_key[key]
+                if json.dumps(gv, sort_keys=True) == json.dumps(ev, sort_keys=True):
+                    status = ROW_MATCH
                 else:
-                    mismatches.append({"path": path, "generated": gen_by_key[key], "expected": exp_by_key[key]})
-            elif key in exp_by_key:
-                only_expected.append(path)
+                    status = ROW_MISMATCH
             else:
-                only_generated.append(path)
+                gv = None
+                status = ROW_MISSING
+            rows.append({"path": path, "major": field, "minor": key,
+                          "expected": ev, "generated": gv, "status": status})
 
-    total = len(matches) + len(mismatches) + len(only_expected) + len(only_generated)
+        for key in sorted(set(gen_by_key.keys()) - set(exp_by_key.keys())):
+            only_generated.append(f"{field}[{key}]")
+
+    match = sum(1 for r in rows if r["status"] == ROW_MATCH)
+    mismatch = sum(1 for r in rows if r["status"] == ROW_MISMATCH)
+    missing = sum(1 for r in rows if r["status"] == ROW_MISSING)
+    golden_total = match + mismatch + missing
+
     return {
         "file": "review",
-        "status": "MATCH" if not mismatches and not only_expected and not only_generated else "MISMATCH",
-        "total_fields": total,
-        "match_count": len(matches),
-        "mismatch_count": len(mismatches),
-        "only_expected_count": len(only_expected),
+        "status": "MATCH" if not mismatch and not missing and not only_generated else "MISMATCH",
+        "golden_total": golden_total,
+        "match_count": match,
+        "mismatch_count": mismatch,
+        "only_expected_count": missing,
         "only_generated_count": len(only_generated),
-        "mismatches": mismatches,
-        "only_expected": only_expected,
+        "rows": rows,
         "only_generated": only_generated,
     }
 
@@ -189,51 +248,56 @@ def compare_review(gen: dict, exp: dict) -> dict:
 # application_data comparison
 # ---------------------------------------------------------------------------
 
-_APP_SKIP_KEYS = {"section", "no", "label", "notes"}
-
 
 def compare_application_data(gen: list, exp: list) -> dict:
     gen_by_id = {it.get("canonical_id"): it for it in gen if it.get("canonical_id")}
     exp_by_id = {it.get("canonical_id"): it for it in exp if it.get("canonical_id")}
 
-    all_ids = sorted(set(gen_by_id) | set(exp_by_id))
-    matches: list[str] = []
-    mismatches: list[dict] = []
-    only_expected: list[str] = []
+    rows: list[dict] = []
     only_generated: list[str] = []
+    compare_keys = ("fill_value", "display_value")
 
-    compare_keys = {"fill_value", "display_value"}
-
-    for cid in all_ids:
-        in_gen = cid in gen_by_id
-        in_exp = cid in exp_by_id
-        if in_gen and in_exp:
-            diffs: dict[str, dict] = {}
+    for cid in sorted(exp_by_id.keys()):
+        ev_item = exp_by_id[cid]
+        if cid in gen_by_id:
+            gv_item = gen_by_id[cid]
+            all_match = True
             for ck in compare_keys:
-                gv = _normalise(gen_by_id[cid].get(ck))
-                ev = _normalise(exp_by_id[cid].get(ck))
-                if gv != ev:
-                    diffs[ck] = {"generated": gen_by_id[cid].get(ck), "expected": exp_by_id[cid].get(ck)}
-            if diffs:
-                mismatches.append({"canonical_id": cid, "diffs": diffs})
-            else:
-                matches.append(cid)
-        elif in_exp:
-            only_expected.append(cid)
+                if _normalise(gv_item.get(ck)) != _normalise(ev_item.get(ck)):
+                    all_match = False
+            status = ROW_MATCH if all_match else ROW_MISMATCH
+            gv_display = gv_item.get("fill_value", "")
         else:
-            only_generated.append(cid)
+            gv_display = None
+            status = ROW_MISSING
 
-    total = len(matches) + len(mismatches) + len(only_expected) + len(only_generated)
+        major, minor = _split_path(cid)
+        rows.append({
+            "path": cid,
+            "major": major,
+            "minor": minor,
+            "expected": ev_item.get("fill_value", ""),
+            "generated": gv_display,
+            "status": status,
+        })
+
+    for cid in sorted(set(gen_by_id.keys()) - set(exp_by_id.keys())):
+        only_generated.append(cid)
+
+    match = sum(1 for r in rows if r["status"] == ROW_MATCH)
+    mismatch = sum(1 for r in rows if r["status"] == ROW_MISMATCH)
+    missing = sum(1 for r in rows if r["status"] == ROW_MISSING)
+    golden_total = match + mismatch + missing
+
     return {
         "file": "application_data",
-        "status": "MATCH" if not mismatches and not only_expected and not only_generated else "MISMATCH",
-        "total_fields": total,
-        "match_count": len(matches),
-        "mismatch_count": len(mismatches),
-        "only_expected_count": len(only_expected),
+        "status": "MATCH" if not mismatch and not missing and not only_generated else "MISMATCH",
+        "golden_total": golden_total,
+        "match_count": match,
+        "mismatch_count": mismatch,
+        "only_expected_count": missing,
         "only_generated_count": len(only_generated),
-        "mismatches": mismatches,
-        "only_expected": only_expected,
+        "rows": rows,
         "only_generated": only_generated,
     }
 
@@ -263,15 +327,11 @@ def _load_json(path: Path) -> Any:
 
 def run_comparison(generated_dir: Path, expected_dir: Path) -> list[dict]:
     results: list[dict] = []
-
     for gen_name, exp_name, label, compare_fn in _FILE_PAIRS:
         gen_path = generated_dir / gen_name
-        # Also accept golden-suffixed names in generated dir (self-comparison)
         if not gen_path.exists():
             gen_path = generated_dir / exp_name
-
         exp_path = expected_dir / exp_name
-        # Also accept non-golden names in expected dir
         if not exp_path.exists():
             exp_path = expected_dir / gen_name
 
@@ -287,77 +347,99 @@ def run_comparison(generated_dir: Path, expected_dir: Path) -> list[dict]:
 
         gen_data = _load_json(gen_path)
         exp_data = _load_json(exp_path)
-        result = compare_fn(gen_data, exp_data)
-        results.append(result)
-
+        results.append(compare_fn(gen_data, exp_data))
     return results
 
 
 # ---------------------------------------------------------------------------
-# Output formatting
+# Markdown report
 # ---------------------------------------------------------------------------
 
 
-def format_text(results: list[dict]) -> str:
-    lines: list[str] = []
-    lines.append("=" * 60)
-    lines.append("Golden Comparison Report")
-    lines.append("=" * 60)
+def _escape_md(s: str) -> str:
+    return s.replace("|", "\\|").replace("\n", " ")
 
-    total_match = 0
-    total_fields = 0
-    total_mismatch = 0
-    total_missing = 0
+
+def format_markdown(results: list[dict]) -> str:
+    lines: list[str] = []
+    lines.append("# Golden 比較レポート\n")
+
+    agg_match = 0
+    agg_golden_total = 0
+    agg_mismatch = 0
+    agg_missing = 0
+    agg_extra = 0
 
     for r in results:
-        lines.append("")
-        lines.append(f"--- {r['file']} ---")
-        status = r["status"]
-        lines.append(f"  Status: {status}")
+        lines.append(f"## {r['file']}\n")
 
-        if status in ("SKIP", "MISSING"):
-            lines.append(f"  Reason: {r.get('reason', '')}")
+        if r["status"] in ("SKIP", "MISSING"):
+            lines.append(f"> {r.get('reason', '')}\n")
             continue
 
-        mc = r["match_count"]
-        tf = r["total_fields"]
-        lines.append(f"  Fields: {tf}  Match: {mc}  Mismatch: {r['mismatch_count']}  "
-                      f"OnlyExpected: {r['only_expected_count']}  OnlyGenerated: {r['only_generated_count']}")
+        m_count = r["match_count"]
+        mm_count = r["mismatch_count"]
+        oe_count = r["only_expected_count"]
+        og_count = r["only_generated_count"]
+        g_total = r["golden_total"]
 
-        total_match += mc
-        total_fields += tf
-        total_mismatch += r["mismatch_count"]
-        total_missing += r["only_expected_count"]
+        agg_match += m_count
+        agg_golden_total += g_total
+        agg_mismatch += mm_count
+        agg_missing += oe_count
+        agg_extra += og_count
 
-        if r.get("mismatches"):
-            lines.append("  Mismatches:")
-            for m in r["mismatches"]:
-                if "path" in m:
-                    lines.append(f"    {m['path']}")
-                    lines.append(f"      expected : {m['expected']}")
-                    lines.append(f"      generated: {m['generated']}")
-                elif "canonical_id" in m:
-                    lines.append(f"    {m['canonical_id']}")
-                    for dk, dv in m["diffs"].items():
-                        lines.append(f"      {dk}: expected={dv['expected']}  generated={dv['generated']}")
+        accuracy = (m_count / g_total * 100) if g_total else 0
+        lines.append(f"**Golden正答率: {accuracy:.1f}%** ({m_count}/{g_total} 項目)\n")
+        lines.append(f"| 指標 | 件数 |")
+        lines.append(f"|---|---|")
+        lines.append(f"| ✅ 一致 | {m_count} |")
+        lines.append(f"| ❌ 値の間違い | {mm_count} |")
+        lines.append(f"| ⚠️ 抽出漏れ | {oe_count} |")
+        lines.append(f"| ➕ 過剰抽出 | {og_count} |")
+        lines.append("")
 
-        if r.get("only_expected"):
-            lines.append("  Only in expected:")
-            for p in r["only_expected"]:
-                lines.append(f"    {p}")
+        # Full detail table for golden fields
+        lines.append("### 全項目詳細\n")
+        lines.append("| 大項目 | 小項目 | 正解データ | AI出力 | 判定 |")
+        lines.append("|---|---|---|---|---|")
 
+        for row in r.get("rows", []):
+            major = _escape_md(row["major"])
+            minor = _escape_md(row["minor"])
+            exp_val = _escape_md(_display(row["expected"]))
+            gen_val = _escape_md(_display(row["generated"]))
+            status = row["status"]
+            lines.append(f"| {major} | {minor} | {exp_val} | {gen_val} | {status} |")
+
+        lines.append("")
+
+        # Extra items (not in golden)
         if r.get("only_generated"):
-            lines.append("  Only in generated:")
+            lines.append("### 過剰抽出（正解にない項目）\n")
+            lines.append("| 項目 |")
+            lines.append("|---|")
             for p in r["only_generated"]:
-                lines.append(f"    {p}")
+                lines.append(f"| {_escape_md(p)} |")
+            lines.append("")
 
-    lines.append("")
-    lines.append("=" * 60)
-    rate = (total_match / total_fields * 100) if total_fields else 0
-    lines.append(f"Summary: {total_match}/{total_fields} fields match ({rate:.1f}%)  "
-                 f"mismatches={total_mismatch}  missing={total_missing}")
-    lines.append("=" * 60)
-    return "\n".join(lines)
+    # Overall summary
+    lines.append("---\n")
+    lines.append("## 全体サマリ\n")
+    if agg_golden_total:
+        overall = agg_match / agg_golden_total * 100
+        lines.append(f"**Golden正答率（メイン指標）: {overall:.1f}%**\n")
+        lines.append(f"正解が期待する **{agg_golden_total}** 項目のうち、"
+                     f"AIが正しく抽出できたのは **{agg_match}** 項目\n")
+
+    lines.append(f"| 指標 | 件数 |")
+    lines.append(f"|---|---|")
+    lines.append(f"| ✅ 一致 | {agg_match} |")
+    lines.append(f"| ❌ 値の間違い | {agg_mismatch} |")
+    lines.append(f"| ⚠️ 抽出漏れ | {agg_missing} |")
+    lines.append(f"| ➕ 過剰抽出 | {agg_extra} |")
+
+    return "\n".join(lines) + "\n"
 
 
 # ---------------------------------------------------------------------------
@@ -369,7 +451,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Compare generated output with golden files")
     parser.add_argument("--generated", required=True, type=Path, help="Directory with generated files")
     parser.add_argument("--expected", required=True, type=Path, help="Directory with golden files")
-    parser.add_argument("--output", type=Path, default=None, help="Write output to file")
+    parser.add_argument("--output", type=Path, default=None, help="Write output to file (default: generated/comparison_report.md)")
     parser.add_argument("--json", dest="as_json", action="store_true", help="Output as JSON")
     args = parser.parse_args()
 
@@ -382,19 +464,30 @@ def main() -> None:
 
     results = run_comparison(args.generated, args.expected)
 
+    # Default output path
+    output_path = args.output or (args.generated / "comparison_report.md")
+
     if args.as_json:
-        output = json.dumps(results, ensure_ascii=False, indent=2)
+        # Strip rows for JSON output (too verbose)
+        json_results = []
+        for r in results:
+            jr = {k: v for k, v in r.items() if k != "rows"}
+            json_results.append(jr)
+        output_content = json.dumps(json_results, ensure_ascii=False, indent=2)
     else:
-        output = format_text(results)
+        output_content = format_markdown(results)
 
-    if args.output:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(output, encoding="utf-8")
-        print(f"Output written to {args.output}")
-    else:
-        print(output)
+    # Save to file
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(output_content, encoding="utf-8")
 
-    # Exit with code 1 if any MISMATCH or MISSING
+    # Print summary to stdout
+    agg_match = sum(r.get("match_count", 0) for r in results if r["status"] not in ("SKIP", "MISSING"))
+    agg_total = sum(r.get("golden_total", 0) for r in results if r["status"] not in ("SKIP", "MISSING"))
+    rate = (agg_match / agg_total * 100) if agg_total else 0
+    print(f"Golden正答率: {rate:.1f}% ({agg_match}/{agg_total})")
+    print(f"レポート保存先: {output_path}")
+
     has_issues = any(r["status"] in ("MISMATCH", "MISSING") for r in results)
     sys.exit(1 if has_issues else 0)
 

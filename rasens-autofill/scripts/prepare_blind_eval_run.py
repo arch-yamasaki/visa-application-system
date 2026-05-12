@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -36,10 +37,11 @@ def write_json(path: Path, data: Any) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
 
 
-def make_symlink(source: Path, link: Path) -> None:
-    if link.exists() or link.is_symlink():
-        link.unlink()
-    link.symlink_to(source)
+def copy_document(source: Path, dest: Path) -> None:
+    """ファイルを実体コピーする（symlink ではなく）。"""
+    if dest.exists():
+        dest.unlink()
+    shutil.copy2(source, dest)
 
 
 def build_output_contract() -> str:
@@ -167,7 +169,7 @@ def prepare(fixture_dir: Path) -> Path:
             raise SystemExit(f"missing source document: {source}")
         link_name = f"doc_{index:03d}{safe_suffix(source)}"
         link = documents_dir / link_name
-        make_symlink(source, link)
+        copy_document(source, link)
         blind_doc = {
             "document_id": f"doc_{index:03d}",
             "document_role": doc.get("document_role", ""),
