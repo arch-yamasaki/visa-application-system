@@ -268,14 +268,21 @@ def compare_application_data(gen: list, exp: list) -> dict:
             status = ROW_MATCH if all_match else ROW_MISMATCH
             gv_display = gv_item.get("fill_value", "")
         else:
+            gv_item = {}
             gv_display = None
             status = ROW_MISSING
+
+        # フォーム項目情報: golden 側を優先、なければ generated 側から取得
+        form_no = ev_item.get("no", "") or gv_item.get("no", "")
+        form_label = ev_item.get("label", "") or gv_item.get("label", "")
+        form_field = f"{form_no} {form_label}".strip() if (form_no or form_label) else ""
 
         major, minor = _split_path(cid)
         rows.append({
             "path": cid,
             "major": major,
             "minor": minor,
+            "form_field": form_field,
             "expected": ev_item.get("fill_value", ""),
             "generated": gv_display,
             "status": status,
@@ -400,9 +407,14 @@ def format_markdown(results: list[dict]) -> str:
         lines.append("")
 
         # Full detail table for golden fields
+        has_form_field = any(row.get("form_field") for row in r.get("rows", []))
         lines.append("### 全項目詳細\n")
-        lines.append("| 大項目 | 小項目 | 正解データ | AI出力 | 判定 |")
-        lines.append("|---|---|---|---|---|")
+        if has_form_field:
+            lines.append("| 申請フォーム項目 | 大項目 | 小項目 | 正解データ | AI出力 | 判定 |")
+            lines.append("|---|---|---|---|---|---|")
+        else:
+            lines.append("| 大項目 | 小項目 | 正解データ | AI出力 | 判定 |")
+            lines.append("|---|---|---|---|---|")
 
         for row in r.get("rows", []):
             major = _escape_md(row["major"])
@@ -410,7 +422,11 @@ def format_markdown(results: list[dict]) -> str:
             exp_val = _escape_md(_display(row["expected"]))
             gen_val = _escape_md(_display(row["generated"]))
             status = row["status"]
-            lines.append(f"| {major} | {minor} | {exp_val} | {gen_val} | {status} |")
+            if has_form_field:
+                form = _escape_md(row.get("form_field", ""))
+                lines.append(f"| {form} | {major} | {minor} | {exp_val} | {gen_val} | {status} |")
+            else:
+                lines.append(f"| {major} | {minor} | {exp_val} | {gen_val} | {status} |")
 
         lines.append("")
 
