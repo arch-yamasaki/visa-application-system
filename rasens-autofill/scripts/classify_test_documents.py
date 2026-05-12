@@ -66,9 +66,9 @@ def doc_role(path: Path) -> str:
     if "添付しなかった" in name:
         return "not_attached_reference"
     if "申請書類" in name:
-        return "submitted_application_bundle"
+        return "submitted_application_pdf"
     if path.suffix.lower() == ".pdf":
-        return "applicant_document_bundle"
+        return "submitted_application_pdf"
     return "other"
 
 
@@ -99,7 +99,7 @@ def record(path: Path) -> dict[str, Any]:
         "document_role": doc_role(path),
         "expected_residence_status": residence_status(path),
         "contains_personal_information": True,
-        "use_as_input": "申請には使わない" not in str(path),
+        "use_as_input": True if doc_role(path) == "unused_resume" else ("申請には使わない" not in str(path)),
         "notes": "",
     }
     if suffix == "pdf":
@@ -107,7 +107,8 @@ def record(path: Path) -> dict[str, Any]:
     if suffix == "xlsx":
         item["sheets"] = xlsx_sheets(path)
     if item["document_role"] == "unused_resume":
-        item["notes"] = "raw参考資料。原則として正解データ生成の入力から除外する。"
+        item["use_as_input"] = True
+        item["notes"] = "申請には添付しないが、記載情報（職歴・学歴等）はAI抽出の対象。"
     if item["document_role"] == "not_attached_reference":
         item["notes"] = "申請添付外の参考資料。期待値との差分確認用。"
     return item

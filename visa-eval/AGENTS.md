@@ -11,7 +11,7 @@ visa-eval/
   fixtures_single/     # 単票テストケース — git管理外 (README.mdのみ管理)
     <case_id>/<applicant_id>/
       scenario.json
-      input/input_documents.json
+      input/document_manifest.json
       expected/         # golden: case_data, application_data, review
       generated/        # AI出力先
   runs/                # ブラインド実行ワークスペース — git管理外
@@ -24,7 +24,7 @@ visa-eval/
 ## 重要ファイル
 
 - `README.md`: 評価ワークスペースの入口、データ機密性ルール
-- `docs/テスト設計.md`: raw → input_documents → golden → generated のテスト構成
+- `docs/テスト設計.md`: raw → document_manifest → golden → generated のテスト構成
 - `docs/単票評価ワークフローまとめ.md`: 単票fixture → Chrome拡張投入までの全体像
 - `docs/AIブラインド抽出実行手順.md`: goldenを見せずにAI抽出を実行する手順
 - `docs/フォルダ整理案.md`: fixtures_single / runs / eval の役割分担

@@ -15,7 +15,7 @@ You are extracting structured data for one Japanese immigration application case
 ## Allowed Inputs
 
 - `scenario.json`
-- `input_documents.blind.json`
+- `document_manifest.blind.json`
 - Files under `documents/`
 - `allowed_reference_paths.txt`
 - `output_contract.md`
@@ -26,6 +26,7 @@ You are extracting structured data for one Japanese immigration application case
 - Any file matching `*.golden.json`
 - Any previous `generated/` output from another run
 - `rasens-autofill/extension/application_data.json` if it contains real-case data
+- Submitted application PDFs (`submitted_application_pdf`): these are used only as golden answer sources, not as AI extraction inputs
 
 ## Required Outputs
 

@@ -7,7 +7,7 @@ Chrome拡張による在留申請オンラインシステム(RASENS)フォーム
 ```text
 rasens-autofill/
   data/
-    schemas/           # case_data, input_documents, review の JSON Schema
+    schemas/           # case_data, document_manifest, review の JSON Schema
     cases/             # 案件単位の正規 case_data (正本)
     form_definitions/  # フォーム項目台帳 (rasens_offer_fields 等)
     mappings/          # case_data -> フォーム入力への変換ルール
@@ -36,7 +36,7 @@ rasens-autofill/
 - `data/form_definitions/rasens_offer_fields.json`: フォーム全項目台帳の正本
 - `data/mappings/rasens_offer_mapping.json`: 正規 case_data からフォーム入力行への変換ルール
 - `data/generated/demo_application_data.json`: デモ案件から生成した Chrome 拡張投入用 JSON
-- `data/schemas/*.json`: case_data, input_documents, review の JSON Schema 定義
+- `data/schemas/*.json`: case_data, document_manifest, review の JSON Schema 定義
 - `extension/`: Chrome拡張本体 (manifest.json, content.js, popup.html/js/css)
 - `scripts/build_application_data.py`: case_data + mapping -> application_data を生成するスクリプト
 

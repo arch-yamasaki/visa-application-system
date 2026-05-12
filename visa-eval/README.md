@@ -48,7 +48,7 @@ visa-eval/
       <applicant_id>/
         scenario.json
         input/
-          input_documents.json
+          document_manifest.json
         expected/
           case_data.golden.json
           application_data.golden.json
@@ -64,7 +64,7 @@ visa-eval/
 - `raw/`: Downloadsから移動した原資料。原本保管場所として扱い、加工しない。
 - `catalog.json`: raw資料の分類結果。案件ID、文書種別、ページ数、Excelシートなどのメタデータを持つ。
 - `fixtures_single/<case_id>/<applicant_id>/...`: 申請人1人=1フォームの単票ケース。まずここでPDF/Excel読取、正規case_data生成、フォーム投入JSON生成を検証する。
-- `.../input/input_documents.json`: そのケースでAIエージェントへ渡す入力資料リスト。
+- `.../input/document_manifest.json`: そのケースでAIエージェントへ渡す入力資料リスト。
 - `.../expected/case_data.golden.json`: 人手で完成させる正規case_dataの正解データ。
 - `.../expected/application_data.golden.json`: case_dataから生成されるフォーム投入用JSONの正解データ。
 - `.../expected/review.golden.json`: 不足確認・リスク判定・人レビュー要否の正解データ。現状はExcel起点のscaffoldを含むため、人手確認でgolden化する。
@@ -89,14 +89,14 @@ python3 rasens-autofill/scripts/classify_test_documents.py
 
 ### Golden作成モード
 
-1. `input_documents.json` をCodex/AIエージェントへ渡す。
+1. `document_manifest.json` をCodex/AIエージェントへ渡す。
 2. AIが `generated/case_data.json` と `generated/review.json` を作る。
 3. `generated/case_data.json` を deterministic な変換処理に渡して `generated/application_data.json` を作る。
 4. 人が `generated/*.json` を確認し、必要な補正後に `expected/*.golden.json` として確定する。
 
 ### 評価モード
 
-1. `input_documents.json` をAIエージェントへ渡す。
+1. `document_manifest.json` をAIエージェントへ渡す。
 2. AIが `generated/case_data.json` と `generated/review.json` を作る。
 3. `generated/case_data.json` を deterministic な変換処理に渡して `generated/application_data.json` を作る。
 4. `expected/*.golden.json` と比較する。
@@ -113,7 +113,7 @@ python3 rasens-autofill/scripts/classify_test_documents.py
 - DevTools Consoleには値をマスクして出す。必要があっても実値ログを外部共有しない。
 - `case_data.golden.json` は人手レビュー済みの正解データとして扱う。
 - `application_data.golden.json` は派生物。案件正本ではない。
-- `unused_resume` と分類された資料は、原則として正解データ生成の入力から除外する。
+- `unused_resume` と分類された履歴書は、申請には添付しないが、記載情報（職歴・学歴等）はAI抽出の対象とする。
 - `not_attached_reference` は添付外資料。差分確認・参考用として扱う。
 
 ## `fixtures_single/` について

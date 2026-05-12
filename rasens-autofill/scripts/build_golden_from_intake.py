@@ -254,7 +254,7 @@ def pick_documents(all_docs: list[dict[str, Any]], applicant_name: str) -> list[
         if doc["document_role"] in {
             "intake_spreadsheet",
             "company_documents",
-            "submitted_application_bundle",
+            "submitted_application_pdf",
             "not_attached_reference",
             "email_context",
         }:
@@ -265,8 +265,8 @@ def pick_documents(all_docs: list[dict[str, Any]], applicant_name: str) -> list[
             continue
         if doc["document_role"] == "employment_terms" and normalized and normalize_name(doc["file_name"]).find(normalized) >= 0:
             docs.append(doc)
-    if not any(d["document_role"] == "applicant_document_bundle" for d in docs):
-        docs.extend([doc for doc in all_docs if doc["document_role"] == "applicant_document_bundle"])
+    if not any(d["document_role"] == "submitted_application_pdf" for d in docs):
+        docs.extend([doc for doc in all_docs if doc["document_role"] == "submitted_application_pdf"])
     unique = {}
     for doc in docs:
         unique[doc["path"]] = doc
@@ -477,7 +477,7 @@ def write_single_fixture(case_data: dict[str, Any], docs: list[dict[str, Any]], 
                     "form_mapping",
                     "gijinkoku_fit",
                 ],
-                "input_documents": "input/input_documents.json",
+                "input_documents": "input/document_manifest.json",
                 "expected_case_data": "expected/case_data.golden.json",
                 "expected_application_data": "expected/application_data.golden.json",
                 "expected_review": "expected/review.golden.json",
@@ -489,7 +489,7 @@ def write_single_fixture(case_data: dict[str, Any], docs: list[dict[str, Any]], 
         + "\n"
     )
 
-    (input_dir / "input_documents.json").write_text(
+    (input_dir / "document_manifest.json").write_text(
         json.dumps(
             {
                 "schema_version": "0.1.0",

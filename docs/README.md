@@ -19,7 +19,7 @@
 
 ### visa-eval/docs/
 
-- [テスト設計.md](../visa-eval/docs/テスト設計.md): raw資料、input_documents、golden expected、generated出力のテスト構成
+- [テスト設計.md](../visa-eval/docs/テスト設計.md): raw資料、document_manifest、golden expected、generated出力のテスト構成
 - [AIブラインド抽出実行手順.md](../visa-eval/docs/AIブラインド抽出実行手順.md): expected/goldenを見せずにAI抽出を実行する手順
 - [フォルダ整理案.md](../visa-eval/docs/フォルダ整理案.md): fixtures_single、runs、evalの役割分担案
 - [単票評価ワークフローまとめ.md](../visa-eval/docs/単票評価ワークフローまとめ.md): 単票fixture、expected、Chrome拡張投入までの全体像

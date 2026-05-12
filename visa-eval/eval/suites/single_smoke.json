@@ -19,7 +19,7 @@
     "gijinkoku_a_company_round2_family_japan__rabin_raj_neupane"
   ],
   "checks": [
-    "input_documents_loadable",
+    "document_manifest_loadable",
     "case_data_schema_loadable",
     "review_output_present",
     "application_data_output_present",

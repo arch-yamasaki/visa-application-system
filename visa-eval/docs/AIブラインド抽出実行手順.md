@@ -19,14 +19,14 @@ goldenを見てしまうと、AIが資料から抽出できたのか、正解を
 ```text
 fixtures_single/<case>/<applicant>/
   scenario.json
-  input/input_documents.json
+  input/document_manifest.json
   expected/*.golden.json   <- AIには見せない
 
 prepare_blind_eval_run.py
   -> visa-eval/runs/<run_id>/
        AGENT_TASK.md
        scenario.json
-       input_documents.blind.json
+       document_manifest.blind.json
        documents/
        output_contract.md
        allowed_reference_paths.txt
@@ -59,7 +59,7 @@ python3 rasens-autofill/scripts/prepare_blind_eval_run.py \
 visa-eval/runs/20260509_153000_gijinkoku_a_company_round1__amit_tamang/
   AGENT_TASK.md
   scenario.json
-  input_documents.blind.json
+  document_manifest.blind.json
   allowed_reference_paths.txt
   output_contract.md
   documents/
@@ -93,13 +93,13 @@ AIに渡してよいファイル:
 
 - `AGENT_TASK.md`
 - `scenario.json`
-- `input_documents.blind.json`
+- `document_manifest.blind.json`
 - `documents/*`
 - `output_contract.md`
 - `allowed_reference_paths.txt`
 - `rasens-autofill/data/schemas/case_data.schema.json`
 - `rasens-autofill/data/schemas/review.schema.json`
-- `rasens-autofill/data/schemas/input_documents.schema.json`
+- `rasens-autofill/data/schemas/document_manifest.schema.json`
 - `rasens-autofill/data/mappings/rasens_offer_mapping.json`
 - `rasens-autofill/data/form_definitions/rasens_offer_fields.json`
 - `rasens-autofill/scripts/build_application_data.py`
@@ -111,6 +111,9 @@ AIに渡してはいけないファイル:
 - `*.golden.json`
 - 他runの `generated/**`
 - 実案件入りの `rasens-autofill/extension/application_data.json`
+- 提出済み申請書PDF（`submitted_application_pdf`）
+
+提出済み申請書PDF（`submitted_application_pdf`）はAIブラインド抽出のインプットではない。これはgolden正解データの根拠として使用するものであり、AIには読ませない。`document_manifest.json` で `"use_as_input": false` が設定されており、`prepare_blind_eval_run.py` はこれらをrunディレクトリの `documents/` にコピーしない。
 
 ## 3. AIが作る出力
 
@@ -173,7 +176,7 @@ AI実行前:
 
 - runディレクトリに `expected/` が存在しないこと。
 - runディレクトリの `scenario.json` に `expected_` で始まるキーがないこと。
-- `input_documents.blind.json` が `documents/` 配下だけを指していること。
+- `document_manifest.blind.json` が `documents/` 配下だけを指していること。
 - AIへの依頼文に `expected/` と `*.golden.json` 禁止が明記されていること。
 - `generated/` が空、または今回run用に初期化されていること。
 
@@ -208,7 +211,7 @@ AI実行後:
 - 出力は <run_dir>/generated/ にだけ作る。
 
 やること:
-1. scenario.json と input_documents.blind.json を読む。
+1. scenario.json と document_manifest.blind.json を読む。
 2. documents/ 配下の資料だけを読む。
 3. generated/case_data.json を作る。
 4. generated/review.json を作る。
@@ -226,3 +229,23 @@ AI実行後:
 | `application_data` をAIが手書きする | マッピング検証と混ざる | `build_application_data.py` で生成する。 |
 | Consoleやチャットに実値を貼る | PII漏えい | 出力JSON内だけに保持し、共有時はマスクする。 |
 | Chrome拡張に実データを残す | 次案件へ混線する | 専用Chromeプロファイルと `chrome.storage.local` 削除を徹底する。 |
+
+## 9. expected_* パスの分離設計
+
+`scenario.json` には `expected_case_data`、`expected_application_data`、`expected_review` のパスを含めない設計に変更した。
+
+正解ファイルへの参照は、各applicantディレクトリの `expected/manifest.json` に分離されている。
+
+```json
+{
+  "case_data": "case_data.golden.json",
+  "application_data": "application_data.golden.json",
+  "review": "review.golden.json"
+}
+```
+
+この設計により:
+
+- `scenario.json` を読んだだけでは正解ファイルのパスが分からない。
+- `prepare_blind_eval_run.py` は `expected/` ディレクトリを丸ごと除外するため、`manifest.json` もAIには見えない。
+- 評価スクリプトやレビュー担当者は `expected/manifest.json` を読んで正解ファイルを特定できる。

@@ -51,7 +51,7 @@ Reference schemas:
 
 - `rasens-autofill/data/schemas/case_data.schema.json`
 - `rasens-autofill/data/schemas/review.schema.json`
-- `rasens-autofill/data/schemas/input_documents.schema.json`
+- `rasens-autofill/data/schemas/document_manifest.schema.json`
 
 ## generated/case_data.json
 
@@ -134,7 +134,7 @@ def blind_scenario(scenario: dict[str, Any]) -> dict[str, Any]:
         "expected_review",
     }
     clean = {key: value for key, value in scenario.items() if key not in forbidden_keys}
-    clean["input_documents"] = "input_documents.blind.json"
+    clean["input_documents"] = "document_manifest.blind.json"
     clean["generated_dir"] = "generated"
     return clean
 
@@ -142,7 +142,7 @@ def blind_scenario(scenario: dict[str, Any]) -> dict[str, Any]:
 def prepare(fixture_dir: Path) -> Path:
     fixture_dir = fixture_dir.resolve()
     scenario_path = fixture_dir / "scenario.json"
-    input_path = fixture_dir / "input" / "input_documents.json"
+    input_path = fixture_dir / "input" / "document_manifest.json"
     if not scenario_path.exists():
         raise SystemExit(f"missing scenario: {scenario_path}")
     if not input_path.exists():
@@ -199,14 +199,14 @@ def prepare(fixture_dir: Path) -> Path:
     }
 
     write_json(run_dir / "scenario.json", scenario)
-    write_json(run_dir / "input_documents.blind.json", blind_manifest)
+    write_json(run_dir / "document_manifest.blind.json", blind_manifest)
     (run_dir / "output_contract.md").write_text(build_output_contract())
     (run_dir / "allowed_reference_paths.txt").write_text(
         "\n".join(
             [
                 "rasens-autofill/data/schemas/case_data.schema.json",
                 "rasens-autofill/data/schemas/review.schema.json",
-                "rasens-autofill/data/schemas/input_documents.schema.json",
+                "rasens-autofill/data/schemas/document_manifest.schema.json",
                 "rasens-autofill/data/mappings/rasens_offer_mapping.json",
                 "rasens-autofill/data/form_definitions/rasens_offer_fields.json",
                 "rasens-autofill/scripts/build_application_data.py",

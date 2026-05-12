@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "input_documents.schema.json",
-  "title": "Blind input documents manifest",
+  "$id": "document_manifest.schema.json",
+  "title": "Blind document manifest",
   "type": "object",
   "required": ["schema_version", "case_id", "documents"],
   "additionalProperties": true,
@@ -37,6 +37,7 @@
               "intake_spreadsheet",
               "email_context",
               "submitted_application_bundle",
+              "submitted_application_pdf",
               "not_attached_reference",
               "unused_resume",
               "other"
