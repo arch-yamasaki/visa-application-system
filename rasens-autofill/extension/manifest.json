@@ -5,7 +5,8 @@
   "description": "申請情報を在留申請オンラインシステムのフォームへ自動入力します。",
   "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": [
-    "https://www.rasens-immi.moj.go.jp/*"
+    "https://www.rasens-immi.moj.go.jp/*",
+    "https://firestore.googleapis.com/*"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -20,7 +21,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["application_data.json"],
+      "resources": ["application_data.json", "rasens_offer_mapping.json"],
       "matches": ["https://www.rasens-immi.moj.go.jp/*"]
     }
   ]

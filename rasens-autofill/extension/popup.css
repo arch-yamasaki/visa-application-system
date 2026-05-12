@@ -43,6 +43,39 @@ button:hover {
   color: #fff;
 }
 
+h2 {
+  margin: 0;
+  font-size: 13px;
+  color: #495770;
+}
+
+#caseId {
+  display: block;
+  width: 100%;
+  min-height: 32px;
+  border: 1px solid #b8c2d6;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font: inherit;
+}
+
+#firestoreSection {
+  display: grid;
+  gap: 6px;
+}
+
+#setApiKey {
+  font-size: 12px;
+  color: #5a6b8a;
+  text-align: right;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid #d7dce7;
+  margin: 2px 0;
+}
+
 pre {
   min-height: 82px;
   max-height: 180px;

@@ -9,12 +9,21 @@
   <body>
     <main>
       <h1>Visa Autofill</h1>
+      <section id="firestoreSection">
+        <h2>Firestore から読込</h2>
+        <input id="caseId" type="text" placeholder="case_id を入力">
+        <button id="loadFirestore" type="button">Firestoreから読込</button>
+        <a href="#" id="setApiKey">API Key 設定</a>
+      </section>
+      <hr>
       <button id="loadBundled" type="button">同梱データを使う</button>
       <button id="fill" type="button">一括入力</button>
       <button id="fillProgressive" type="button">ゆっくり入力</button>
       <button id="preview" type="button">入力対象を確認</button>
       <pre id="status">データ未読込</pre>
     </main>
+    <script src="firestore_client.js"></script>
+    <script src="build_application_data.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

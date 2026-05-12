@@ -72,3 +72,54 @@ chrome.storage.local.get(["visaRows", "visaDataSource"]).then(({ visaRows, visaD
     setStatus(`${visaDataSource || "保存済みデータ"}\n${visaRows.length}件の入力値が保存されています`);
   }
 });
+
+// --- Firestore integration ---
+
+document.querySelector("#setApiKey").addEventListener("click", (e) => {
+  e.preventDefault();
+  const key = prompt("Firestore API Key を入力してください:");
+  if (key?.trim()) {
+    chrome.storage.local.set({ firestoreApiKey: key.trim() });
+    setStatus("API Key を保存しました");
+  }
+});
+
+document.querySelector("#loadFirestore").addEventListener("click", async () => {
+  const caseId = document.querySelector("#caseId").value.trim();
+  if (!caseId) {
+    setStatus("case_id を入力してください");
+    return;
+  }
+
+  try {
+    setStatus("Firestore から取得中...");
+    const caseData = await window.firestoreClient.getCase(caseId);
+
+    // Check workflow_state
+    const workflowState = caseData.workflow_state;
+    if (workflowState && workflowState !== "ready_to_fill") {
+      const proceed = confirm(
+        `workflow_state が「${workflowState}」です（ready_to_fill ではありません）。\n続行しますか？`
+      );
+      if (!proceed) {
+        setStatus("読込を中止しました");
+        return;
+      }
+    }
+
+    // Fetch bundled mapping
+    const mappingResponse = await fetch(chrome.runtime.getURL("rasens_offer_mapping.json"));
+    const mappingData = await mappingResponse.json();
+
+    // Build rows
+    const rows = window.buildApplicationData.buildRows(caseData, mappingData);
+    if (!rows.length) {
+      setStatus("マッピング対象の入力値がありません。case_data の内容を確認してください。");
+      return;
+    }
+
+    await saveRows(rows, `Firestore: ${caseId}`);
+  } catch (error) {
+    setStatus(`読込エラー\n${error.message}`);
+  }
+});
