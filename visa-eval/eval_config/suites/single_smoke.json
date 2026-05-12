@@ -2,7 +2,7 @@
   "schema_version": "0.1.0",
   "suite_id": "single_smoke",
   "fixture_family": "single",
-  "description": "fixtures_single を使って、1申請人=1フォームの入力生成を最低限確認する。",
+  "description": "test_cases_from_raw を使って、1申請人=1フォームの入力生成を最低限確認する。",
   "cases": [
     "gijinkoku_a_company_round1__kushang_subba_limbu",
     "gijinkoku_a_company_round1__prashamsa_g_c",

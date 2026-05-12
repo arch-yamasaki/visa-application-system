@@ -24,7 +24,7 @@ from build_application_data import build_rows
 ROOT = Path(__file__).resolve().parents[2]
 TEST_ROOT = ROOT / "visa-eval"
 CATALOG = TEST_ROOT / "catalog.json"
-SINGLE_ROOT = TEST_ROOT / "fixtures_single"
+SINGLE_ROOT = TEST_ROOT / "test_cases_from_raw"
 MAPPING = ROOT / "rasens-autofill" / "data" / "mappings" / "rasens_offer_mapping.json"
 
 

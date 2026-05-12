@@ -22,9 +22,9 @@ You are extracting structured data for one Japanese immigration application case
 
 ## Forbidden Inputs
 
-- `visa-eval/fixtures_single/**/expected/**`
+- `visa-eval/test_cases_from_raw/**/expected/**`
 - Any file matching `*.golden.json`
-- Any previous `generated/` output from another run
+- Any previous `generated/` output from another blind run
 - `rasens-autofill/extension/application_data.json` if it contains real-case data
 - Submitted application PDFs (`submitted_application_pdf`): these are used only as golden answer sources, not as AI extraction inputs
 

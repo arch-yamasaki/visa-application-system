@@ -17,13 +17,13 @@ goldenを見てしまうと、AIが資料から抽出できたのか、正解を
 ## 全体フロー
 
 ```text
-fixtures_single/<case>/<applicant>/
+test_cases_from_raw/<case>/<applicant>/
   scenario.json
   input/document_manifest.json
   expected/*.golden.json   <- AIには見せない
 
 prepare_blind_eval_run.py
-  -> visa-eval/runs/<run_id>/
+  -> visa-eval/blind_runs_from_test_cases/<run_id>/
        AGENT_TASK.md
        scenario.json
        document_manifest.blind.json
@@ -50,13 +50,13 @@ build_application_data.py
 
 ```bash
 python3 rasens-autofill/scripts/prepare_blind_eval_run.py \
-  visa-eval/fixtures_single/gijinkoku_a_company_round1/amit_tamang
+  visa-eval/test_cases_from_raw/gijinkoku_a_company_round1/amit_tamang
 ```
 
 出力例:
 
 ```text
-visa-eval/runs/20260509_153000_gijinkoku_a_company_round1__amit_tamang/
+visa-eval/blind_runs_from_test_cases/20260509_153000_gijinkoku_a_company_round1__amit_tamang/
   AGENT_TASK.md
   scenario.json
   document_manifest.blind.json
@@ -107,7 +107,7 @@ AIに渡してよいファイル:
 AIに渡してはいけないファイル:
 
 - fixture本体の `scenario.json`
-- `visa-eval/fixtures_single/**/expected/**`
+- `visa-eval/test_cases_from_raw/**/expected/**`
 - `*.golden.json`
 - 他runの `generated/**`
 - 実案件入りの `rasens-autofill/extension/application_data.json`

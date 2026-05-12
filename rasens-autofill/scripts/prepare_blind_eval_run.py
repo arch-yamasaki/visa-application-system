@@ -12,8 +12,8 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
-RUNS_ROOT = ROOT / "visa-eval" / "runs"
-PROMPT_TEMPLATE = ROOT / "visa-eval" / "eval" / "prompts" / "blind_single_case_prompt.md"
+RUNS_ROOT = ROOT / "visa-eval" / "blind_runs_from_test_cases"
+PROMPT_TEMPLATE = ROOT / "visa-eval" / "eval_config" / "prompts" / "blind_single_case_prompt.md"
 
 
 def load_json(path: Path) -> Any:
@@ -190,9 +190,9 @@ def prepare(fixture_dir: Path) -> Path:
         "documents": blind_documents,
         "blind_run_policy": {
             "forbidden_globs": [
-                "visa-eval/fixtures_single/**/expected/**",
+                "visa-eval/test_cases_from_raw/**/expected/**",
                 "**/*.golden.json",
-                "visa-eval/runs/*/generated/**",
+                "visa-eval/blind_runs_from_test_cases/*/generated/**",
             ],
             "write_only": "generated/",
         },
@@ -220,7 +220,7 @@ def prepare(fixture_dir: Path) -> Path:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("fixture_dir", type=Path, help="Path to visa-eval/fixtures_single/<case_id>/<applicant_id>")
+    parser.add_argument("fixture_dir", type=Path, help="Path to visa-eval/test_cases_from_raw/<case_id>/<applicant_id>")
     args = parser.parse_args()
 
     run_dir = prepare(args.fixture_dir)
