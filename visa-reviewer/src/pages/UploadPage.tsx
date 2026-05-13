@@ -13,6 +13,7 @@ export default function UploadPage() {
   const [uploading, setUploading] = useState(false)
   const [extracting, setExtracting] = useState(false)
   const [extractionStatus, setExtractionStatus] = useState<string | null>(null)
+  const demoSuffix = sessionStorage.getItem('visa_demo_mode') === 'true' ? '?demo=true' : ''
 
   useEffect(() => {
     if (!caseId) return
@@ -48,7 +49,7 @@ export default function UploadPage() {
         if (status.status === 'completed' || status.status === 'needs_review') {
           clearInterval(poll)
           setExtracting(false)
-          navigate(`/cases/${caseId}/review`)
+          navigate(`/cases/${caseId}/review${demoSuffix}`)
         } else if (status.status === 'failed') {
           clearInterval(poll)
           setExtracting(false)
@@ -87,7 +88,7 @@ export default function UploadPage() {
         </button>
         {documents.length > 0 && !extracting && (
           <button
-            onClick={() => navigate(`/cases/${caseId}/review`)}
+            onClick={() => navigate(`/cases/${caseId}/review${demoSuffix}`)}
             className="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm"
           >
             レビューへ

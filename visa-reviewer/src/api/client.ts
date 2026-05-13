@@ -7,7 +7,13 @@ function isDemoMode(): boolean {
   if (import.meta.env.VITE_DEMO === 'true') return true
   if (typeof window !== 'undefined') {
     const params = new URLSearchParams(window.location.search)
-    if (params.get('demo') === 'true') return true
+    if (params.get('demo') === 'true') {
+      sessionStorage.setItem('visa_demo_mode', 'true')
+      return true
+    }
+    if (sessionStorage.getItem('visa_demo_mode') === 'true') {
+      return true
+    }
   }
   return false
 }

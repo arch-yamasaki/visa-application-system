@@ -7,6 +7,7 @@ export default function CaseListPage() {
   const navigate = useNavigate()
   const [cases, setCases] = useState<CaseSummary[]>([])
   const [loading, setLoading] = useState(true)
+  const demoSuffix = sessionStorage.getItem('visa_demo_mode') === 'true' ? '?demo=true' : ''
 
   useEffect(() => {
     apiClient.listCases().then(setCases).finally(() => setLoading(false))
@@ -17,7 +18,7 @@ export default function CaseListPage() {
       application_type: 'certificate_of_eligibility',
       target_status: 'engineer_humanities_international',
     })
-    navigate(`/cases/${created.case_id}/upload`)
+    navigate(`/cases/${created.case_id}/upload${demoSuffix}`)
   }
 
   const stateLabel: Record<string, string> = {
@@ -64,8 +65,8 @@ export default function CaseListPage() {
               key={c.case_id}
               onClick={() => {
                 const dest = c.workflow_state === 'draft' || c.workflow_state === 'uploading'
-                  ? `/cases/${c.case_id}/upload`
-                  : `/cases/${c.case_id}/review`
+                  ? `/cases/${c.case_id}/upload${demoSuffix}`
+                  : `/cases/${c.case_id}/review${demoSuffix}`
                 navigate(dest)
               }}
               className="flex items-center justify-between p-4 bg-white rounded-lg border border-gray-200 hover:border-blue-300 cursor-pointer transition-colors"

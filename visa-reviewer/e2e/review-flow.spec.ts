@@ -104,6 +104,27 @@ test.describe('ReviewPage demo mode', () => {
   })
 })
 
+test.describe('Demo mode navigation', () => {
+  test('case list → click case → review page preserves demo mode', async ({ page }) => {
+    await page.goto('/?demo=true')
+    await expect(page.getByRole('heading', { name: '案件一覧' })).toBeVisible()
+
+    // Click the demo case card
+    await page.getByText('demo-gijinkoku-001').click()
+
+    // Should navigate to review page with demo=true
+    await expect(page).toHaveURL(/\/cases\/demo-gijinkoku-001\/review\?demo=true/)
+    await expect(page.getByText('demo-gijinkoku-001').first()).toBeVisible()
+    await expect(page.locator('[data-field-row]').first()).toBeVisible()
+
+    // Go back and verify demo mode is maintained
+    await page.goBack()
+    await expect(page).toHaveURL(/\?demo=true/)
+    await expect(page.getByRole('heading', { name: '案件一覧' })).toBeVisible()
+    await expect(page.getByText('demo-gijinkoku-001')).toBeVisible()
+  })
+})
+
 test.describe('UploadPage demo mode', () => {
   test('shows DropZone with Japanese text', async ({ page }) => {
     await page.goto('/cases/demo/upload?demo=true')
