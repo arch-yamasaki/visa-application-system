@@ -89,10 +89,14 @@ export const apiClient = {
   },
 
   // Extraction
-  startExtraction(caseId: string) {
+  startExtraction(caseId: string, options?: { backend?: string; pattern?: string }) {
     if (isDemoMode()) return mockApi.startExtraction(caseId)
     return request<{ session_id: string; status: string }>(`/cases/${caseId}/extract`, {
       method: 'POST',
+      body: JSON.stringify({
+        backend: options?.backend ?? 'gemini',
+        pattern: options?.pattern ?? 'auto',
+      }),
     })
   },
 

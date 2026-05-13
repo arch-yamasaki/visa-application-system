@@ -13,6 +13,8 @@ export default function UploadPage() {
   const [uploading, setUploading] = useState(false)
   const [extracting, setExtracting] = useState(false)
   const [extractionStatus, setExtractionStatus] = useState<string | null>(null)
+  const [backend, setBackend] = useState<string>('gemini')
+  const [pattern, setPattern] = useState<string>('auto')
   const demoSuffix = sessionStorage.getItem('visa_demo_mode') === 'true' ? '?demo=true' : ''
 
   useEffect(() => {
@@ -41,7 +43,7 @@ export default function UploadPage() {
     setExtracting(true)
     setExtractionStatus('starting')
     try {
-      await apiClient.startExtraction(caseId)
+      await apiClient.startExtraction(caseId, { backend, pattern })
       // Poll for completion
       const poll = setInterval(async () => {
         const status = await apiClient.getExtractionStatus(caseId)
@@ -78,7 +80,33 @@ export default function UploadPage() {
 
       <FileList documents={documents} />
 
-      <div className="mt-6 flex items-center gap-4">
+      <div className="mt-6 flex flex-wrap items-center gap-4">
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          抽出エンジン
+          <select
+            value={backend}
+            onChange={(e) => setBackend(e.target.value)}
+            disabled={extracting}
+            className="border border-gray-300 rounded px-2 py-1.5 text-sm"
+          >
+            <option value="gemini">Gemini</option>
+            <option value="codex">Codex</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          抽出方式
+          <select
+            value={pattern}
+            onChange={(e) => setPattern(e.target.value)}
+            disabled={extracting}
+            className="border border-gray-300 rounded px-2 py-1.5 text-sm"
+          >
+            <option value="auto">自動</option>
+            <option value="text_only">テキストのみ</option>
+            <option value="pdf_direct">PDF直接</option>
+            <option value="text_and_image">テキスト+画像</option>
+          </select>
+        </label>
         <button
           onClick={handleExtract}
           disabled={extracting || documents.length === 0}

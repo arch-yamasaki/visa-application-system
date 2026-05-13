@@ -133,6 +133,39 @@ test.describe('UploadPage demo mode', () => {
   })
 })
 
+test.describe('UploadPage backend selection', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/cases/demo/upload?demo=true')
+  })
+
+  test('shows extraction engine and pattern selectors', async ({ page }) => {
+    await expect(page.getByText('抽出エンジン')).toBeVisible()
+    await expect(page.getByText('抽出方式')).toBeVisible()
+  })
+
+  test('default backend is Gemini', async ({ page }) => {
+    const backendSelect = page.locator('select').first()
+    await expect(backendSelect).toHaveValue('gemini')
+  })
+
+  test('default pattern is auto', async ({ page }) => {
+    const patternSelect = page.locator('select').nth(1)
+    await expect(patternSelect).toHaveValue('auto')
+  })
+
+  test('can switch backend to Codex', async ({ page }) => {
+    const backendSelect = page.locator('select').first()
+    await backendSelect.selectOption('codex')
+    await expect(backendSelect).toHaveValue('codex')
+  })
+
+  test('can switch pattern to text_only', async ({ page }) => {
+    const patternSelect = page.locator('select').nth(1)
+    await patternSelect.selectOption('text_only')
+    await expect(patternSelect).toHaveValue('text_only')
+  })
+})
+
 test.describe('Navigation', () => {
   test('redirects unknown paths to /', async ({ page }) => {
     await page.goto('/nonexistent-path?demo=true')
