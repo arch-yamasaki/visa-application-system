@@ -17,6 +17,11 @@ from google.cloud import firestore, storage
 from google.cloud import run_v2
 from pydantic import BaseModel
 
+from extractors.gemini import extract_text_only, extract_pdf_direct, extract_with_images
+from extractors.vision import ocr_document
+from extractors.pdf_text import has_text_layer
+from extractors.types import ExtractionResult
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
@@ -65,6 +70,11 @@ class UpdateCaseRequest(BaseModel):
     case_data: dict | None = None
     field_metadata: dict | None = None
     workflow_state: str | None = None
+
+
+class ExtractRequest(BaseModel):
+    backend: str = "gemini"  # "gemini" | "codex"
+    pattern: str = "auto"  # "auto" | "text_only" | "pdf_direct" | "text_and_image"
 
 
 # ---------------------------------------------------------------------------
@@ -497,8 +507,51 @@ def get_document_url(case_id: str, document_id: str):
         }
 
 
+def _extract_with_gemini(case_doc: dict, pattern: str) -> ExtractionResult:
+    """Run Gemini extraction synchronously."""
+    documents = case_doc["document_manifest"]["documents"]
+    case_info = case_doc["case_data"]["case"]
+    case_meta = {
+        "case_id": case_info["case_id"],
+        "application_type": case_info["application_type"],
+        "target_status": case_info["target_status"],
+    }
+
+    # Download documents from GCS
+    file_entries: list[tuple[str, str, bytes]] = []  # (document_id, file_name, bytes)
+    for doc in documents:
+        blob = gcs.bucket(GCS_BUCKET).blob(doc["gcs_path"])
+        content = blob.download_as_bytes()
+        file_entries.append((doc["document_id"], doc["file_name"], content))
+
+    if pattern == "auto":
+        has_text = all(
+            has_text_layer(content)
+            for _, fname, content in file_entries
+            if fname.lower().endswith(".pdf")
+        )
+        pattern = "pdf_direct" if has_text else "text_and_image"
+
+    pdf_contents = [(did, content) for did, _, content in file_entries]
+
+    if pattern == "text_only":
+        ocr_results = [
+            ocr_document(content, fname, did)
+            for did, fname, content in file_entries
+        ]
+        return extract_text_only(ocr_results, case_meta, documents)
+    elif pattern == "pdf_direct":
+        return extract_pdf_direct(pdf_contents, case_meta, documents)
+    else:  # text_and_image
+        ocr_results = [
+            ocr_document(content, fname, did)
+            for did, fname, content in file_entries
+        ]
+        return extract_with_images(ocr_results, pdf_contents, case_meta, documents)
+
+
 @app.post("/cases/{case_id}/extract")
-def start_extraction(case_id: str):
+def start_extraction(case_id: str, body: ExtractRequest = ExtractRequest()):
     ref = db.collection("cases").document(case_id)
     doc = ref.get()
     if not doc.exists:
@@ -513,7 +566,44 @@ def start_extraction(case_id: str):
             status_code=400, detail="No documents uploaded for this case"
         )
 
-    # Build extraction prompt
+    if body.backend == "gemini":
+        return _start_gemini_extraction(case_id, ref, data, body.pattern)
+
+    return _start_codex_extraction(case_id, ref, data, documents)
+
+
+def _start_gemini_extraction(
+    case_id: str, case_ref, case_doc: dict, pattern: str
+) -> dict:
+    """Gemini backend: synchronous extraction."""
+    now = _now_iso()
+    case_ref.update({"workflow_state": "extracting", "updated_at": now})
+
+    try:
+        result = _extract_with_gemini(case_doc, pattern)
+    except Exception as exc:
+        case_ref.update(
+            {"workflow_state": "extraction_failed", "updated_at": _now_iso()}
+        )
+        return {"status": "extraction_failed", "error": str(exc)}
+
+    case_ref.update(
+        {
+            "case_data": result.case_data,
+            "review": result.review,
+            "field_metadata": result.field_metadata,
+            "workflow_state": "needs_review",
+            "updated_at": _now_iso(),
+        }
+    )
+
+    return {"status": "completed", "workflow_state": "needs_review"}
+
+
+def _start_codex_extraction(
+    case_id: str, case_ref, data: dict, documents: list[dict]
+) -> dict:
+    """Codex backend: async extraction via Cloud Run Job."""
     doc_list_text = "\n".join(
         f"- {d['file_name']} (role: {d['document_role']}, gcs: gs://{GCS_BUCKET}/{d['gcs_path']})"
         for d in documents
@@ -564,7 +654,7 @@ def start_extraction(case_id: str):
     )
 
     # Update case with extraction session
-    ref.update(
+    case_ref.update(
         {
             "extraction_session_id": session_id,
             "workflow_state": "extracting",
@@ -578,7 +668,9 @@ def start_extraction(case_id: str):
     except Exception as exc:
         run_ref.update({"status": "launch_failed", "error": str(exc)})
         session_ref.update({"status": "launch_failed", "updated_at": _now_iso()})
-        ref.update({"workflow_state": "extraction_failed", "updated_at": _now_iso()})
+        case_ref.update(
+            {"workflow_state": "extraction_failed", "updated_at": _now_iso()}
+        )
         return {
             "session_id": session_id,
             "status": "launch_failed",

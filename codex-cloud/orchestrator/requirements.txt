@@ -3,3 +3,6 @@ uvicorn[standard]
 google-cloud-firestore
 google-cloud-storage
 google-cloud-run
+google-cloud-vision
+google-genai>=1.0.0
+pymupdf>=1.24.0
