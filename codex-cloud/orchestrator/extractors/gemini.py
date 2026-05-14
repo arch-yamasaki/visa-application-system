@@ -11,34 +11,6 @@ from .types import ExtractionResult, OcrResult
 
 MODEL_NAME = os.environ.get("GEMINI_MODEL", "gemini-3-flash-preview")
 
-_RESPONSE_SCHEMA = {
-    "type": "object",
-    "required": ["case_data", "review", "field_metadata"],
-    "properties": {
-        "case_data": {"type": "object"},
-        "review": {"type": "object"},
-        "field_metadata": {
-            "type": "object",
-            "additionalProperties": {
-                "type": "object",
-                "properties": {
-                    "source_refs": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "document_id": {"type": "string"},
-                                "page": {"type": "string"},
-                                "text_quote": {"type": "string"},
-                                "confidence": {"type": "string"},
-                            },
-                        },
-                    }
-                },
-            },
-        },
-    },
-}
 
 
 def _build_ocr_context(ocr_results: list[OcrResult]) -> str:
@@ -62,11 +34,13 @@ def _call_gemini(client: genai.Client, contents: list, prompt: str) -> dict:
         contents=[*contents, prompt],
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
-            response_schema=_RESPONSE_SCHEMA,
             temperature=0.0,
         ),
     )
-    return json.loads(response.text)
+    parsed = json.loads(response.text)
+    if isinstance(parsed, list) and len(parsed) == 1:
+        parsed = parsed[0]
+    return parsed
 
 
 def _map_field_metadata(
@@ -113,11 +87,18 @@ def extract_text_only(
     ocr_results: list[OcrResult],
     case_meta: dict,
     documents: list[dict] | None = None,
+    text_contents: list[tuple[str, str]] | None = None,
 ) -> ExtractionResult:
     """Pattern A: OCR text only."""
     prompt = build_extraction_prompt(case_meta, documents or [])
     ocr_context = _build_ocr_context(ocr_results)
-    full_prompt = f"{prompt}\n\n## 書類テキスト（OCR結果）\n\n{ocr_context}"
+    text_section = ""
+    if text_contents:
+        text_parts = []
+        for doc_id, text in text_contents:
+            text_parts.append(f"--- document: {doc_id} ---\n{text}")
+        text_section = "\n\n## テキスト書類（xlsx/docx等）\n\n" + "\n\n".join(text_parts)
+    full_prompt = f"{prompt}\n\n## 書類テキスト（OCR結果）\n\n{ocr_context}{text_section}"
 
     client = _get_client()
     raw = _call_gemini(client, [], full_prompt)
@@ -136,10 +117,16 @@ def extract_pdf_direct(
     pdf_contents: list[tuple[str, bytes]],
     case_meta: dict,
     documents: list[dict] | None = None,
+    text_contents: list[tuple[str, str]] | None = None,
 ) -> ExtractionResult:
     """Pattern B: PDF direct to Gemini."""
     prompt = build_extraction_prompt(case_meta, documents or [])
     parts = []
+    # テキスト書類（xlsx, docx等）
+    if text_contents:
+        for doc_id, text in text_contents:
+            parts.append(f"--- document: {doc_id} ---\n{text}")
+    # PDF書類
     for doc_id, pdf_bytes in pdf_contents:
         parts.append(
             types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf")
@@ -161,12 +148,17 @@ def extract_with_images(
     image_contents: list[tuple[str, bytes]],
     case_meta: dict,
     documents: list[dict] | None = None,
+    text_contents: list[tuple[str, str]] | None = None,
 ) -> ExtractionResult:
     """Pattern C: OCR text + images."""
     prompt = build_extraction_prompt(case_meta, documents or [])
     ocr_context = _build_ocr_context(ocr_results)
 
     parts: list = []
+    # テキスト書類（xlsx, docx等）
+    if text_contents:
+        for doc_id, text in text_contents:
+            parts.append(f"--- document: {doc_id} ---\n{text}")
     parts.append(f"## 書類テキスト（OCR結果）\n\n{ocr_context}")
     for doc_id, img_bytes in image_contents:
         mime = "image/png" if img_bytes[:4] == b"\x89PNG" else "image/jpeg"

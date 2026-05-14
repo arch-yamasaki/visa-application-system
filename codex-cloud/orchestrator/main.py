@@ -517,37 +517,53 @@ def _extract_with_gemini(case_doc: dict, pattern: str) -> ExtractionResult:
         "target_status": case_info["target_status"],
     }
 
-    # Download documents from GCS
+    # Download documents from GCS and classify by type
     file_entries: list[tuple[str, str, bytes]] = []  # (document_id, file_name, bytes)
     for doc in documents:
         blob = gcs.bucket(GCS_BUCKET).blob(doc["gcs_path"])
         content = blob.download_as_bytes()
         file_entries.append((doc["document_id"], doc["file_name"], content))
 
-    if pattern == "auto":
-        has_text = all(
-            has_text_layer(content)
-            for _, fname, content in file_entries
-            if fname.lower().endswith(".pdf")
-        )
-        pattern = "pdf_direct" if has_text else "text_and_image"
+    # Split into PDF/image vs text-extractable formats
+    pdf_contents: list[tuple[str, bytes]] = []
+    text_contents: list[tuple[str, str]] = []
+    image_entries: list[tuple[str, str, bytes]] = []  # for OCR path
 
-    pdf_contents = [(did, content) for did, _, content in file_entries]
+    for did, fname, content in file_entries:
+        ext = fname.rsplit(".", 1)[-1].lower() if "." in fname else ""
+        if ext == "pdf":
+            pdf_contents.append((did, content))
+            image_entries.append((did, fname, content))
+        elif ext in ("xlsx", "xls"):
+            from extractors.xlsx import extract_xlsx
+            ocr = extract_xlsx(content, did)
+            text_contents.append((did, "\n".join(p.text for p in ocr.pages)))
+        elif ext in ("docx", "doc"):
+            from extractors.docx_text import extract_docx
+            ocr = extract_docx(content, did)
+            text_contents.append((did, "\n".join(p.text for p in ocr.pages)))
+        elif ext in ("png", "jpg", "jpeg"):
+            image_entries.append((did, fname, content))
+
+    if pattern == "auto":
+        pdf_files = [(did, fname, c) for did, fname, c in file_entries if fname.lower().endswith(".pdf")]
+        has_text = all(has_text_layer(c) for _, _, c in pdf_files) if pdf_files else True
+        pattern = "pdf_direct" if has_text else "text_and_image"
 
     if pattern == "text_only":
         ocr_results = [
             ocr_document(content, fname, did)
-            for did, fname, content in file_entries
+            for did, fname, content in image_entries
         ]
-        return extract_text_only(ocr_results, case_meta, documents)
+        return extract_text_only(ocr_results, case_meta, documents, text_contents=text_contents or None)
     elif pattern == "pdf_direct":
-        return extract_pdf_direct(pdf_contents, case_meta, documents)
+        return extract_pdf_direct(pdf_contents, case_meta, documents, text_contents=text_contents or None)
     else:  # text_and_image
         ocr_results = [
             ocr_document(content, fname, did)
-            for did, fname, content in file_entries
+            for did, fname, content in image_entries
         ]
-        return extract_with_images(ocr_results, pdf_contents, case_meta, documents)
+        return extract_with_images(ocr_results, pdf_contents, case_meta, documents, text_contents=text_contents or None)
 
 
 @app.post("/cases/{case_id}/extract")
