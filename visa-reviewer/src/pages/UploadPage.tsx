@@ -43,8 +43,19 @@ export default function UploadPage() {
     setExtracting(true)
     setExtractionStatus('starting')
     try {
-      await apiClient.startExtraction(caseId, { backend, pattern })
-      // Poll for completion
+      const result = await apiClient.startExtraction(caseId, { backend, pattern })
+      // Gemini returns synchronously with completed status
+      if (result.status === 'completed' || result.status === 'needs_review') {
+        setExtracting(false)
+        navigate(`/cases/${caseId}/review${demoSuffix}`)
+        return
+      }
+      if (result.status === 'extraction_failed' || result.status === 'launch_failed') {
+        setExtracting(false)
+        setExtractionStatus('failed')
+        return
+      }
+      // Codex async backend → poll for completion
       const poll = setInterval(async () => {
         const status = await apiClient.getExtractionStatus(caseId)
         setExtractionStatus(status.status)
