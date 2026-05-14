@@ -19,7 +19,6 @@ from pydantic import BaseModel
 
 from extractors.gemini import extract_text_only, extract_pdf_direct, extract_with_images
 from extractors.vision import ocr_document
-from extractors.pdf_text import has_text_layer
 from extractors.types import ExtractionResult
 
 # ---------------------------------------------------------------------------
@@ -510,11 +509,12 @@ def get_document_url(case_id: str, document_id: str):
 def _extract_with_gemini(case_doc: dict, pattern: str) -> ExtractionResult:
     """Run Gemini extraction synchronously."""
     documents = case_doc["document_manifest"]["documents"]
-    case_info = case_doc["case_data"]["case"]
+    case_data = case_doc.get("case_data", {})
+    case_info = case_data.get("case", case_data)
     case_meta = {
-        "case_id": case_info["case_id"],
-        "application_type": case_info["application_type"],
-        "target_status": case_info["target_status"],
+        "case_id": case_info.get("case_id", case_doc.get("case_id", "")),
+        "application_type": case_info.get("application_type", ""),
+        "target_status": case_info.get("target_status", ""),
     }
 
     # Download documents from GCS and classify by type
@@ -546,9 +546,12 @@ def _extract_with_gemini(case_doc: dict, pattern: str) -> ExtractionResult:
             image_entries.append((did, fname, content))
 
     if pattern == "auto":
-        pdf_files = [(did, fname, c) for did, fname, c in file_entries if fname.lower().endswith(".pdf")]
-        has_text = all(has_text_layer(c) for _, _, c in pdf_files) if pdf_files else True
-        pattern = "pdf_direct" if has_text else "text_and_image"
+        # Gemini can read image-based PDFs directly, so prefer pdf_direct
+        # to avoid Cloud Vision API dependency. Fall back to text_and_image
+        # only when there are standalone images (png/jpg) without any PDFs.
+        has_pdfs = any(fname.lower().endswith(".pdf") for _, fname, _ in file_entries)
+        has_images_only = image_entries and not has_pdfs
+        pattern = "text_and_image" if has_images_only else "pdf_direct"
 
     if pattern == "text_only":
         ocr_results = [
