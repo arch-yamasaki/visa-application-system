@@ -135,7 +135,7 @@ export default function UploadPage() {
         )}
       </div>
 
-      {extracting && <ExtractionProgress status={extractionStatus} />}
+      {extracting && <ExtractionProgress status={extractionStatus} backend={backend} />}
     </div>
   )
 }
