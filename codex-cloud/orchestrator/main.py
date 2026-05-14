@@ -565,18 +565,19 @@ def get_document_content(case_id: str, document_id: str):
 
 def _docx_to_html(file_bytes: bytes) -> str:
     import docx
+    from html import escape
     doc = docx.Document(io.BytesIO(file_bytes))
     parts = ['<div style="font-family:sans-serif;padding:20px;max-width:800px;margin:auto">']
     for para in doc.paragraphs:
         if para.text.strip():
             style = 'font-weight:bold;font-size:1.2em;margin-top:1em' if para.style.name.startswith('Heading') else ''
-            parts.append(f'<p style="{style}">{para.text}</p>')
+            parts.append(f'<p style="{style}">{escape(para.text)}</p>')
     for table in doc.tables:
         parts.append('<table style="border-collapse:collapse;width:100%;margin:1em 0">')
         for row in table.rows:
             parts.append('<tr>')
             for cell in row.cells:
-                parts.append(f'<td style="border:1px solid #ddd;padding:6px 8px;font-size:13px">{cell.text}</td>')
+                parts.append(f'<td style="border:1px solid #ddd;padding:6px 8px;font-size:13px">{escape(cell.text)}</td>')
             parts.append('</tr>')
         parts.append('</table>')
     parts.append('</div>')
@@ -585,30 +586,89 @@ def _docx_to_html(file_bytes: bytes) -> str:
 
 def _xlsx_to_html(file_bytes: bytes, sheet_name: str | None = None) -> str:
     import openpyxl
-    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
+    from html import escape
+    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
     sheets = [wb[sheet_name]] if sheet_name else wb.worksheets
-    parts = ['<div style="font-family:sans-serif;padding:20px">']
+    parts = ['<div style="font-family:sans-serif;padding:20px;max-width:1200px;margin:auto">']
     for ws in sheets:
-        parts.append(f'<h3>{ws.title}</h3>')
+        # 結合セル情報を収集
+        merged_map: dict[tuple[int, int], tuple[int, int]] = {}  # (row,col) -> (rowspan,colspan)
+        merged_skip: set[tuple[int, int]] = set()
+        for rng in ws.merged_cells.ranges:
+            r1, c1, r2, c2 = rng.min_row, rng.min_col, rng.max_row, rng.max_col
+            merged_map[(r1, c1)] = (r2 - r1 + 1, c2 - c1 + 1)
+            for r in range(r1, r2 + 1):
+                for c in range(c1, c2 + 1):
+                    if (r, c) != (r1, c1):
+                        merged_skip.add((r, c))
+
+        parts.append(f'<h3 style="margin:1em 0 0.5em;color:#333">{escape(ws.title)}</h3>')
         parts.append('<table style="border-collapse:collapse;width:100%;margin-bottom:2em">')
+        row_idx = 0
         for row in ws.iter_rows(values_only=False):
+            row_num = row[0].row if row else 0
             cells = []
             has_content = False
             for cell in row:
+                coord = (cell.row, cell.column)
+                if coord in merged_skip:
+                    continue
                 val = str(cell.value) if cell.value is not None else ''
+                # @dropdown 等の data_validation 文字列を除去
+                if val.startswith('@'):
+                    val = ''
                 if val:
                     has_content = True
-                cells.append(f'<td style="border:1px solid #ddd;padding:4px 8px;font-size:12px">{val}</td>')
+                val_escaped = escape(val)
+
+                # スタイル: ヘッダー行（1行目）は太字+背景色
+                if row_num == 1:
+                    style = 'border:1px solid #ccc;padding:6px 10px;font-size:13px;font-weight:bold;background:#4a6fa5;color:#fff;white-space:nowrap'
+                else:
+                    bg = '#f8f9fa' if row_idx % 2 == 0 else '#fff'
+                    style = f'border:1px solid #e0e0e0;padding:5px 10px;font-size:13px;background:{bg}'
+
+                # 結合セル属性
+                span_attr = ''
+                if coord in merged_map:
+                    rs, cs = merged_map[coord]
+                    if rs > 1:
+                        span_attr += f' rowspan="{rs}"'
+                    if cs > 1:
+                        span_attr += f' colspan="{cs}"'
+
+                cells.append(f'<td style="{style}"{span_attr}>{val_escaped}</td>')
             if has_content:
                 parts.append(f'<tr>{"".join(cells)}</tr>')
+                row_idx += 1
         parts.append('</table>')
     parts.append('</div>')
     wb.close()
     return '\n'.join(parts)
 
 
+@app.get("/cases/{case_id}/documents/{document_id}/sheets")
+def get_document_sheets(case_id: str, document_id: str):
+    """xlsxのシート名一覧を返す。"""
+    _, doc_entry = _find_document_in_manifest(case_id, document_id)
+    file_name = doc_entry.get("file_name", "")
+    ext = file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
+    if ext != "xlsx":
+        return {"sheets": []}
+    import openpyxl
+    file_bytes = _download_document_bytes(doc_entry["gcs_path"])
+    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), read_only=True)
+    names = wb.sheetnames
+    wb.close()
+    return {"sheets": names}
+
+
 @app.get("/cases/{case_id}/documents/{document_id}/preview")
-def get_document_preview(case_id: str, document_id: str):
+def get_document_preview(
+    case_id: str,
+    document_id: str,
+    sheet: Optional[str] = Query(None, description="シート名（xlsx用）"),
+):
     """docx/xlsxをHTML変換して返す。PDF/画像はそのまま返す。"""
     _, doc_entry = _find_document_in_manifest(case_id, document_id)
     gcs_path = doc_entry["gcs_path"]
@@ -621,7 +681,7 @@ def get_document_preview(case_id: str, document_id: str):
         html = _docx_to_html(file_bytes)
         return HTMLResponse(content=html)
     elif ext == "xlsx":
-        html = _xlsx_to_html(file_bytes)
+        html = _xlsx_to_html(file_bytes, sheet_name=sheet)
         return HTMLResponse(content=html)
     else:
         # PDF/画像はそのまま配信

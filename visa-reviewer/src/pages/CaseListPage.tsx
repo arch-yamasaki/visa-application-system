@@ -28,6 +28,8 @@ export default function CaseListPage() {
     needs_review: '要レビュー',
     ready_to_fill: '入力準備完了',
     archived: 'アーカイブ',
+    extraction_failed: '抽出失敗',
+    launch_failed: '起動失敗',
   }
 
   const stateColor: Record<string, string> = {
@@ -37,6 +39,8 @@ export default function CaseListPage() {
     needs_review: 'bg-orange-100 text-orange-700',
     ready_to_fill: 'bg-green-100 text-green-700',
     archived: 'bg-gray-100 text-gray-400',
+    extraction_failed: 'bg-red-100 text-red-700',
+    launch_failed: 'bg-red-100 text-red-700',
   }
 
   return (

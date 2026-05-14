@@ -7,7 +7,7 @@ export default function ImageViewer({ url }: Props) {
     <div className="p-4 flex justify-center">
       <img
         src={url}
-        alt="Document"
+        alt="書類"
         className="max-w-full shadow-lg"
       />
     </div>

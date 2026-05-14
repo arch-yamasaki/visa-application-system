@@ -1,13 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
-import type { TextItem } from 'pdfjs-dist/types/src/display/api'
+import type { PDFDocumentProxy, TextItem } from 'pdfjs-dist/types/src/display/api'
 import { useViewerStore } from '../../store/viewerStore'
 
-// Configure pdf.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
   import.meta.url,
 ).toString()
+
+const WASM_URL = '/'
 
 interface Props {
   url: string
@@ -19,55 +20,76 @@ export default function PdfViewer({ url, page, highlightText }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const highlightRef = useRef<HTMLDivElement>(null)
   const [numPages, setNumPages] = useState(0)
-  const [scale] = useState(1.5)
+  const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null)
+  const scale = 1.5
   const setPage = useViewerStore((s) => s.setPage)
 
+  // Load PDF document
   useEffect(() => {
-    let cancelled = false
-    const loadTask = pdfjsLib.getDocument(url)
+    let destroyed = false
+    setPdfDoc(null)
+    setNumPages(0)
 
-    loadTask.promise.then(async (pdf) => {
-      if (cancelled) return
-      setNumPages(pdf.numPages)
-
-      const pageNum = Math.min(Math.max(1, page), pdf.numPages)
-      const pdfPage = await pdf.getPage(pageNum)
-      const viewport = pdfPage.getViewport({ scale })
-
-      // Render canvas
-      const canvas = canvasRef.current
-      if (!canvas) return
-      const ctx = canvas.getContext('2d')
-      if (!ctx) return
-      canvas.width = viewport.width
-      canvas.height = viewport.height
-
-      await pdfPage.render({
-        canvasContext: ctx,
-        viewport,
-      } as unknown as Parameters<typeof pdfPage.render>[0]).promise
-
-      // Highlight using text content positions
-      const overlay = highlightRef.current
-      if (!overlay) return
-      overlay.innerHTML = ''
-      overlay.style.width = `${viewport.width}px`
-      overlay.style.height = `${viewport.height}px`
-
-      if (highlightText && highlightText.trim()) {
-        const textContent = await pdfPage.getTextContent()
-        highlightTextOnCanvas(overlay, textContent.items as TextItem[], viewport, highlightText.trim())
+    const task = pdfjsLib.getDocument({ url, wasmUrl: WASM_URL })
+    task.promise.then((pdf) => {
+      if (!destroyed) {
+        setPdfDoc(pdf)
+        setNumPages(pdf.numPages)
       }
-    })
+    }).catch(() => {})
 
     return () => {
-      cancelled = true
-      loadTask.destroy()
+      destroyed = true
+      task.destroy().catch(() => {})
     }
-  }, [url, page, scale, highlightText])
+  }, [url])
+
+  // Render current page
+  const renderPage = useCallback(async (doc: PDFDocumentProxy, pageNum: number) => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    const pdfPage = await doc.getPage(pageNum)
+    const viewport = pdfPage.getViewport({ scale })
+
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    canvas.width = viewport.width
+    canvas.height = viewport.height
+
+    await (pdfPage.render({
+      canvasContext: ctx,
+      viewport,
+    } as unknown as Parameters<typeof pdfPage.render>[0]).promise)
+
+    // Highlight
+    const overlay = highlightRef.current
+    if (!overlay) return
+    overlay.innerHTML = ''
+    overlay.style.width = `${viewport.width}px`
+    overlay.style.height = `${viewport.height}px`
+
+    if (highlightText?.trim()) {
+      const textContent = await pdfPage.getTextContent()
+      highlightTextOnCanvas(overlay, textContent.items as TextItem[], viewport, highlightText.trim())
+    }
+  }, [scale, highlightText])
+
+  useEffect(() => {
+    if (!pdfDoc) return
+    const pageNum = Math.min(Math.max(1, page), pdfDoc.numPages)
+    renderPage(pdfDoc, pageNum).catch(() => {})
+  }, [pdfDoc, page, renderPage])
 
   return (
     <div className="relative p-4">
+      {!pdfDoc && (
+        <div className="flex items-center justify-center h-64 text-gray-400 text-sm">
+          <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mr-2" />
+          PDFを読み込み中...
+        </div>
+      )}
+
       {numPages > 1 && (
         <div className="flex items-center justify-center gap-3 mb-3">
           <button
@@ -101,7 +123,6 @@ export default function PdfViewer({ url, page, highlightText }: Props) {
   )
 }
 
-/** Use pdf.js text item positions to draw highlight rectangles on matching text. */
 function highlightTextOnCanvas(
   overlay: HTMLElement,
   items: TextItem[],
@@ -110,10 +131,8 @@ function highlightTextOnCanvas(
 ) {
   const normalizedQuote = quote.replace(/\s+/g, '').toLowerCase()
 
-  // Build a text buffer with item indices
   let fullText = ''
   const itemRanges: { start: number; end: number; item: TextItem }[] = []
-
   for (const item of items) {
     if (!item.str) continue
     const start = fullText.length
@@ -125,12 +144,8 @@ function highlightTextOnCanvas(
   if (matchIdx === -1) return
 
   const matchEnd = matchIdx + normalizedQuote.length
-
-  // Find overlapping items
   for (const { start, end, item } of itemRanges) {
     if (end <= matchIdx || start >= matchEnd) continue
-
-    // Get the item's transform: [scaleX, skewX, skewY, scaleY, translateX, translateY]
     const tx = pdfjsLib.Util.transform(viewport.transform, item.transform)
     const x = tx[4]
     const y = tx[5]
@@ -143,12 +158,12 @@ function highlightTextOnCanvas(
     div.style.top = `${y - fontSize}px`
     div.style.width = `${width}px`
     div.style.height = `${fontSize * 1.2}px`
-    div.style.backgroundColor = 'rgba(255, 200, 0, 0.4)'
+    div.style.backgroundColor = 'rgba(255, 160, 0, 0.45)'
+    div.style.border = '1px solid rgba(255, 140, 0, 0.7)'
     div.style.borderRadius = '2px'
     overlay.appendChild(div)
   }
 
-  // Scroll first highlight into view
   const first = overlay.firstElementChild as HTMLElement | null
   first?.scrollIntoView({ behavior: 'smooth', block: 'center' })
 }

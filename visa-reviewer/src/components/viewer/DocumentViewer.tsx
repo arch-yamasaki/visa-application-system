@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useViewerStore } from '../../store/viewerStore'
 import { apiClient } from '../../api/client'
 import PdfViewer from './PdfViewer'
@@ -18,10 +18,14 @@ export default function DocumentViewer({ caseId }: Props) {
   const setSignedUrl = useViewerStore((s) => s.setSignedUrl)
   const setCurrentDoc = useViewerStore((s) => s.navigateToSource)
 
+  const [sheets, setSheets] = useState<string[]>([])
+  const [selectedSheet, setSelectedSheet] = useState<string | undefined>()
+
   const currentDoc = documents.find((d) => d.document_id === currentDocumentId)
 
   const ext = currentDoc?.file_name?.split('.').pop()?.toLowerCase()
   const isOfficeDoc = ['docx', 'xlsx', 'xls', 'doc'].includes(ext ?? '')
+  const isXlsx = ext === 'xlsx'
   const isPdf = ext === 'pdf'
   const isImage = ['png', 'jpg', 'jpeg', 'tiff', 'tif'].includes(ext ?? '')
 
@@ -39,9 +43,29 @@ export default function DocumentViewer({ caseId }: Props) {
       })
   }, [caseId, currentDocumentId, signedUrls, setSignedUrl, isOfficeDoc])
 
-  const url = isOfficeDoc && currentDocumentId
-    ? apiClient.getDocumentPreviewUrl(caseId, currentDocumentId)
-    : currentDocumentId ? signedUrls[currentDocumentId] : null
+  // Fetch sheet names for xlsx
+  useEffect(() => {
+    if (!currentDocumentId || !isXlsx) {
+      setSheets([])
+      setSelectedSheet(undefined)
+      return
+    }
+    apiClient.getDocumentSheets(caseId, currentDocumentId).then((r) => {
+      setSheets(r.sheets)
+      setSelectedSheet(undefined) // 全シート表示（デフォルト）
+    }).catch(() => {
+      setSheets([])
+    })
+  }, [caseId, currentDocumentId, isXlsx])
+
+  const handleSheetChange = useCallback((sheet: string) => {
+    setSelectedSheet(sheet)
+  }, [])
+
+  const previewUrl = isOfficeDoc && currentDocumentId
+    ? apiClient.getDocumentPreviewUrl(caseId, currentDocumentId, selectedSheet)
+    : null
+  const url = previewUrl ?? (currentDocumentId ? signedUrls[currentDocumentId] : null)
 
   if (documents.length === 0) {
     return (
@@ -88,7 +112,12 @@ export default function DocumentViewer({ caseId }: Props) {
         ) : isImage ? (
           <ImageViewer url={url} />
         ) : isOfficeDoc ? (
-          <HtmlViewer url={url} />
+          <HtmlViewer
+            url={url}
+            highlightText={highlightText}
+            sheets={isXlsx ? sheets : undefined}
+            onSheetChange={isXlsx ? handleSheetChange : undefined}
+          />
         ) : (
           <div className="flex items-center justify-center h-full text-gray-400 text-sm">
             未対応のファイル形式: .{ext}

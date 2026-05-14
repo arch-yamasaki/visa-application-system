@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import type { FieldMeta } from '../../types/caseData'
 import { useViewerStore } from '../../store/viewerStore'
+import { getDisplayValue } from '../../lib/fieldPaths'
 import FlagBadge from './FlagBadge'
 
 interface Props {
@@ -35,7 +36,8 @@ export default function FieldRow({ label, fieldPath, value, meta, flagType, onUp
   const setActiveFieldPath = useViewerStore((s) => s.setActiveFieldPath)
   const rowRef = useRef<HTMLDivElement>(null)
 
-  const displayValue = value === null || value === undefined || value === '' ? '(empty)' : String(value)
+  const rawValue = value === null || value === undefined || value === '' ? '' : String(value)
+  const displayValue = rawValue === '' ? '(未入力)' : getDisplayValue(rawValue) || rawValue
   const confidence = meta?.source_refs?.[0]?.confidence
   const hasSource = meta?.source_refs && meta.source_refs.length > 0
   const isActive = activeFieldPath === fieldPath
@@ -50,7 +52,7 @@ export default function FieldRow({ label, fieldPath, value, meta, flagType, onUp
 
   const startEditing = () => {
     if (!onUpdate) return
-    setEditValue(displayValue === '(empty)' ? '' : displayValue)
+    setEditValue(displayValue === '(未入力)' ? '' : displayValue)
     setEditing(true)
   }
 
@@ -134,7 +136,7 @@ export default function FieldRow({ label, fieldPath, value, meta, flagType, onUp
           </button>
         </div>
       ) : (
-        <span className={`flex-1 truncate ${displayValue === '(empty)' ? 'text-gray-300 italic' : 'text-gray-800'}`}>
+        <span className={`flex-1 truncate ${displayValue === '(未入力)' ? 'text-gray-300 italic' : 'text-gray-800'}`}>
           {displayValue}
         </span>
       )}

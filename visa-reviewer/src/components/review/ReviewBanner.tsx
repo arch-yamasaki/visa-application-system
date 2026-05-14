@@ -22,6 +22,8 @@ export default function ReviewBanner({ caseId, workflowState, fieldMetadata, rev
     ready_to_fill: '入力準備完了',
     extracting: '抽出中...',
     draft: '下書き',
+    extraction_failed: '抽出失敗',
+    launch_failed: '起動失敗',
   }
 
   const stateColor: Record<string, string> = {
@@ -29,6 +31,8 @@ export default function ReviewBanner({ caseId, workflowState, fieldMetadata, rev
     ready_to_fill: 'bg-green-100 text-green-700',
     extracting: 'bg-yellow-100 text-yellow-700',
     draft: 'bg-gray-100 text-gray-600',
+    extraction_failed: 'bg-red-100 text-red-700',
+    launch_failed: 'bg-red-100 text-red-700',
   }
 
   const progressColor = progress >= 1 ? 'bg-green-500' : progress >= 0.5 ? 'bg-blue-500' : 'bg-orange-400'

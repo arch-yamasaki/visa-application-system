@@ -92,8 +92,13 @@ export const apiClient = {
     return `${BASE}/cases/${caseId}/documents/${documentId}/content`
   },
 
-  getDocumentPreviewUrl(caseId: string, documentId: string): string {
-    return `${BASE}/cases/${caseId}/documents/${documentId}/preview`
+  getDocumentPreviewUrl(caseId: string, documentId: string, sheet?: string): string {
+    const base = `${BASE}/cases/${caseId}/documents/${documentId}/preview`
+    return sheet ? `${base}?sheet=${encodeURIComponent(sheet)}` : base
+  },
+
+  getDocumentSheets(caseId: string, documentId: string): Promise<{ sheets: string[] }> {
+    return request(`/cases/${caseId}/documents/${documentId}/sheets`)
   },
 
   // Extraction

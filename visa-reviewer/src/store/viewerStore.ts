@@ -34,8 +34,8 @@ export const useViewerStore = create<ViewerState>((set) => ({
   navigateToSource: (ref) =>
     set({
       currentDocumentId: ref.document_id,
-      currentPage: ref.page,
-      highlightText: ref.text_quote,
+      currentPage: ref.page || 1,
+      highlightText: ref.text_quote || null,
     }),
 
   setPage: (page) => set({ currentPage: page, highlightText: null }),

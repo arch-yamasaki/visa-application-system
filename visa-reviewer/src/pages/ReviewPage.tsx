@@ -4,8 +4,31 @@ import { apiClient } from '../api/client'
 import FieldPanel from '../components/review/FieldPanel'
 import DocumentViewer from '../components/viewer/DocumentViewer'
 import ReviewBanner from '../components/review/ReviewBanner'
-import type { CaseDocument } from '../types/caseData'
+import type { CaseDocument, FieldMetadataMap } from '../types/caseData'
 import { useViewerStore } from '../store/viewerStore'
+
+/** APIが返すリスト形式の field_metadata を Record<string, FieldMeta> に変換 */
+function normalizeFieldMetadata(raw: unknown): FieldMetadataMap {
+  if (!raw) return {}
+  if (!Array.isArray(raw)) return raw as FieldMetadataMap
+  const map: FieldMetadataMap = {}
+  for (const item of raw) {
+    const path = item.field_path ?? item.path
+    if (!path) continue
+    map[path] = {
+      source_refs: (item.source_refs ?? []).map((ref: Record<string, unknown>) => ({
+        document_id: ref.doc_id ?? ref.document_id ?? '',
+        page: ref.page ?? 1,
+        text_quote: ref.text_quote ?? '',
+        confidence: ref.confidence ?? 0,
+      })),
+      human_reviewed: item.human_reviewed,
+      human_edited: item.human_edited,
+      original_value: item.original_value,
+    }
+  }
+  return map
+}
 
 export default function ReviewPage() {
   const { caseId } = useParams<{ caseId: string }>()
@@ -20,6 +43,7 @@ export default function ReviewPage() {
   useEffect(() => {
     if (!caseId) return
     apiClient.getCase(caseId).then((doc) => {
+      doc.field_metadata = normalizeFieldMetadata(doc.field_metadata)
       setCaseDoc(doc)
       if (doc.document_manifest?.documents) {
         setDocuments(doc.document_manifest.documents)

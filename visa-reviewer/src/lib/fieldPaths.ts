@@ -53,6 +53,10 @@ const sectionMap: Record<string, string> = {
   receiving_method: '受取方法',
   supporting_documents: '添付書類',
   assessments: '審査結果',
+  activity_details: '活動内容',
+  employment_conditions: '雇用条件',
+  past_history: '過去の履歴',
+  family_in_japan: '在日親族',
 }
 
 export function getSectionForPath(path: string): string {
@@ -100,6 +104,13 @@ const labelOverrides: Record<string, string> = {
   'applicant.japan_contact.phone': '電話番号',
   'applicant.japan_contact.mobile': '携帯番号',
   'applicant.japan_contact.email': 'メール',
+  'applicant.nationality': '国籍',
+  'applicant.date_of_birth': '生年月日',
+  'applicant.passport_number': '旅券番号',
+  'applicant.gender': '性別',
+  'applicant.hometown_city': '出身地',
+  'applicant.passport_expiration_date': '旅券有効期限',
+  'applicant.place_of_birth': '出生地',
 
   // 旅券
   'passport.number': '旅券番号',
@@ -133,6 +144,7 @@ const labelOverrides: Record<string, string> = {
   'education.major': '専攻・学科',
   'education.graduation_date': '卒業年月日',
   'education.source_refs': '証跡',
+  'education.degree': '学位',
 
   // 成績科目（配列項目）
   'transcript_subjects.name': '科目名',
@@ -173,6 +185,10 @@ const labelOverrides: Record<string, string> = {
   'employer.representative_title': '代表者役職',
   'employer.industry': '業種',
   'employer.branch_office': '事業所',
+  'employer.company_name': '会社名',
+  'employer.business_description': '事業内容',
+  'employer.head_office_address': '本社所在地',
+  'employer.capital': '資本金',
 
   // 代理人（配列項目含む）
   'proxy.name': '氏名',
@@ -193,6 +209,38 @@ const labelOverrides: Record<string, string> = {
   'assessments.type': '審査種別',
   'assessments.status': '判定結果',
   'assessments.summary': '概要',
+
+  // 雇用条件
+  'employment_conditions.company_name': '会社名',
+  'employment_conditions.monthly_salary': '月給',
+  'employment_conditions.job_title': '職種',
+  'employment_conditions.contract_type': '契約種別',
+  'employment_conditions.contract_start_date': '契約開始日',
+  'employment_conditions.contract_end_date': '契約終了日',
+  'employment_conditions.working_hours': '勤務時間',
+  'employment_conditions.holidays': '休日',
+  'employment_conditions.insurance': '保険',
+  'employment_conditions.bonus': '賞与',
+  'employment_conditions.allowances': '手当',
+  'employment_conditions.annual_salary': '年収',
+  'employment_conditions.contract_period': '契約期間',
+  'employment_conditions.work_location': '勤務地',
+  'employment_conditions.joining_date': '入社予定日',
+
+  // 活動内容
+  'activity_details.description': '活動内容',
+  'activity_details.schedule': 'スケジュール',
+
+  // 在日親族
+  'family_in_japan.name': '氏名',
+  'family_in_japan.relationship': '続柄',
+  'family_in_japan.nationality': '国籍',
+  'family_in_japan.residence_card_number': '在留カード番号',
+  'family_in_japan.cohabiting': '同居の有無',
+
+  // 過去の履歴
+  'past_history.has_history': '履歴の有無',
+  'past_history.count': '回数',
 }
 
 /** Strip numeric array indices from a path for label lookup.
@@ -201,13 +249,102 @@ function stripIndices(path: string): string {
   return path.replace(/\.\d+\./g, '.').replace(/\.\d+$/, '')
 }
 
+/** Common field name fragments → Japanese */
+const segmentLabels: Record<string, string> = {
+  name: '名称', company_name: '会社名', school_name: '学校名',
+  description: '説明', business_description: '事業内容',
+  address: '住所', head_office_address: '本社所在地',
+  capital: '資本金', salary: '給与', monthly_salary: '月給',
+  salary_monthly: '月給', annual_salary: '年収', annual_sales: '年間売上',
+  job_title: '職種', work_location: '勤務地', joining_date: '入社予定日',
+  contract_period: '契約期間', working_hours: '勤務時間', bonus: '賞与',
+  nationality: '国籍', gender: '性別', date_of_birth: '生年月日',
+  birthday: '生年月日', place_of_birth: '出生地', hometown_city: '出身地',
+  passport_number: '旅券番号', passport_expiration_date: '旅券有効期限',
+  degree: '学位', major: '専攻', graduation_date: '卒業年月日',
+  has_history: '履歴の有無', count: '回数',
+  family_in_japan: '在日親族', employment_history: '職歴', work_history: '職歴',
+  qualifications: '資格', activity_details: '活動内容',
+  criminal_record: '犯罪歴', past_entry_history: '過去の入国歴',
+  past_coe_application_history: '過去のCOE申請歴',
+  start_date: '開始日', end_date: '終了日',
+  phone: '電話番号', mobile: '携帯番号', email: 'メール',
+  postal_code: '郵便番号', relationship: '続柄',
+  status: 'ステータス', type: '種別', summary: '概要',
+  source: '出典', notes: '備考', id: 'ID',
+}
+
 export function getFieldLabel(path: string): string {
   if (labelOverrides[path]) return labelOverrides[path]
   const stripped = stripIndices(path)
   if (labelOverrides[stripped]) return labelOverrides[stripped]
-  // Take last segment, replace underscores with spaces, capitalize
   const last = path.split('.').pop() ?? path
+  if (segmentLabels[last]) return segmentLabels[last]
   return last.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+/** Map internal enum values to human-readable Japanese labels. */
+const valueLabels: Record<string, string> = {
+  // 在留資格
+  engineer_humanities_international: '技術・人文知識・国際業務',
+  highly_skilled_professional: '高度専門職',
+  skilled_labor: '技能',
+  specified_skilled_worker: '特定技能',
+  student: '留学',
+  dependent: '家族滞在',
+  spouse_of_japanese: '日本人の配偶者等',
+  permanent_resident: '永住者',
+  long_term_resident: '定住者',
+  intra_company_transferee: '企業内転勤',
+  business_manager: '経営・管理',
+  entertainer: '興行',
+
+  // 申請種別
+  certificate_of_eligibility: '在留資格認定証明書交付申請',
+  change_of_status: '在留資格変更許可申請',
+  extension_of_stay: '在留期間更新許可申請',
+
+  // ワークフロー
+  draft: '下書き',
+  uploading: 'アップロード中',
+  extracting: '抽出中',
+  needs_review: '要レビュー',
+  ready_to_fill: '入力準備完了',
+  archived: 'アーカイブ',
+  extraction_failed: '抽出失敗',
+
+  // 性別
+  male: '男',
+  female: '女',
+
+  // 配偶者
+  married: '有',
+  unmarried: '無',
+
+  // 有無
+  yes: 'あり',
+  no: 'なし',
+  none: 'なし',
+  true: 'あり',
+  false: 'なし',
+
+  // 学歴区分
+  university: '大学',
+  graduate_school: '大学院',
+  junior_college: '短期大学',
+  vocational_school: '専門学校',
+  high_school: '高等学校',
+
+  // 書類受領状況
+  received: '受領済',
+  pending: '未受領',
+  not_required: '不要',
+}
+
+export function getDisplayValue(value: unknown): string {
+  if (value === null || value === undefined || value === '') return ''
+  const str = String(value)
+  return valueLabels[str] ?? str
 }
 
 /** Get a nested value from an object using dot-path. */
