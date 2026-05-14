@@ -88,6 +88,14 @@ export const apiClient = {
     return request(`/cases/${caseId}/documents/${documentId}/url`)
   },
 
+  getDocumentContentUrl(caseId: string, documentId: string): string {
+    return `${BASE}/cases/${caseId}/documents/${documentId}/content`
+  },
+
+  getDocumentPreviewUrl(caseId: string, documentId: string): string {
+    return `${BASE}/cases/${caseId}/documents/${documentId}/preview`
+  },
+
   // Extraction
   startExtraction(caseId: string, options?: { backend?: string; pattern?: string }) {
     if (isDemoMode()) return mockApi.startExtraction(caseId)

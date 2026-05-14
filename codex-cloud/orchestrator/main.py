@@ -1,5 +1,6 @@
 """Codex orchestrator – FastAPI service on Cloud Run."""
 
+import io
 import json
 import mimetypes
 import os
@@ -12,7 +13,7 @@ from typing import Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from google.cloud import firestore, storage
 from google.cloud import run_v2
 from pydantic import BaseModel
@@ -504,6 +505,131 @@ def get_document_url(case_id: str, document_id: str):
             "file_name": target_doc.get("file_name"),
             "note": "Signed URL generation failed. Use gcs_path to access the file directly.",
         }
+
+
+def _find_document_in_manifest(case_id: str, document_id: str) -> tuple[dict, dict]:
+    """Lookup a document entry from a case's manifest. Returns (case_data, doc_entry)."""
+    doc = db.collection("cases").document(case_id).get()
+    if not doc.exists:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    data = doc.to_dict()
+    manifest = data.get("document_manifest", {})
+    documents = manifest.get("documents", [])
+
+    for d in documents:
+        if d.get("document_id") == document_id:
+            return data, d
+
+    raise HTTPException(status_code=404, detail="Document not found in manifest")
+
+
+def _download_document_bytes(gcs_path: str) -> bytes:
+    """Download file bytes from GCS."""
+    bucket = gcs.bucket(GCS_BUCKET)
+    blob = bucket.blob(gcs_path)
+    if not blob.exists():
+        raise HTTPException(status_code=404, detail="File not found in GCS")
+    return blob.download_as_bytes()
+
+
+def _content_type_for_filename(filename: str) -> str:
+    """Return appropriate Content-Type for a filename."""
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    content_types = {
+        "pdf": "application/pdf",
+        "png": "image/png",
+        "jpg": "image/jpeg",
+        "jpeg": "image/jpeg",
+        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }
+    return content_types.get(ext, "application/octet-stream")
+
+
+@app.get("/cases/{case_id}/documents/{document_id}/content")
+def get_document_content(case_id: str, document_id: str):
+    """GCSからファイルをダウンロードして直接配信（signed URL不要）"""
+    _, doc_entry = _find_document_in_manifest(case_id, document_id)
+    gcs_path = doc_entry["gcs_path"]
+    file_name = doc_entry.get("file_name", "download")
+
+    file_bytes = _download_document_bytes(gcs_path)
+    media_type = _content_type_for_filename(file_name)
+
+    return Response(
+        content=file_bytes,
+        media_type=media_type,
+    )
+
+
+def _docx_to_html(file_bytes: bytes) -> str:
+    import docx
+    doc = docx.Document(io.BytesIO(file_bytes))
+    parts = ['<div style="font-family:sans-serif;padding:20px;max-width:800px;margin:auto">']
+    for para in doc.paragraphs:
+        if para.text.strip():
+            style = 'font-weight:bold;font-size:1.2em;margin-top:1em' if para.style.name.startswith('Heading') else ''
+            parts.append(f'<p style="{style}">{para.text}</p>')
+    for table in doc.tables:
+        parts.append('<table style="border-collapse:collapse;width:100%;margin:1em 0">')
+        for row in table.rows:
+            parts.append('<tr>')
+            for cell in row.cells:
+                parts.append(f'<td style="border:1px solid #ddd;padding:6px 8px;font-size:13px">{cell.text}</td>')
+            parts.append('</tr>')
+        parts.append('</table>')
+    parts.append('</div>')
+    return '\n'.join(parts)
+
+
+def _xlsx_to_html(file_bytes: bytes, sheet_name: str | None = None) -> str:
+    import openpyxl
+    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
+    sheets = [wb[sheet_name]] if sheet_name else wb.worksheets
+    parts = ['<div style="font-family:sans-serif;padding:20px">']
+    for ws in sheets:
+        parts.append(f'<h3>{ws.title}</h3>')
+        parts.append('<table style="border-collapse:collapse;width:100%;margin-bottom:2em">')
+        for row in ws.iter_rows(values_only=False):
+            cells = []
+            has_content = False
+            for cell in row:
+                val = str(cell.value) if cell.value is not None else ''
+                if val:
+                    has_content = True
+                cells.append(f'<td style="border:1px solid #ddd;padding:4px 8px;font-size:12px">{val}</td>')
+            if has_content:
+                parts.append(f'<tr>{"".join(cells)}</tr>')
+        parts.append('</table>')
+    parts.append('</div>')
+    wb.close()
+    return '\n'.join(parts)
+
+
+@app.get("/cases/{case_id}/documents/{document_id}/preview")
+def get_document_preview(case_id: str, document_id: str):
+    """docx/xlsxをHTML変換して返す。PDF/画像はそのまま返す。"""
+    _, doc_entry = _find_document_in_manifest(case_id, document_id)
+    gcs_path = doc_entry["gcs_path"]
+    file_name = doc_entry.get("file_name", "download")
+    ext = file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
+
+    file_bytes = _download_document_bytes(gcs_path)
+
+    if ext == "docx":
+        html = _docx_to_html(file_bytes)
+        return HTMLResponse(content=html)
+    elif ext == "xlsx":
+        html = _xlsx_to_html(file_bytes)
+        return HTMLResponse(content=html)
+    else:
+        # PDF/画像はそのまま配信
+        media_type = _content_type_for_filename(file_name)
+        return Response(
+            content=file_bytes,
+            media_type=media_type,
+        )
 
 
 def _extract_with_gemini(case_doc: dict, pattern: str) -> ExtractionResult:

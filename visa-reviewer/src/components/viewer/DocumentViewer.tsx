@@ -3,6 +3,7 @@ import { useViewerStore } from '../../store/viewerStore'
 import { apiClient } from '../../api/client'
 import PdfViewer from './PdfViewer'
 import ImageViewer from './ImageViewer'
+import HtmlViewer from './HtmlViewer'
 
 interface Props {
   caseId: string
@@ -19,19 +20,28 @@ export default function DocumentViewer({ caseId }: Props) {
 
   const currentDoc = documents.find((d) => d.document_id === currentDocumentId)
 
-  // Fetch signed URL for current document
-  useEffect(() => {
-    if (!currentDocumentId || signedUrls[currentDocumentId]) return
-    apiClient
-      .getDocumentUrl(caseId, currentDocumentId)
-      .then((r) => setSignedUrl(currentDocumentId, r.signed_url))
-      .catch(() => {})
-  }, [caseId, currentDocumentId, signedUrls, setSignedUrl])
-
-  const url = currentDocumentId ? signedUrls[currentDocumentId] : null
   const ext = currentDoc?.file_name?.split('.').pop()?.toLowerCase()
+  const isOfficeDoc = ['docx', 'xlsx', 'xls', 'doc'].includes(ext ?? '')
   const isPdf = ext === 'pdf'
   const isImage = ['png', 'jpg', 'jpeg', 'tiff', 'tif'].includes(ext ?? '')
+
+  // Fetch signed URL for current document (skip for office docs)
+  useEffect(() => {
+    if (!currentDocumentId || signedUrls[currentDocumentId] || isOfficeDoc) return
+    apiClient
+      .getDocumentUrl(caseId, currentDocumentId)
+      .then((r) => {
+        const url = r.signed_url || apiClient.getDocumentContentUrl(caseId, currentDocumentId)
+        setSignedUrl(currentDocumentId, url)
+      })
+      .catch(() => {
+        setSignedUrl(currentDocumentId, apiClient.getDocumentContentUrl(caseId, currentDocumentId))
+      })
+  }, [caseId, currentDocumentId, signedUrls, setSignedUrl, isOfficeDoc])
+
+  const url = isOfficeDoc && currentDocumentId
+    ? apiClient.getDocumentPreviewUrl(caseId, currentDocumentId)
+    : currentDocumentId ? signedUrls[currentDocumentId] : null
 
   if (documents.length === 0) {
     return (
@@ -77,6 +87,8 @@ export default function DocumentViewer({ caseId }: Props) {
           <PdfViewer url={url} page={currentPage} highlightText={highlightText} />
         ) : isImage ? (
           <ImageViewer url={url} />
+        ) : isOfficeDoc ? (
+          <HtmlViewer url={url} />
         ) : (
           <div className="flex items-center justify-center h-full text-gray-400 text-sm">
             未対応のファイル形式: .{ext}
