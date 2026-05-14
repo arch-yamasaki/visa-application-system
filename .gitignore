@@ -74,6 +74,12 @@ rasens-autofill/extension/application_data.json
 *.avi
 *.mkv
 
+# Playwright
+.playwright-mcp/
+test-results/
+playwright-report/
+screenshots/
+
 # Logs and caches
 *.log
 .history/
