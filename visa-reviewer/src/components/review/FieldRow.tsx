@@ -145,10 +145,12 @@ export default function FieldRow({ label, fieldPath, value, meta, flagType, onUp
 
       <FlagBadge type={badgeType} />
 
-      {hasSource && (
+      {hasSource ? (
         <span className="text-[10px] text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">
           p.{meta?.source_refs?.[0]?.page}
         </span>
+      ) : (
+        <span className="text-[10px] text-gray-300 italic">(証跡なし)</span>
       )}
     </div>
   )

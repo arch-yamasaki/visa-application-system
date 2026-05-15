@@ -48,11 +48,45 @@ _TEMPLATE = """\
 
 ## field_metadata 要件
 
+**case_data に出力した全てのフィールドについて、field_metadata に対応するエントリを必ず出力すること。**
+漏れがあってはならない。
+
 各フィールドパスに対して source_refs を記録する。
 - field_path は case_data のドットパス表記（例: applicant.name_roman, education.0.school_name）
-- text_quote は原文から直接引用し50文字以内
-- confidence: 0.9以上=明瞭、0.7-0.9=やや不明瞭、0.5-0.7=複数解釈可能、0.5未満=推測
+- source_refs 内の各エントリは以下の必須項目を含むこと:
+  - document_id (string): 書類一覧の document_id と一致
+  - page (integer): ページ番号（1始まり）
+  - text_quote (string): 原文から直接引用、50文字以内
+  - confidence (number): 0.0〜1.0 の範囲
+    - 0.9以上=明瞭、0.7-0.9=やや不明瞭、0.5-0.7=複数解釈可能、0.5未満=推測
 - 値が見つからない場合は source_refs を空配列とし review の missing_items に記録
+
+### field_metadata 出力例
+
+```json
+{{
+  "applicant.name_roman": {{
+    "source_refs": [
+      {{
+        "document_id": "doc_abc123",
+        "page": 1,
+        "text_quote": "YAMADA TARO",
+        "confidence": 0.95
+      }}
+    ]
+  }},
+  "applicant.date_of_birth": {{
+    "source_refs": [
+      {{
+        "document_id": "doc_abc123",
+        "page": 1,
+        "text_quote": "1990-01-15",
+        "confidence": 0.9
+      }}
+    ]
+  }}
+}}
+```
 
 ## 出力フォーマット
 

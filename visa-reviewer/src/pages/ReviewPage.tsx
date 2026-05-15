@@ -18,9 +18,9 @@ function normalizeFieldMetadata(raw: unknown): FieldMetadataMap {
     map[path] = {
       source_refs: (item.source_refs ?? []).map((ref: Record<string, unknown>) => ({
         document_id: ref.doc_id ?? ref.document_id ?? '',
-        page: ref.page ?? 1,
+        page: Number(ref.page) || 1,
         text_quote: ref.text_quote ?? '',
-        confidence: ref.confidence ?? 0,
+        confidence: Number(ref.confidence) || 0,
       })),
       human_reviewed: item.human_reviewed,
       human_edited: item.human_edited,

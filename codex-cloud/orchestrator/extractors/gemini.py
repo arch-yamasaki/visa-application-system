@@ -1,10 +1,13 @@
 """Gemini 3 Flash structured extraction for visa application documents."""
 
 import json
+import logging
 import os
 
 from google import genai
 from google.genai import types
+
+logger = logging.getLogger(__name__)
 
 from .prompt_template import build_extraction_prompt
 from .types import ExtractionResult, OcrResult
@@ -35,12 +38,87 @@ def _call_gemini(client: genai.Client, contents: list, prompt: str) -> dict:
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
             temperature=0.0,
+            max_output_tokens=65536,
         ),
     )
-    parsed = json.loads(response.text)
+    raw_text = response.text
+    logger.debug("Gemini response (first 500 chars): %s", raw_text[:500])
+    try:
+        parsed = json.loads(raw_text)
+    except json.JSONDecodeError as e:
+        logger.error("Gemini JSON parse error: %s\nResponse head: %s", e, raw_text[:200])
+        raise ValueError(
+            f"Gemini returned invalid JSON: {e}. Response starts with: {raw_text[:200]}"
+        ) from e
     if isinstance(parsed, list) and len(parsed) == 1:
         parsed = parsed[0]
+
+    # --- field_metadata 正規化 ---
+    raw_fm = parsed.get("field_metadata", {})
+    if isinstance(raw_fm, dict):
+        for _fp, meta in raw_fm.items():
+            refs = meta.get("source_refs", [])
+            if not isinstance(refs, list):
+                continue
+            for ref in refs:
+                # doc_id → document_id に統一
+                if "doc_id" in ref and "document_id" not in ref:
+                    ref["document_id"] = ref.pop("doc_id")
+                # page: デフォルト1、文字列→整数
+                if "page" not in ref:
+                    ref["page"] = 1
+                elif isinstance(ref["page"], str):
+                    try:
+                        ref["page"] = int(ref["page"])
+                    except (ValueError, TypeError):
+                        ref["page"] = 1
+    elif isinstance(raw_fm, list):
+        # リスト形式の場合も各エントリの source_refs を正規化
+        for entry in raw_fm:
+            if not isinstance(entry, dict):
+                continue
+            refs = entry.get("source_refs", [])
+            if not isinstance(refs, list):
+                continue
+            for ref in refs:
+                if "doc_id" in ref and "document_id" not in ref:
+                    ref["document_id"] = ref.pop("doc_id")
+                if "page" not in ref:
+                    ref["page"] = 1
+                elif isinstance(ref["page"], str):
+                    try:
+                        ref["page"] = int(ref["page"])
+                    except (ValueError, TypeError):
+                        ref["page"] = 1
+        parsed["field_metadata"] = raw_fm
+
+    # --- case_data の全フィールドに対して field_metadata を補完 ---
+    fm = parsed.get("field_metadata")
+    case_data = parsed.get("case_data")
+    if isinstance(fm, dict) and isinstance(case_data, dict):
+        for path in _flatten_keys(case_data):
+            if path not in fm:
+                fm[path] = {"source_refs": []}
+
     return parsed
+
+
+def _flatten_keys(obj: dict, prefix: str = "") -> list[str]:
+    """case_data のネストされたキーをドットパス表記でフラット化する。"""
+    keys: list[str] = []
+    for k, v in obj.items():
+        path = f"{prefix}{k}" if not prefix else f"{prefix}.{k}"
+        if isinstance(v, dict):
+            keys.extend(_flatten_keys(v, path))
+        elif isinstance(v, list):
+            for i, item in enumerate(v):
+                if isinstance(item, dict):
+                    keys.extend(_flatten_keys(item, f"{path}.{i}"))
+                else:
+                    keys.append(f"{path}.{i}")
+        else:
+            keys.append(path)
+    return keys
 
 
 def _map_field_metadata(
