@@ -41,3 +41,5 @@
 - `visa-eval/raw/`, `visa-eval/catalog.json`, `visa-eval/test_cases_from_raw/<case_id>/` は実PIIを含む restricted test data としてローカル管理し、gitに入れない。
 - `rasens-autofill/data/` は設計資産としてgit管理する。ただし一時CSV、PDF/画像キャプチャ、実案件由来データは入れない。
 - まずは技人国で型を固め、周辺業務としてシャローム入力、社会保険・雇用保険、助成金に広げる。
+- QA検証スクリーンショットやテスト入力ファイルは `qa/` 配下に集約する（`qa/screenshots/`, `qa/test-files/`）。git管理外。
+- Playwright E2Eテストのコードは `visa-app/frontend/e2e/` に配置し、テスト成果物（test-results/, playwright-report/, .playwright-mcp/）はコミットしない。
