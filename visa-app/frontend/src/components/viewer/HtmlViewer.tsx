@@ -19,14 +19,30 @@ export default function HtmlViewer({ url, highlightText, sheets, onSheetChange }
   // iframe ロード後にハイライトテキストを検索
   useEffect(() => {
     const iframe = iframeRef.current
-    if (!iframe || !highlightText?.trim()) return
+    if (!iframe) return
+
+    /** 既存の <mark> を全て unwrap してクリアする */
+    const clearHighlights = (doc: Document) => {
+      doc.querySelectorAll('mark').forEach((mark) => {
+        const parent = mark.parentNode
+        if (parent) {
+          while (mark.firstChild) parent.insertBefore(mark.firstChild, mark)
+          parent.removeChild(mark)
+        }
+      })
+    }
 
     const handleLoad = () => {
       try {
         const doc = iframe.contentDocument || iframe.contentWindow?.document
         if (!doc?.body) return
 
-        const text = highlightText.trim()
+        // 前回のハイライトをクリア
+        clearHighlights(doc)
+
+        const text = highlightText?.trim()
+        if (!text) return
+
         const walker = document.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT)
         const normalizedSearch = text.replace(/\s+/g, '').toLowerCase()
         let node: Text | null
