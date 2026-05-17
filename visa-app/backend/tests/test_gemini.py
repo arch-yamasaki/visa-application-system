@@ -5,6 +5,8 @@ from unittest.mock import MagicMock, patch
 
 from extractors.gemini import (
     _build_ocr_context,
+    _extract_field_metadata,
+    _extract_display_values,
     _map_field_metadata,
     extract_pdf_direct,
     extract_text_only,
@@ -40,7 +42,42 @@ _DOCUMENTS = [
     },
 ]
 
-_GEMINI_RESPONSE = {
+# 新形式（FieldValue 構造）の Gemini レスポンス
+_GEMINI_RESPONSE_NEW = {
+    "case_data": {
+        "applicant": {
+            "name_roman": {
+                "value": "TANAKA TARO",
+                "source_refs": [
+                    {
+                        "document_id": "doc_p",
+                        "page": 1,
+                        "text_quote": "TANAKA TARO",
+                        "confidence": 0.95,
+                    }
+                ],
+            },
+            "nationality": {
+                "value": "JP",
+                "source_refs": [
+                    {
+                        "document_id": "doc_p",
+                        "page": 1,
+                        "text_quote": "JP",
+                        "confidence": 0.9,
+                    }
+                ],
+            },
+        },
+    },
+    "review": {
+        "missing_items": [],
+        "summary": "問題なし",
+    },
+}
+
+# 旧形式（field_metadata 別出し）の Gemini レスポンス
+_GEMINI_RESPONSE_OLD = {
     "case_data": {
         "applicant": {"name_roman": "TANAKA TARO", "nationality": "JP"},
     },
@@ -93,6 +130,9 @@ def _mock_gemini_response(raw: dict):
     """_call_gemini が返す値をモックするためのレスポンスオブジェクト。"""
     response = MagicMock()
     response.text = json.dumps(raw)
+    candidate = MagicMock()
+    candidate.finish_reason = "STOP"
+    response.candidates = [candidate]
     return response
 
 
@@ -154,10 +194,32 @@ class TestBuildOcrContext:
 
 class TestExtractTextOnly:
     @patch("extractors.gemini._get_client")
-    def test_returns_extraction_result(self, mock_get_client):
+    def test_returns_extraction_result_new_format(self, mock_get_client):
         mock_client = MagicMock()
         mock_client.models.generate_content.return_value = _mock_gemini_response(
-            _GEMINI_RESPONSE
+            _GEMINI_RESPONSE_NEW
+        )
+        mock_get_client.return_value = mock_client
+
+        result = extract_text_only(_make_ocr_results(), _CASE_META, _DOCUMENTS)
+
+        assert isinstance(result, ExtractionResult)
+        # display_case_data は値のみ
+        assert result.display_case_data["applicant"]["name_roman"] == "TANAKA TARO"
+        # case_data は FieldValue 構造
+        assert result.case_data["applicant"]["name_roman"]["value"] == "TANAKA TARO"
+        assert result.review["summary"] == "問題なし"
+        # field_metadata が自動生成されている
+        assert "applicant.name_roman" in result.field_metadata
+        assert result.field_metadata["applicant.name_roman"]["confidence"] == 0.95
+        mock_client.models.generate_content.assert_called_once()
+
+    @patch("extractors.gemini._get_client")
+    def test_returns_extraction_result_old_format(self, mock_get_client):
+        """旧形式のレスポンスでも動作する（互換性テスト）。"""
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = _mock_gemini_response(
+            _GEMINI_RESPONSE_OLD
         )
         mock_get_client.return_value = mock_client
 
@@ -165,6 +227,7 @@ class TestExtractTextOnly:
 
         assert isinstance(result, ExtractionResult)
         assert result.case_data["applicant"]["name_roman"] == "TANAKA TARO"
+        assert result.display_case_data["applicant"]["name_roman"] == "TANAKA TARO"
         assert result.review["summary"] == "問題なし"
         mock_client.models.generate_content.assert_called_once()
 
@@ -172,7 +235,7 @@ class TestExtractTextOnly:
     def test_prompt_contains_ocr_text(self, mock_get_client):
         mock_client = MagicMock()
         mock_client.models.generate_content.return_value = _mock_gemini_response(
-            _GEMINI_RESPONSE
+            _GEMINI_RESPONSE_NEW
         )
         mock_get_client.return_value = mock_client
 
@@ -193,7 +256,7 @@ class TestExtractPdfDirect:
     def test_returns_extraction_result(self, mock_get_client, mock_from_bytes):
         mock_client = MagicMock()
         mock_client.models.generate_content.return_value = _mock_gemini_response(
-            _GEMINI_RESPONSE
+            _GEMINI_RESPONSE_NEW
         )
         mock_get_client.return_value = mock_client
         mock_from_bytes.return_value = "pdf_part"
@@ -202,7 +265,7 @@ class TestExtractPdfDirect:
         result = extract_pdf_direct(pdf_contents, _CASE_META, _DOCUMENTS)
 
         assert isinstance(result, ExtractionResult)
-        assert result.case_data["applicant"]["nationality"] == "JP"
+        assert result.display_case_data["applicant"]["nationality"] == "JP"
         mock_from_bytes.assert_called_once_with(
             data=b"fake_pdf_bytes", mime_type="application/pdf"
         )
@@ -212,7 +275,7 @@ class TestExtractPdfDirect:
     def test_multiple_pdfs(self, mock_get_client, mock_from_bytes):
         mock_client = MagicMock()
         mock_client.models.generate_content.return_value = _mock_gemini_response(
-            _GEMINI_RESPONSE
+            _GEMINI_RESPONSE_NEW
         )
         mock_get_client.return_value = mock_client
         mock_from_bytes.return_value = "pdf_part"
@@ -232,7 +295,7 @@ class TestExtractWithImages:
     def test_returns_extraction_result(self, mock_get_client, mock_from_bytes):
         mock_client = MagicMock()
         mock_client.models.generate_content.return_value = _mock_gemini_response(
-            _GEMINI_RESPONSE
+            _GEMINI_RESPONSE_NEW
         )
         mock_get_client.return_value = mock_client
         mock_from_bytes.return_value = "img_part"
@@ -251,7 +314,7 @@ class TestExtractWithImages:
     def test_jpeg_detection(self, mock_get_client, mock_from_bytes):
         mock_client = MagicMock()
         mock_client.models.generate_content.return_value = _mock_gemini_response(
-            _GEMINI_RESPONSE
+            _GEMINI_RESPONSE_NEW
         )
         mock_get_client.return_value = mock_client
         mock_from_bytes.return_value = "img_part"
@@ -264,70 +327,113 @@ class TestExtractWithImages:
         mock_from_bytes.assert_called_once_with(data=jpg_bytes, mime_type="image/jpeg")
 
 
+# ---------- _extract_field_metadata ------------------------------------
+
+
+class TestExtractFieldMetadata:
+    def test_extracts_from_new_format(self):
+        case_data = {
+            "applicant": {
+                "name_roman": {
+                    "value": "YAMADA TARO",
+                    "source_refs": [
+                        {"document_id": "doc_p", "page": 1, "text_quote": "YAMADA TARO", "confidence": 0.95}
+                    ],
+                },
+                "nationality": {
+                    "value": "JP",
+                    "source_refs": [
+                        {"document_id": "doc_p", "page": 1, "text_quote": "JP", "confidence": 0.9}
+                    ],
+                },
+            }
+        }
+        result = _extract_field_metadata(case_data)
+        assert "applicant.name_roman" in result
+        assert result["applicant.name_roman"]["confidence"] == 0.95
+        assert "applicant.nationality" in result
+
+    def test_handles_list_fields(self):
+        case_data = {
+            "education": [
+                {
+                    "school_name": {
+                        "value": "東京大学",
+                        "source_refs": [{"confidence": 0.9}],
+                    }
+                }
+            ]
+        }
+        result = _extract_field_metadata(case_data)
+        assert "education.0.school_name" in result
+
+    def test_empty_source_refs(self):
+        case_data = {
+            "applicant": {
+                "name": {"value": "", "source_refs": []},
+            }
+        }
+        result = _extract_field_metadata(case_data)
+        assert result["applicant.name"]["confidence"] is None
+
+
+# ---------- _extract_display_values ------------------------------------
+
+
+class TestExtractDisplayValues:
+    def test_unwraps_values(self):
+        case_data = {
+            "applicant": {
+                "name_roman": {
+                    "value": "YAMADA TARO",
+                    "source_refs": [{"confidence": 0.95}],
+                },
+            }
+        }
+        result = _extract_display_values(case_data)
+        assert result == {"applicant": {"name_roman": "YAMADA TARO"}}
+
+    def test_handles_lists(self):
+        case_data = {
+            "education": [
+                {
+                    "school_name": {"value": "東京大学", "source_refs": []},
+                }
+            ]
+        }
+        result = _extract_display_values(case_data)
+        assert result["education"][0]["school_name"] == "東京大学"
+
+
 # ---------- _map_field_metadata -----------------------------------------
 
 
 class TestMapFieldMetadata:
-    def test_maps_bbox_from_ocr(self):
+    def test_dict_passthrough(self):
         raw_metadata = {
             "applicant.name_roman": {
                 "source_refs": [
                     {
                         "document_id": "doc_p",
-                        "page": "1",
+                        "page": 1,
                         "text_quote": "TANAKA",
-                        "confidence": "0.95",
+                        "confidence": 0.95,
                     }
                 ]
             }
         }
-        ocr_results = _make_ocr_results()
-        result = _map_field_metadata(raw_metadata, ocr_results)
+        result = _map_field_metadata(raw_metadata)
+        assert "applicant.name_roman" in result
 
-        ref = result["applicant.name_roman"]["source_refs"][0]
-        assert "bbox" in ref
-        assert ref["bbox"]["x"] == 10
-        assert ref["bbox"]["y"] == 20
-        assert ref["bbox"]["width"] == 80
-
-    def test_no_match_no_bbox(self):
-        raw_metadata = {
-            "some.field": {
+    def test_list_to_dict_conversion(self):
+        raw_metadata = [
+            {
+                "field_path": "applicant.name_roman",
                 "source_refs": [
-                    {"text_quote": "NONEXISTENT_TEXT", "confidence": "0.5"}
-                ]
+                    {"text_quote": "TANAKA", "confidence": 0.95}
+                ],
             }
-        }
-        result = _map_field_metadata(raw_metadata, _make_ocr_results())
-        ref = result["some.field"]["source_refs"][0]
-        assert "bbox" not in ref
-
-    def test_empty_text_quote_skipped(self):
-        raw_metadata = {
-            "some.field": {"source_refs": [{"text_quote": "", "confidence": "0.5"}]}
-        }
-        result = _map_field_metadata(raw_metadata, _make_ocr_results())
-        ref = result["some.field"]["source_refs"][0]
-        assert "bbox" not in ref
-
-    def test_empty_ocr_returns_unchanged(self):
-        raw_metadata = {"f": {"source_refs": [{"text_quote": "X"}]}}
-        result = _map_field_metadata(raw_metadata, [])
-        assert result == raw_metadata
-
-    def test_best_match_longest_word(self):
-        """text_quote に複数の word がマッチする場合、最長の word を選ぶ。"""
-        raw_metadata = {
-            "applicant.name_roman": {
-                "source_refs": [
-                    {"text_quote": "TANAKA TARO", "confidence": "0.95"}
-                ]
-            }
-        }
-        ocr_results = _make_ocr_results()
-        result = _map_field_metadata(raw_metadata, ocr_results)
-
-        ref = result["applicant.name_roman"]["source_refs"][0]
-        # "TANAKA" (6 chars) > "TARO" (4 chars) → TANAKA の bbox が使われる
-        assert ref["bbox"]["x"] == 10
-        assert ref["bbox"]["width"] == 80
+        ]
+        result = _map_field_metadata(raw_metadata)
+        assert "applicant.name_roman" in result
+        assert result["applicant.name_roman"]["source_refs"][0]["text_quote"] == "TANAKA"

@@ -808,9 +808,9 @@ def _start_gemini_extraction(
 
     case_ref.update(
         {
-            "case_data": result.case_data,
+            "case_data": result.display_case_data,    # 表示用（従来形式）をFirestoreに保存
             "review": result.review,
-            "field_metadata": result.field_metadata,
+            "field_metadata": result.field_metadata,  # 互換レイヤーで自動生成済み
             "workflow_state": "needs_review",
             "updated_at": _now_iso(),
         }

@@ -13,11 +13,10 @@ _TEMPLATE = """\
 
 ## 指示
 
-提供された書類から以下の3つのJSONオブジェクトを含む単一のJSONを出力してください。
+提供された書類から以下の2つのJSONオブジェクトを含む単一のJSONを出力してください。
 
-1. **case_data**: 申請人の身元情報、出入国歴、家族、学歴、職歴、資格、雇用主情報、雇用条件、活動内容詳細を抽出。
+1. **case_data**: 申請人の身元情報、出入国歴、家族、学歴、職歴、資格、雇用主情報、雇用条件、活動内容詳細を抽出。各フィールドは `{{"value": "...", "source": "document_id|page|text_quote|confidence"}}` の形式で出力すること。
 2. **review**: 欠損項目、根拠の弱い項目、矛盾点、人の判断が必要な理由を記録。reason/message/summaryは日本語で記述。
-3. **field_metadata**: 各フィールドの抽出根拠を記録。
 
 ## 抽出の優先順位
 
@@ -35,7 +34,7 @@ _TEMPLATE = """\
 
 - case_data: 値は原本の言語をそのまま使用（例：ローマ字氏名はローマ字、日本語住所は日本語）
 - review: reason、message、summaryなどの説明テキストは日本語で記述
-- field_metadata: text_quoteは原文から直接引用
+- text_quote は原文から直接引用
 
 ## レビュー方針（技人国）
 
@@ -46,50 +45,40 @@ _TEMPLATE = """\
 
 根拠となる資料が不足している場合、OCR精度が低い場合、法的・実務的な判断が必要な場合は needs_review を付与すること。
 
-## field_metadata 要件
+## 証跡要件（case_data 内の各フィールドに埋め込み）
 
-**case_data に出力した全てのフィールドについて、field_metadata に対応するエントリを必ず出力すること。**
-漏れがあってはならない。
+**case_data の各末端フィールドは `{{"value": "...", "source": "document_id|page|text_quote|confidence"}}` の形式で出力すること。**
 
-### 追加ルール
+### ルール
 
 - DOCX書類からの抽出値にも必ず証跡を付与すること。DOCXにはページ概念がないため page は 1 とすること。
 - 雇用条件の詳細項目（昇給、賞与、勤務時間、休日、入社日等）にも必ず証跡を付与すること。
 - 値を出力する場合は、必ずどの書類（document_id）のどの箇所から取得したか記録すること。証跡なしで値だけ返すことは禁止。
+- 複数の根拠がある場合は、最も信頼度の高いものを1つ選んで記載すること。
 
-各フィールドパスに対して source_refs を記録する。
-- field_path は case_data のドットパス表記（例: applicant.name_roman, education.0.school_name）
-- source_refs 内の各エントリは以下の必須項目を含むこと:
+source 文字列のフォーマット: `document_id|page|text_quote|confidence`
   - document_id (string): 書類一覧の document_id と一致
   - page (integer): ページ番号（1始まり）
-  - text_quote (string): 原文から直接引用、50文字以内
+  - text_quote (string): 原文から直接引用、50文字以内。パイプ文字(|)は含めない
   - confidence (number): 0.0〜1.0 の範囲
     - 0.9以上=明瞭、0.7-0.9=やや不明瞭、0.5-0.7=複数解釈可能、0.5未満=推測
-- 値が見つからない場合は source_refs を空配列とし review の missing_items に記録
+- 値が見つからない場合は value を空文字、source を空文字とし review の missing_items に記録
 
-### field_metadata 出力例
+### case_data 出力例
 
 ```json
 {{
-  "applicant.name_roman": {{
-    "source_refs": [
-      {{
-        "document_id": "doc_abc123",
-        "page": 1,
-        "text_quote": "YAMADA TARO",
-        "confidence": 0.95
+  "case_data": {{
+    "applicant": {{
+      "name_roman": {{
+        "value": "YAMADA TARO",
+        "source": "doc_abc123|1|YAMADA TARO|0.95"
+      }},
+      "date_of_birth": {{
+        "value": "1990-01-15",
+        "source": "doc_abc123|1|1990-01-15|0.9"
       }}
-    ]
-  }},
-  "applicant.date_of_birth": {{
-    "source_refs": [
-      {{
-        "document_id": "doc_abc123",
-        "page": 1,
-        "text_quote": "1990-01-15",
-        "confidence": 0.9
-      }}
-    ]
+    }}
   }}
 }}
 ```
@@ -129,7 +118,7 @@ _TEMPLATE = """\
 }}
 ```
 
-field_metadata のパスも必ず `employment_conditions.xxx` とすること（`employment_terms.xxx` や `employment_contract.xxx` は禁止）。
+case_data のキーも必ず `employment_conditions.xxx` とすること（`employment_terms.xxx` や `employment_contract.xxx` は禁止）。
 
 ## 出力フォーマット
 

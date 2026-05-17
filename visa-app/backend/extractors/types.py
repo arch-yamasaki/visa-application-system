@@ -31,6 +31,7 @@ class OcrResult:
 
 @dataclass
 class ExtractionResult:
-    case_data: dict
+    case_data: dict          # FieldValue をネストした構造（新形式）
+    display_case_data: dict  # value のみ（従来形式、互換用）
     review: dict
-    field_metadata: dict
+    field_metadata: dict     # case_data から自動生成（互換用）
