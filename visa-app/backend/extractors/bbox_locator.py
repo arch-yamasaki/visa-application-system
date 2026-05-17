@@ -1,6 +1,8 @@
 """Gemini bbox取得: 対象フィールドのsource_refにbboxを付与する。"""
 
 import logging
+import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pymupdf
 
@@ -9,22 +11,28 @@ from .gemini import get_bboxes_for_page, _map_field_metadata
 logger = logging.getLogger(__name__)
 
 BBOX_TARGET_FIELDS = [
+    # 申請人
     "applicant.name_roman",
     "applicant.nationality",
     "applicant.date_of_birth",
     "applicant.passport_number",
-    "employment_terms.job_title",
-    "employment_terms.monthly_salary",
-    "employment_terms.work_location",
+    # 雇用条件 (正規パス: employment_conditions)
     "employment_conditions.job_title",
+    "employment_conditions.duties",
     "employment_conditions.monthly_salary",
-    "employment_conditions.salary_monthly",
+    "employment_conditions.annual_salary",
+    "employment_conditions.bonus",
     "employment_conditions.work_location",
-    "employment_contract.position",
-    "employment_contract.salary_monthly",
-    "employment_contract.work_location",
+    "employment_conditions.working_hours",
+    "employment_conditions.joining_date",
+    "employment_conditions.holidays",
+    "employment_conditions.insurance",
+    "employment_conditions.contract_period",
+    "employment_conditions.contract_type",
+    # 学歴
     "education.0.school_name",
     "education.0.major",
+    # 所属機関
     "employer.company_name",
     "employer.capital",
     "employer.representative_name",
@@ -72,11 +80,10 @@ def locate_bboxes(
     if not page_groups:
         return field_metadata
 
-    # 各ページを画像化して Gemini bbox 取得
-    for (doc_id, page_num), field_quotes in page_groups.items():
+    # 1) 全ページの画像を一括レンダリング (CPU処理なので逐次で十分)
+    page_images: dict[tuple[str, int], bytes] = {}
+    for (doc_id, page_num) in page_groups:
         pdf_bytes = pdf_bytes_map[doc_id]
-
-        # PyMuPDF でページを PNG 画像に変換 (300dpi)
         doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
         page_idx = page_num - 1
         if page_idx < 0 or page_idx >= len(doc):
@@ -84,29 +91,46 @@ def locate_bboxes(
             continue
         page = doc[page_idx]
         pix = page.get_pixmap(dpi=300)
-        page_image_bytes = pix.tobytes("png")
+        page_images[(doc_id, page_num)] = pix.tobytes("png")
         doc.close()
 
-        # Gemini bbox 取得
-        try:
-            bboxes = get_bboxes_for_page(page_image_bytes, field_quotes)
-        except Exception as e:
-            logger.warning("Gemini bbox failed for %s page %d: %s", doc_id, page_num, e)
-            continue
+    # 2) Gemini bbox 取得を並列実行
+    max_workers = int(os.environ.get("BBOX_MAX_WORKERS", "4"))
 
-        # 結果を field_metadata に反映
-        for field_path, bbox_coords in bboxes.items():
-            if bbox_coords is None or field_path not in field_metadata:
+    def _fetch_bboxes(key: tuple[str, int]):
+        doc_id, page_num = key
+        field_quotes = page_groups[key]
+        page_image_bytes = page_images[key]
+        bboxes = get_bboxes_for_page(page_image_bytes, field_quotes)
+        return key, bboxes
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(_fetch_bboxes, key): key
+            for key in page_images
+        }
+        for future in as_completed(futures):
+            key = futures[future]
+            doc_id, page_num = key
+            try:
+                _, bboxes = future.result()
+            except Exception as e:
+                logger.warning("Gemini bbox failed for %s page %d: %s", doc_id, page_num, e)
                 continue
-            if not isinstance(bbox_coords, list) or len(bbox_coords) != 4:
-                continue
-            for ref in field_metadata[field_path].get("source_refs", []):
-                if ref.get("document_id") == doc_id and ref.get("page", 1) == page_num:
-                    ref["bbox"] = {
-                        "y_min": bbox_coords[0],
-                        "x_min": bbox_coords[1],
-                        "y_max": bbox_coords[2],
-                        "x_max": bbox_coords[3],
-                    }
+
+            # 結果を field_metadata に反映
+            for field_path, bbox_coords in bboxes.items():
+                if bbox_coords is None or field_path not in field_metadata:
+                    continue
+                if not isinstance(bbox_coords, list) or len(bbox_coords) != 4:
+                    continue
+                for ref in field_metadata[field_path].get("source_refs", []):
+                    if ref.get("document_id") == doc_id and ref.get("page", 1) == page_num:
+                        ref["bbox"] = {
+                            "y_min": bbox_coords[0],
+                            "x_min": bbox_coords[1],
+                            "y_max": bbox_coords[2],
+                            "x_max": bbox_coords[3],
+                        }
 
     return field_metadata
