@@ -13,6 +13,7 @@ from .prompt_template import build_extraction_prompt
 from .types import ExtractionResult, OcrResult
 
 MODEL_NAME = os.environ.get("GEMINI_MODEL", "gemini-3-flash-preview")
+BBOX_MODEL_NAME = os.environ.get("GEMINI_BBOX_MODEL", "gemini-3-flash-preview")
 
 
 
@@ -31,6 +32,47 @@ def _get_client() -> genai.Client:
     return genai.Client()
 
 
+def get_bboxes_for_page(
+    page_image_bytes: bytes,
+    field_quotes: dict[str, str],
+) -> dict[str, list[int] | None]:
+    """Gemini にページ画像を渡し、各text_quoteの bbox を取得。
+
+    Returns: {field_path: [y_min, x_min, y_max, x_max]} (0-1000正規化座標)
+    """
+    if not field_quotes:
+        return {}
+
+    client = _get_client()
+
+    prompt = (
+        "この画像内で以下のテキストの位置を特定してください。\n"
+        "各テキストについて、bounding box を [y_min, x_min, y_max, x_max] の形式で返してください。\n"
+        "座標は 0-1000 の正規化座標です。\n"
+        "見つからない場合は null を返してください。\n\n"
+        "テキストリスト:\n"
+    )
+    for path, quote in field_quotes.items():
+        prompt += f'- "{path}": "{quote}"\n'
+    prompt += '\nJSON形式で返してください: {"field_path": [y_min, x_min, y_max, x_max] or null}'
+
+    image_part = types.Part.from_bytes(data=page_image_bytes, mime_type="image/png")
+    response = client.models.generate_content(
+        model=BBOX_MODEL_NAME,
+        contents=[image_part, prompt],
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            temperature=0.0,
+        ),
+    )
+
+    try:
+        return json.loads(response.text)
+    except json.JSONDecodeError:
+        logger.warning("Gemini bbox response parse error: %s", response.text[:200])
+        return {}
+
+
 def _call_gemini(client: genai.Client, contents: list, prompt: str) -> dict:
     response = client.models.generate_content(
         model=MODEL_NAME,
@@ -41,15 +83,25 @@ def _call_gemini(client: genai.Client, contents: list, prompt: str) -> dict:
             max_output_tokens=65536,
         ),
     )
+    # finish_reason を確認
+    candidate = response.candidates[0] if response.candidates else None
+    finish_reason = getattr(candidate, 'finish_reason', None) if candidate else None
+    logger.debug("Gemini finish_reason: %s", finish_reason)
+
     raw_text = response.text
-    logger.debug("Gemini response (first 500 chars): %s", raw_text[:500])
+    logger.debug("Gemini response length: %d chars", len(raw_text))
+
     try:
         parsed = json.loads(raw_text)
-    except json.JSONDecodeError as e:
-        logger.error("Gemini JSON parse error: %s\nResponse head: %s", e, raw_text[:200])
-        raise ValueError(
-            f"Gemini returned invalid JSON: {e}. Response starts with: {raw_text[:200]}"
-        ) from e
+    except json.JSONDecodeError:
+        from json_repair import repair_json
+        repaired_text = repair_json(raw_text, return_objects=False)
+        try:
+            parsed = json.loads(repaired_text)
+            logger.warning("Gemini response was truncated, repaired JSON (%d→%d chars)", len(raw_text), len(repaired_text))
+        except json.JSONDecodeError as e:
+            logger.error("Gemini JSON parse error: %s\nResponse head: %s", e, raw_text[:200])
+            raise ValueError(f"Gemini returned invalid JSON: {e}") from e
     if isinstance(parsed, list) and len(parsed) == 1:
         parsed = parsed[0]
 
@@ -122,41 +174,17 @@ def _flatten_keys(obj: dict, prefix: str = "") -> list[str]:
 
 
 def _map_field_metadata(
-    raw_metadata: dict, ocr_results: list[OcrResult]
+    raw_metadata: dict | list,
 ) -> dict:
-    """Enrich field_metadata with bounding boxes from OCR word coordinates."""
-    word_index: list[tuple[str, int, str, object]] = []
-    for ocr in ocr_results:
-        for page in ocr.pages:
-            for word in page.words:
-                if word.bbox is not None:
-                    word_index.append(
-                        (ocr.document_id, page.page_number, word.text, word.bbox)
-                    )
-
-    if not word_index:
-        return raw_metadata
-
-    for field_path, meta in raw_metadata.items():
-        for ref in meta.get("source_refs", []):
-            text_quote = ref.get("text_quote", "")
-            if not text_quote:
-                continue
-            best_match = None
-            best_score = 0
-            for doc_id, page_num, word_text, bbox in word_index:
-                if word_text in text_quote or text_quote in word_text:
-                    score = len(word_text)
-                    if score > best_score:
-                        best_score = score
-                        best_match = {
-                            "x": bbox.x,
-                            "y": bbox.y,
-                            "width": bbox.width,
-                            "height": bbox.height,
-                        }
-            if best_match:
-                ref["bbox"] = best_match
+    """Normalize field_metadata: convert list to dict, ensure all fields have source_refs."""
+    # リスト形式の field_metadata を dict に変換
+    if isinstance(raw_metadata, list):
+        converted = {}
+        for entry in raw_metadata:
+            path = entry.get("field_path", entry.get("path", ""))
+            if path:
+                converted[path] = entry
+        raw_metadata = converted
 
     return raw_metadata
 
@@ -181,9 +209,7 @@ def extract_text_only(
     client = _get_client()
     raw = _call_gemini(client, [], full_prompt)
 
-    field_metadata = _map_field_metadata(
-        raw.get("field_metadata", {}), ocr_results
-    )
+    field_metadata = _map_field_metadata(raw.get("field_metadata", {}))
     return ExtractionResult(
         case_data=raw.get("case_data", {}),
         review=raw.get("review", {}),
@@ -248,9 +274,7 @@ def extract_with_images(
     client = _get_client()
     raw = _call_gemini(client, parts, prompt)
 
-    field_metadata = _map_field_metadata(
-        raw.get("field_metadata", {}), ocr_results
-    )
+    field_metadata = _map_field_metadata(raw.get("field_metadata", {}))
     return ExtractionResult(
         case_data=raw.get("case_data", {}),
         review=raw.get("review", {}),

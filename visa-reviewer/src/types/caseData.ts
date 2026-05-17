@@ -181,6 +181,7 @@ export interface SourceRef {
   page: number
   text_quote: string
   confidence: number
+  bbox?: { y_min: number; x_min: number; y_max: number; x_max: number }
 }
 
 export interface FieldMeta {

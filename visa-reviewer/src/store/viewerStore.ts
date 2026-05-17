@@ -6,6 +6,7 @@ interface ViewerState {
   currentDocumentId: string | null
   currentPage: number
   highlightText: string | null
+  highlightSourceRef: SourceRef | null
   signedUrls: Record<string, string>
   activeFieldPath: string | null
 
@@ -22,6 +23,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
   currentDocumentId: null,
   currentPage: 1,
   highlightText: null,
+  highlightSourceRef: null,
   signedUrls: {},
   activeFieldPath: null,
 
@@ -36,11 +38,12 @@ export const useViewerStore = create<ViewerState>((set) => ({
       currentDocumentId: ref.document_id,
       currentPage: ref.page || 1,
       highlightText: ref.text_quote || null,
+      highlightSourceRef: ref,
     }),
 
-  setPage: (page) => set({ currentPage: page, highlightText: null }),
+  setPage: (page) => set({ currentPage: page, highlightText: null, highlightSourceRef: null }),
 
-  clearHighlight: () => set({ highlightText: null }),
+  clearHighlight: () => set({ highlightText: null, highlightSourceRef: null }),
 
   setActiveFieldPath: (path) => set({ activeFieldPath: path }),
 }))

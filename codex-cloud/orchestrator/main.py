@@ -19,6 +19,7 @@ from google.cloud import run_v2
 from pydantic import BaseModel
 
 from extractors.gemini import extract_text_only, extract_pdf_direct, extract_with_images
+from extractors.bbox_locator import locate_bboxes
 from extractors.vision import ocr_document
 from extractors.types import ExtractionResult
 
@@ -746,13 +747,22 @@ def _extract_with_gemini(case_doc: dict, pattern: str) -> ExtractionResult:
         ]
         return extract_text_only(ocr_results, case_meta, documents, text_contents=text_contents or None)
     elif pattern == "pdf_direct":
-        return extract_pdf_direct(pdf_contents, case_meta, documents, text_contents=text_contents or None)
+        result = extract_pdf_direct(pdf_contents, case_meta, documents, text_contents=text_contents or None)
+        # Gemini bbox 付与（対象13フィールドのみ）
+        pdf_bytes_map = {did: content for did, content in pdf_contents}
+        result.field_metadata = locate_bboxes(result.field_metadata, pdf_bytes_map)
+        return result
     else:  # text_and_image
         ocr_results = [
             ocr_document(content, fname, did)
             for did, fname, content in image_entries
         ]
-        return extract_with_images(ocr_results, pdf_contents, case_meta, documents, text_contents=text_contents or None)
+        result = extract_with_images(ocr_results, pdf_contents, case_meta, documents, text_contents=text_contents or None)
+        # Gemini bbox 付与（対象13フィールドのみ、PDFのみ）
+        if pdf_contents:
+            pdf_bytes_map = {did: content for did, content in pdf_contents}
+            result.field_metadata = locate_bboxes(result.field_metadata, pdf_bytes_map)
+        return result
 
 
 @app.post("/cases/{case_id}/extract")

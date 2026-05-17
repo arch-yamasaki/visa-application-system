@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
 import type { PDFDocumentProxy, TextItem } from 'pdfjs-dist/types/src/display/api'
 import { useViewerStore } from '../../store/viewerStore'
+import type { SourceRef } from '../../types/caseData'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
@@ -14,9 +15,10 @@ interface Props {
   url: string
   page: number
   highlightText: string | null
+  sourceRef?: SourceRef | null
 }
 
-export default function PdfViewer({ url, page, highlightText }: Props) {
+export default function PdfViewer({ url, page, highlightText, sourceRef }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const highlightRef = useRef<HTMLDivElement>(null)
   const [numPages, setNumPages] = useState(0)
@@ -69,11 +71,24 @@ export default function PdfViewer({ url, page, highlightText }: Props) {
     overlay.style.width = `${viewport.width}px`
     overlay.style.height = `${viewport.height}px`
 
-    if (highlightText?.trim()) {
+    if (sourceRef?.bbox) {
+      const { y_min, x_min, y_max, x_max } = sourceRef.bbox
+      const div = document.createElement('div')
+      div.style.position = 'absolute'
+      div.style.left = `${(x_min / 1000) * viewport.width}px`
+      div.style.top = `${(y_min / 1000) * viewport.height}px`
+      div.style.width = `${((x_max - x_min) / 1000) * viewport.width}px`
+      div.style.height = `${((y_max - y_min) / 1000) * viewport.height}px`
+      div.style.backgroundColor = 'rgba(255, 160, 0, 0.45)'
+      div.style.border = '1px solid rgba(255, 140, 0, 0.7)'
+      div.style.borderRadius = '2px'
+      overlay.appendChild(div)
+      div.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    } else if (highlightText?.trim()) {
       const textContent = await pdfPage.getTextContent()
       highlightTextOnCanvas(overlay, textContent.items as TextItem[], viewport, highlightText.trim())
     }
-  }, [scale, highlightText])
+  }, [scale, highlightText, sourceRef])
 
   useEffect(() => {
     if (!pdfDoc) return
@@ -123,27 +138,51 @@ export default function PdfViewer({ url, page, highlightText }: Props) {
   )
 }
 
+function normalizeText(s: string): string {
+  return s
+    .normalize('NFKC')
+    .replace(/[\s\u3000]+/g, '')
+    .replace(/[、。,.，．]/g, '')
+    .toLowerCase()
+}
+
 function highlightTextOnCanvas(
   overlay: HTMLElement,
   items: TextItem[],
   viewport: pdfjsLib.PageViewport,
   quote: string,
 ) {
-  const normalizedQuote = quote.replace(/\s+/g, '').toLowerCase()
+  const normalizedQuote = normalizeText(quote)
 
   let fullText = ''
   const itemRanges: { start: number; end: number; item: TextItem }[] = []
   for (const item of items) {
     if (!item.str) continue
     const start = fullText.length
-    fullText += item.str.replace(/\s+/g, '').toLowerCase()
+    fullText += normalizeText(item.str)
     itemRanges.push({ start, end: fullText.length, item })
   }
 
-  const matchIdx = fullText.indexOf(normalizedQuote)
+  // Try full match first, then partial match fallback
+  let matchIdx = fullText.indexOf(normalizedQuote)
+  let matchLen = normalizedQuote.length
+
+  if (matchIdx === -1 && normalizedQuote.length > 10) {
+    // Try progressively shorter prefixes (minimum 10 chars)
+    for (let len = normalizedQuote.length - 1; len >= 10; len--) {
+      const partial = normalizedQuote.slice(0, len)
+      const idx = fullText.indexOf(partial)
+      if (idx !== -1) {
+        matchIdx = idx
+        matchLen = len
+        break
+      }
+    }
+  }
+
   if (matchIdx === -1) return
 
-  const matchEnd = matchIdx + normalizedQuote.length
+  const matchEnd = matchIdx + matchLen
   for (const { start, end, item } of itemRanges) {
     if (end <= matchIdx || start >= matchEnd) continue
     const tx = pdfjsLib.Util.transform(viewport.transform, item.transform)
