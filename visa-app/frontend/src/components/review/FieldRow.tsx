@@ -9,7 +9,7 @@ interface Props {
   fieldPath: string
   value: unknown
   meta?: FieldMeta
-  flagType?: 'ok' | 'needs_review' | 'missing' | 'error' | 'edited'
+  flagType?: 'action_needed' | 'edited' | null
   onUpdate?: (fieldPath: string, value: string) => void
 }
 
@@ -88,7 +88,7 @@ export default function FieldRow({ label, fieldPath, value, meta, flagType, onUp
     }
   }
 
-  const badgeType = meta?.human_edited ? 'edited' : flagType ?? 'ok'
+  const badgeType = flagType ?? null
 
   return (
     <div
@@ -143,7 +143,7 @@ export default function FieldRow({ label, fieldPath, value, meta, flagType, onUp
 
       {confidence !== undefined && <ConfidenceDots confidence={confidence} />}
 
-      <FlagBadge type={badgeType} />
+      {badgeType && <FlagBadge type={badgeType} />}
 
       {hasSource ? (
         <span className="text-[10px] text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">

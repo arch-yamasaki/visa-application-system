@@ -31,12 +31,10 @@ export default function FieldPanel({ caseData, fieldMetadata, review, onFieldUpd
     sections.get(section)!.push(field)
   }
 
-  const getFlagType = (path: string): 'ok' | 'needs_review' | 'missing' | 'error' | 'edited' => {
+  const getFlagType = (path: string): 'action_needed' | 'edited' | null => {
     if (fieldMetadata[path]?.human_edited) return 'edited'
-    if (errorPaths.has(path)) return 'error'
-    if (missingPaths.has(path)) return 'missing'
-    if (reviewPaths.has(path)) return 'needs_review'
-    return 'ok'
+    if (errorPaths.has(path) || missingPaths.has(path) || reviewPaths.has(path)) return 'action_needed'
+    return null
   }
 
   return (

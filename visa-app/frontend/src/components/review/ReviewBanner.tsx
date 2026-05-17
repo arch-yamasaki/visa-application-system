@@ -12,10 +12,11 @@ export default function ReviewBanner({ caseId, workflowState, fieldMetadata, rev
   const reviewed = entries.filter(([, m]) => m.human_reviewed).length
   const total = entries.length
   const progress = total > 0 ? reviewed / total : 0
-  const flaggedCount =
+  const actionNeededCount =
     (review.missing_items?.length ?? 0) +
-    (review.validation_errors?.length ?? 0)
-  const findingsCount = review.findings?.length ?? 0
+    (review.validation_errors?.length ?? 0) +
+    (review.findings?.filter((f) => f.severity === 'medium' || f.severity === 'high').length ?? 0)
+  const editedCount = entries.filter(([, m]) => m.human_edited).length
 
   const stateLabel: Record<string, string> = {
     needs_review: '要レビュー',
@@ -60,23 +61,22 @@ export default function ReviewBanner({ caseId, workflowState, fieldMetadata, rev
           </span>
         </div>
 
-        {flaggedCount > 0 && (
+        {actionNeededCount > 0 && (
           <span className="text-orange-600 text-xs flex items-center gap-1">
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
               <path d="M8 1L15 14H1L8 1Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
               <path d="M8 6V9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
               <circle cx="8" cy="11.5" r="0.75" fill="currentColor" />
             </svg>
-            {flaggedCount}件
+            要対応 {actionNeededCount}件
           </span>
         )}
-        {findingsCount > 0 && (
-          <span className="text-red-600 text-xs flex items-center gap-1">
+        {editedCount > 0 && (
+          <span className="text-blue-600 text-xs flex items-center gap-1">
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-              <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5" />
-              <path d="M5.5 5.5L10.5 10.5M10.5 5.5L5.5 10.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              <path d="M11 2L14 5L5 14H2V11L11 2Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
             </svg>
-            {findingsCount}件
+            編集済 {editedCount}件
           </span>
         )}
       </div>
