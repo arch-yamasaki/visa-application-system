@@ -105,6 +105,9 @@ def _call_gemini(client: genai.Client, contents: list, prompt: str) -> dict:
     if isinstance(parsed, list) and len(parsed) == 1:
         parsed = parsed[0]
 
+    # --- employment フィールドパス正規化 (employment_terms/contract → conditions) ---
+    parsed = _normalize_employment_keys(parsed)
+
     # --- field_metadata 正規化 ---
     raw_fm = parsed.get("field_metadata", {})
     if isinstance(raw_fm, dict):
@@ -151,6 +154,49 @@ def _call_gemini(client: genai.Client, contents: list, prompt: str) -> dict:
         for path in _flatten_keys(case_data):
             if path not in fm:
                 fm[path] = {"source_refs": []}
+
+    return parsed
+
+
+# --- employment フィールドパス正規化 ---
+_EMPLOYMENT_ALIASES = ("employment_terms", "employment_contract")
+_EMPLOYMENT_CANONICAL = "employment_conditions"
+
+
+def _normalize_employment_keys(parsed: dict) -> dict:
+    """Rename employment_terms / employment_contract → employment_conditions
+    in both case_data and field_metadata to ensure consistent field paths."""
+    # --- case_data ---
+    case_data = parsed.get("case_data")
+    if isinstance(case_data, dict):
+        for alias in _EMPLOYMENT_ALIASES:
+            if alias in case_data and _EMPLOYMENT_CANONICAL not in case_data:
+                case_data[_EMPLOYMENT_CANONICAL] = case_data.pop(alias)
+            elif alias in case_data:
+                # merge into canonical, alias values as fallback
+                canonical = case_data[_EMPLOYMENT_CANONICAL]
+                alias_data = case_data.pop(alias)
+                if isinstance(canonical, dict) and isinstance(alias_data, dict):
+                    for k, v in alias_data.items():
+                        if k not in canonical or not canonical[k]:
+                            canonical[k] = v
+
+    # --- field_metadata ---
+    fm = parsed.get("field_metadata")
+    if isinstance(fm, dict):
+        keys_to_rename = []
+        for key in list(fm.keys()):
+            for alias in _EMPLOYMENT_ALIASES:
+                if key.startswith(alias + "."):
+                    new_key = _EMPLOYMENT_CANONICAL + key[len(alias):]
+                    keys_to_rename.append((key, new_key))
+                elif key == alias:
+                    keys_to_rename.append((key, _EMPLOYMENT_CANONICAL))
+        for old_key, new_key in keys_to_rename:
+            if new_key not in fm:
+                fm[new_key] = fm.pop(old_key)
+            else:
+                fm.pop(old_key)
 
     return parsed
 

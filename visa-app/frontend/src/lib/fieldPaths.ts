@@ -55,6 +55,8 @@ const sectionMap: Record<string, string> = {
   assessments: '審査結果',
   activity_details: '活動内容',
   employment_conditions: '雇用条件',
+  employment_terms: '雇用条件',
+  employment_contract: '雇用条件',
   past_history: '過去の履歴',
   family_in_japan: '在日親族',
 }
@@ -226,6 +228,25 @@ const labelOverrides: Record<string, string> = {
   'employment_conditions.contract_period': '契約期間',
   'employment_conditions.work_location': '勤務地',
   'employment_conditions.joining_date': '入社予定日',
+  'employment_conditions.duties': '職務内容',
+
+  // 雇用条件フォールバック (employment_terms)
+  'employment_terms.company_name': '会社名',
+  'employment_terms.monthly_salary': '月給',
+  'employment_terms.job_title': '職種',
+  'employment_terms.work_location': '勤務地',
+  'employment_terms.working_hours': '勤務時間',
+  'employment_terms.joining_date': '入社予定日',
+  'employment_terms.holidays': '休日',
+  'employment_terms.insurance': '保険',
+  'employment_terms.bonus': '賞与',
+  'employment_terms.contract_period': '契約期間',
+  'employment_terms.duties': '職務内容',
+
+  // 雇用条件フォールバック (employment_contract)
+  'employment_contract.position': '職種',
+  'employment_contract.salary_monthly': '月給',
+  'employment_contract.work_location': '勤務地',
 
   // 活動内容
   'activity_details.description': '活動内容',

@@ -94,6 +94,43 @@ _TEMPLATE = """\
 }}
 ```
 
+## case_data のキー名ルール（厳守）
+
+以下のトップレベルキー名を必ず使用すること。別名は禁止。
+
+| 正規キー | 禁止される別名 |
+|---|---|
+| `employment_conditions` | `employment_terms`, `employment_contract` |
+| `education` | `education_history`, `academic_history` |
+| `employer` | `company`, `organization` |
+
+### employment_conditions の必須サブキー
+
+```json
+{{
+  "employment_conditions": {{
+    "company_name": "",
+    "job_title": "",
+    "duties": "",
+    "monthly_salary": "",
+    "annual_salary": "",
+    "bonus": "",
+    "allowances": "",
+    "contract_type": "",
+    "contract_period": "",
+    "contract_start_date": "",
+    "contract_end_date": "",
+    "working_hours": "",
+    "holidays": "",
+    "work_location": "",
+    "joining_date": "",
+    "insurance": ""
+  }}
+}}
+```
+
+field_metadata のパスも必ず `employment_conditions.xxx` とすること（`employment_terms.xxx` や `employment_contract.xxx` は禁止）。
+
 ## 出力フォーマット
 
 値が見つからない場合は空文字またはnullとすること。
