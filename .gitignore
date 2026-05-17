@@ -78,11 +78,9 @@ rasens-autofill/extension/application_data.json
 .playwright-mcp/
 test-results/
 playwright-report/
-screenshots/
 
 # QA test artifacts
-qa-screenshots/
-qa-test-files/
+qa/
 
 # Logs and caches
 *.log
