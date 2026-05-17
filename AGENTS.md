@@ -15,9 +15,12 @@
 
 | ディレクトリ | プロジェクト名 | 概要 |
 |---|---|---|
+| `visa-app/` | visa-app | ビザ申請レビューアプリ（フロント+バックエンド+ジョブ統合） |
+| `visa-app/frontend/` | (visa-app) | React UI — ケース管理・レビュー画面 |
+| `visa-app/backend/` | (visa-app) | FastAPI — 抽出エンジン(Gemini/Codex)・API |
+| `visa-app/jobs/codex-runner/` | (visa-app) | Cloud Run Job — Codex非同期実行コンテナ |
 | `rasens-autofill/` | rasens-autofill | Chrome拡張によるフォーム自動入力、データ設計 |
 | `visa-eval/` | visa-eval | 実資料読み取り評価、テスト設計 |
-| `codex-cloud/` | codex-cloud | Codex実行基盤、Cloud Run Jobs |
 | `docs/shared/` | (共通) | ヒアリング、MVP設計、AIエージェント基盤調査 |
 
 ## 共通ドキュメント (docs/shared/)

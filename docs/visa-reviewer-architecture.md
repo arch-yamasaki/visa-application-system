@@ -1,5 +1,7 @@
 # visa-reviewer アーキテクチャドキュメント
 
+> **注記** (2026-05-17): ディレクトリ再編により `visa-reviewer/` は `visa-app/frontend/` に移動しました。
+
 ## 概要
 
 `visa-reviewer` は在留資格申請書類のレビュー支援Webアプリケーション。
