@@ -16,7 +16,7 @@
 ## 2. ディレクトリ構成
 
 ```
-codex-cloud/orchestrator/
+visa-app/backend/
   extractors/
     __init__.py
     types.py            # 共通型: OcrResult, PageResult, WordResult, ExtractionResult

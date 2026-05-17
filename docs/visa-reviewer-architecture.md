@@ -29,7 +29,7 @@
 ## ディレクトリ構成
 
 ```
-visa-reviewer/
+visa-app/frontend/
 ├── src/
 │   ├── main.tsx              # エントリポイント（BrowserRouter設定）
 │   ├── App.tsx               # ルーティング定義

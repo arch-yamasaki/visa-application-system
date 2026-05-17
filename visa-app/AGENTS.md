@@ -1,51 +1,31 @@
-# codex-cloud
+# visa-app
 
-Codex CLIをCloud Run Jobs上で実行するリモート実行基盤。
+ビザ申請書類のレビュー支援アプリケーション。
 
-## ディレクトリ構成
+## 構成
 
-```text
-codex-cloud/
-  orchestrator/
-    main.py            # FastAPI アプリ (Cloud Run Service)
-    Dockerfile
-    requirements.txt
-    static/index.html  # Web UI
-  runner/
-    entrypoint.sh      # codex exec ラッパー
-    Dockerfile
-    requirements.txt
-    gcs_helper.py      # GCS アップロード/ダウンロード
-    update_status.py   # Firestore 状態更新
-    PREINSTALLED_LIBS.md
-  frontend/
-    index.html         # orchestrator/static/ と同一内容
-  docs/
+- `frontend/` — React 19 + Vite。ケース管理、ドキュメントレビュー、PDFハイライト表示。
+- `backend/` — FastAPI + Uvicorn。抽出エンジン（Gemini同期/Codex非同期）、GCS/Firestore管理。
+- `jobs/codex-runner/` — Cloud Run Job。Codex CLI非同期実行コンテナ。
+
+## 開発
+
+```bash
+# ターミナル1: フロントエンド
+cd frontend && npm run dev        # localhost:5173
+
+# ターミナル2: バックエンド
+cd backend && uvicorn main:app --reload --port 8080
 ```
 
-## コンポーネント
+frontend の Vite proxy が `/api/*` を `localhost:8080` に転送する。
 
-### orchestrator/ — FastAPI (Cloud Run Service)
-セッション管理、Cloud Run Jobの起動、結果配信を行うAPIサーバー。Port 8080。
-- `POST /sessions`: プロンプト受付 → GCS保存 → Job起動
-- `GET /sessions/{id}/result`: 最終出力の取得
-- `GET /sessions/{id}/files`: ワークスペース内ファイルの閲覧・ダウンロード
+## 抽出エンジン
 
-### runner/ — Cloud Run Jobs
-codex exec を隔離環境で実行し、成果物をGCS/Firestoreに書き戻すバッチジョブ。
-- Node 22 (Codex CLI) + Python 3 (GCPクライアント)
-- `--sandbox workspace-write` でサンドボックス実行
-- ワークスペースは `tar.zst` で圧縮してGCSに保存
-
-### frontend/ — Web UI
-プロンプト入力、ステータスポーリング、結果表示の単一HTMLページ。
-
-## 重要ファイル
-
-- `docs/README.md`: 実行基盤のアーキテクチャ概要、3方式の比較
-- `docs/option3_codex_exec_json_cloud_run_jobs.md`: 採用方式の詳細設計
-- `orchestrator/main.py`: API全エンドポイント定義
-- `runner/entrypoint.sh`: ジョブ実行フロー（認証→プロンプト取得→codex実行→成果物アップロード）
+| エンジン | 方式 | 用途 |
+|---|---|---|
+| Gemini | 同期。PDF/テキスト→Gemini API→構造化JSON | 通常の申請書類抽出 |
+| Codex | 非同期。Cloud Run Job→codex exec→結果収穫 | 複雑な分析・統合処理 |
 
 ## GCPリソース
 

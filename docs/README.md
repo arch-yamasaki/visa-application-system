@@ -29,10 +29,10 @@
 - [データ設計.md](../rasens-autofill/docs/データ設計.md): 正規case_data、フォーム台帳、投入用JSONの関係
 - [Chrome_DevTools_MCP_autoConnect.md](../rasens-autofill/docs/Chrome_DevTools_MCP_autoConnect.md): Chrome拡張とブラウザ運用メモ
 
-### codex-cloud/docs/
+### visa-app/docs/
 
-- [README.md](../codex-cloud/docs/README.md): Codex 実行基盤の設計
-- [option3_codex_exec_json_cloud_run_jobs.md](../codex-cloud/docs/option3_codex_exec_json_cloud_run_jobs.md): Cloud Run Jobs 方式
+- [README.md](../visa-app/docs/README.md): Codex 実行基盤の設計
+- [option3_codex_exec_json_cloud_run_jobs.md](../visa-app/docs/option3_codex_exec_json_cloud_run_jobs.md): Cloud Run Jobs 方式
 
 ## データの正本と生成物
 

@@ -107,4 +107,4 @@
 ## 備考
 
 - orchestrator: port 8080 で起動中 (--reload)
-- GOOGLE_API_KEY: codex-cloud/orchestrator/.env に設定済み
+- GOOGLE_API_KEY: visa-app/backend/.env に設定済み
