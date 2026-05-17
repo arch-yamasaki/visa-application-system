@@ -80,6 +80,10 @@ test-results/
 playwright-report/
 screenshots/
 
+# QA test artifacts
+qa-screenshots/
+qa-test-files/
+
 # Logs and caches
 *.log
 .history/
