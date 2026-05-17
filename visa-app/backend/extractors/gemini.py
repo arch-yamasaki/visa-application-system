@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import re
 
 from google import genai
 from google.genai import types
@@ -246,6 +247,18 @@ def _normalize_employment_keys(parsed: dict) -> dict:
     return parsed
 
 
+def _normalize_corporate_number(case_data: dict) -> None:
+    """法人番号からハイフン・スペースを除去。"""
+    employer = case_data.get("employer", {})
+    cn = employer.get("corporate_number")
+    if isinstance(cn, dict):  # FieldValue形式
+        v = cn.get("value", "")
+        if v:
+            cn["value"] = re.sub(r'[\s\-]', '', v)
+    elif isinstance(cn, str):
+        employer["corporate_number"] = re.sub(r'[\s\-]', '', cn)
+
+
 def _map_field_metadata(
     raw_metadata: dict | list,
 ) -> dict:
@@ -332,6 +345,9 @@ def _build_extraction_result(parsed: dict) -> ExtractionResult:
     # Unflatten if needed (schema.py outputs flattened format)
     raw_case_data = _unflatten_field_values(raw_case_data)
     parsed["case_data"] = raw_case_data
+
+    # 法人番号の正規化（ハイフン・スペース除去）
+    _normalize_corporate_number(raw_case_data)
 
     if _is_new_format(raw_case_data):
         # 新形式: case_data の FieldValue 構造から field_metadata と display 値を生成

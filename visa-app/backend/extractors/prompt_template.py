@@ -120,6 +120,10 @@ source 文字列のフォーマット: `document_id|page|text_quote|confidence`
 
 case_data のキーも必ず `employment_conditions.xxx` とすること（`employment_terms.xxx` や `employment_contract.xxx` は禁止）。
 
+## フィールド値の正規化ルール
+
+- `employer.corporate_number`: 法人番号は13桁の数字のみ（ハイフン・スペースは除去）。元書類にハイフン付きで記載されている場合は除去して数字のみにすること。
+
 ## 出力フォーマット
 
 値が見つからない場合は空文字またはnullとすること。
