@@ -30,25 +30,26 @@ export default function HtmlViewer({ url, highlightText, sheets, onSheetChange }
         const walker = document.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT)
         const normalizedSearch = text.replace(/\s+/g, '').toLowerCase()
         let node: Text | null
-        let firstMark: HTMLElement | null = null
 
         while ((node = walker.nextNode() as Text | null)) {
-          const nodeText = node.textContent?.replace(/\s+/g, '').toLowerCase() ?? ''
-          if (nodeText.includes(normalizedSearch)) {
-            const parent = node.parentElement
-            if (parent) {
-              const mark = doc.createElement('mark')
-              mark.style.backgroundColor = 'rgba(255, 160, 0, 0.45)'
-              mark.style.border = '1px solid rgba(255, 140, 0, 0.7)'
-              mark.style.borderRadius = '2px'
-              parent.replaceChild(mark, node)
-              mark.appendChild(node)
-              if (!firstMark) firstMark = mark
-            }
-          }
-        }
+          // td 祖先があればそのセル全体のテキストで完全一致判定
+          const td = node.parentElement?.closest('td')
+          const compareText = (td ?? node).textContent?.replace(/\s+/g, '').toLowerCase() ?? ''
+          if (compareText.indexOf(normalizedSearch) === -1) continue
 
-        firstMark?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          // td 内テキスト全体が一致 → そのセルだけハイライトして終了
+          const parent = node.parentElement
+          if (parent) {
+            const mark = doc.createElement('mark')
+            mark.style.backgroundColor = 'rgba(255, 160, 0, 0.45)'
+            mark.style.border = '1px solid rgba(255, 140, 0, 0.7)'
+            mark.style.borderRadius = '2px'
+            parent.replaceChild(mark, node)
+            mark.appendChild(node)
+            mark.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          }
+          break
+        }
       } catch {
         // cross-origin の場合は無視（ハイライトなしで表示）
       }
