@@ -1,494 +1,252 @@
 # 抽出パイプライン フロー図
 
-visa-app バックエンドの抽出パイプライン全体を図解する。
-コード上の関数名・ファイル名を併記し、実装に忠実に記述する。
+書類から申請データを自動的に読み取る処理の全体像。
+「どの順番で何が起きるか」を図で説明する。
 
 ---
 
-## 全体フロー（AA図）
+## ざっくり全体像
 
 ```
-  POST /cases/{case_id}/extract
-  (main.py: start_extraction)
-         |
-         v
-  +-------------------------------+
-  | case_ref.update               |
-  | workflow_state = "extracting" |
-  +-------------------------------+
-         |
-         v
-  +-------------------------------+
-  | _extract_with_gemini()        |
-  | (main.py)                     |
-  +-------------------------------+
-         |
-         v
-  +-------------------------------+
-  | GCS からドキュメント一括DL    |
-  | file_entries[]                |
-  +-------------------------------+
-         |
-         v
-  +-----------------------------------------+
-  | 拡張子で分類                            |
-  | (main.py: _extract_with_gemini 内部)    |
-  +-----------------------------------------+
-         |
-    +----+----+----+----+
-    |    |    |    |    |
-    v    v    v    v    v
-  .pdf .xlsx .docx .png/.jpg
-    |    |     |     |
-    |    |     |     +---> image_entries[]
-    |    |     |
-    |    |     +---> extract_docx() -> text_contents[]
-    |    |           (docx_text.py)
-    |    |
-    |    +---> extract_xlsx() -> text_contents[]
-    |          (xlsx.py)
-    |
-    +---> pdf_contents[] + image_entries[]
-         |
-         v
-  +-----------------------------------------+
-  | パターン選択 (auto / 手動指定)          |
-  | (詳細は「パターン選択ロジック」参照)    |
-  +-----------------------------------------+
-         |
-    +----+----+---------+
-    |         |         |
-    v         v         v
- text_only pdf_direct text_and_image
-    |         |         |
-    v         v         v
-  (後述)   (後述)    (後述)
-    |         |         |
-    +----+----+---------+
-         |
-         v
-  +-------------------------------+
-  | ExtractionResult              |
-  |  .case_data                   |
-  |  .display_case_data           |
-  |  .review                      |
-  |  .field_metadata              |
-  +-------------------------------+
-         |
-         v
-  +-------------------------------+
-  | Firestore 保存                |
-  | case_ref.update({             |
-  |   case_data,                  |
-  |   review,                     |
-  |   field_metadata,             |
-  |   workflow_state:             |
-  |     "needs_review"            |
-  | })                            |
-  +-------------------------------+
+  ユーザーが書類をアップロードして「抽出」ボタンを押す
+       |
+       v
+  ┌─────────────────────────────┐
+  │  1. 書類をダウンロード       │  ← クラウド(GCS)から取得
+  └──────────────┬──────────────┘
+                 v
+  ┌─────────────────────────────┐
+  │  2. 書類の種類を仕分け       │  ← PDF? Excel? Word? 画像?
+  └──────────────┬──────────────┘
+                 v
+  ┌─────────────────────────────┐
+  │  3. AIに書類を渡して読み取り  │  ← Gemini API（1回目）
+  │     「この書類から             │    氏名、国籍、給与...を抽出
+  │      申請データを取り出して」  │
+  └──────────────┬──────────────┘
+                 v
+  ┌─────────────────────────────┐
+  │  4. PDFのどこから取ったか     │  ← Gemini API（2回目〜）
+  │     座標を計算               │    ハイライト表示用
+  │     （bbox = 黄色い枠の位置） │
+  └──────────────┬──────────────┘
+                 v
+  ┌─────────────────────────────┐
+  │  5. 結果を保存               │  ← データベース(Firestore)に保存
+  │     → レビュー画面に表示     │
+  └─────────────────────────────┘
 ```
+
+**ポイント**: AIに聞くのは大きく2種類
+- **1回目**: 「書類の中身を読み取って」（メイン抽出）
+- **2回目〜**: 「この値はPDFのどの位置にある？」（座標推定 = bbox）
 
 ---
 
-## パターン選択ロジック（AA図）
+## ステップ2: 書類の仕分け
 
-`_extract_with_gemini()` 内の `pattern == "auto"` 時の分岐:
+書類のファイル形式によって、AIへの渡し方が変わる。
 
 ```
-  pattern == "auto" ?
-         |
-    +----+----+
-    |         |
-   YES        NO --> 指定された pattern をそのまま使用
-    |
-    v
-  [file_entries に .pdf がある?]
-         |
-    +----+----+
-    |         |
-   YES        NO
-    |         |
-    |    [image_entries がある?]
-    |         |
-    |    +----+----+
-    |    |         |
-    |   YES        NO
-    |    |         |
-    v    v         v
- "pdf_direct"  "text_and_image"  "pdf_direct"
-                                  (※テキストのみでも
-                                   pdf_direct になる)
+  アップロードされた書類
+       |
+  ┌────┼────┬────┬────┐
+  |    |    |    |    |
+  v    v    v    v    v
+ PDF  Excel Word 画像  その他
+  |    |    |    |
+  |    |    |    └──→ そのまま画像として保持
+  |    |    |
+  |    |    └──→ テキストに変換（段落・表を取り出す）
+  |    |
+  |    └──→ テキストに変換（セルの値を取り出す）
+  |
+  └──→ そのまま原本としてAIに渡す（一番読みやすい形式）
 ```
 
-まとめ:
-- PDFあり → `pdf_direct`
-- PDFなし + 画像あり → `text_and_image`
-- PDFなし + 画像なし → `pdf_direct` (pdf_contents は空だがそのまま通る)
+**たとえるなら**:
+- PDF = 「印刷された書類をそのまま渡す」→ AIが一番正確に読める
+- Excel/Word = 「書類の中身をメモ書きにして渡す」→ レイアウト情報は失われる
+- 画像 = 「写真を撡って渡す」→ OCR（文字認識）が必要
 
 ---
 
-## 各パターンの処理フロー（AA図）
+## ステップ3: AIに読み取ってもらう（メイン抽出）
 
-### Pattern A: text_only
-
-```
-  image_entries[]
-         |
-         v
-  +-------------------------------+
-  | ocr_document() x N            |
-  | (vision.py)                   |
-  |   .pdf -> has_text_layer()?   |
-  |     YES -> extract_text()     |
-  |            (pdf_text.py)      |
-  |     NO  -> ocr_pdf()          |
-  |            (vision.py/        |
-  |             Cloud Vision API) |
-  |   .png/.jpg -> ocr_image()   |
-  |            (Cloud Vision API) |
-  +-------------------------------+
-         |
-         v
-  ocr_results[] + text_contents[]
-         |
-         v
-  +-------------------------------+
-  | extract_text_only()           |
-  | (gemini.py)                   |
-  |                               |
-  | build_extraction_prompt()     |
-  | + OCRテキスト                 |
-  | + テキスト書類(xlsx/docx)     |
-  +-------------------------------+
-         |
-         v
-  +-------------------------------+
-  | _call_gemini()                |
-  | contents=[], prompt=全テキスト|
-  | (テキストのみ、画像なし)      |
-  +-------------------------------+
-         |
-         v
-  +-------------------------------+
-  | _build_extraction_result()    |
-  +-------------------------------+
-```
-
-### Pattern B: pdf_direct (メインパターン)
+通常は「pdf_direct」パターン（PDFをそのままAIに渡す）が使われる。
 
 ```
-  pdf_contents[] + text_contents[]
-         |
-         v
-  +-------------------------------+
-  | extract_pdf_direct()          |
-  | (gemini.py)                   |
-  |                               |
-  | parts[] を構築:               |
-  |   テキスト書類 → 文字列Part   |
-  |   PDF → Part.from_bytes()    |
-  |         (mime: application/   |
-  |          pdf)                 |
-  |   + "(document_id: xxx)"     |
-  +-------------------------------+
-         |
-         v
-  +-------------------------------+
-  | _call_gemini()                |
-  | contents=parts[], prompt=抽出 |
-  | 指示                          |
-  | (PDFバイナリ直接送信)         |
-  +-------------------------------+
-         |
-         v
-  +-------------------------------+
-  | _build_extraction_result()    |
-  +-------------------------------+
-         |
-         v
-  +=================================+
-  | locate_bboxes()                 |
-  | (bbox_locator.py)               |
-  | 詳細は「bbox処理の詳細フロー」 |
-  +=================================+
-```
-
-### Pattern C: text_and_image
-
-```
-  image_entries[]
-         |
-         v
-  +-------------------------------+
-  | ocr_document() x N            |
-  | (vision.py)                   |
-  +-------------------------------+
-         |
-         v
-  ocr_results[]
-         |
-  +------+------+
-  |             |
-  v             v
-  text_contents[]  image_contents[]
-         |             |
-         v             v
-  +-------------------------------+
-  | extract_with_images()         |
-  | (gemini.py)                   |
-  |                               |
-  | parts[] を構築:               |
-  |   テキスト書類 → 文字列Part   |
-  |   OCRテキスト → 文字列Part    |
-  |   画像/PDF → Part.from_bytes()|
-  |     PNG → image/png           |
-  |     JPG → image/jpeg          |
-  |   + "(document_id: xxx)"     |
-  +-------------------------------+
-         |
-         v
-  +-------------------------------+
-  | _call_gemini()                |
-  | contents=parts[], prompt=抽出 |
-  | 指示                          |
-  +-------------------------------+
-         |
-         v
-  +-------------------------------+
-  | _build_extraction_result()    |
-  +-------------------------------+
-         |
-         v
-  [pdf_contents がある?]
-    +----+----+
-    |         |
-   YES        NO --> bbox処理スキップ
-    |
-    v
-  +=================================+
-  | locate_bboxes()                 |
-  +=================================+
-```
-
----
-
-## bbox処理の詳細フロー（AA図）
-
-`bbox_locator.py: locate_bboxes()`
-
-```
-  field_metadata (dict)
-  pdf_bytes_map {doc_id: bytes}
-         |
-         v
-  +--------------------------------------+
-  | _map_field_metadata()                |
-  | list形式ならdict形式に正規化         |
-  +--------------------------------------+
-         |
-         v
-  +--------------------------------------+
-  | BBOX_TARGET_FIELDS (22フィールド)    |
-  | でフィルタ                           |
-  |                                      |
-  | 対象:                                |
-  |   applicant.name_roman               |
-  |   applicant.nationality              |
-  |   applicant.date_of_birth            |
-  |   applicant.passport_number          |
-  |   employment_conditions.job_title    |
-  |   employment_conditions.duties       |
-  |   employment_conditions.monthly_     |
-  |     salary / annual_salary / bonus   |
-  |   employment_conditions.work_        |
-  |     location / working_hours /       |
-  |     joining_date / holidays /        |
-  |     insurance / contract_period /    |
-  |     contract_type                    |
-  |   education.0.school_name            |
-  |   education.0.major                  |
-  |   employer.company_name              |
-  |   employer.capital                   |
-  |   employer.representative_name       |
-  |   employer.business_category         |
-  |   employer.business_type             |
-  |   employer.corporate_number          |
-  +--------------------------------------+
-         |
-         v
-  +--------------------------------------+
-  | source_refs から                     |
-  | (document_id, page) でグループ化     |
-  |                                      |
-  | page_groups:                         |
-  |   {(doc_id, page): {field: quote}}   |
-  |                                      |
-  | ※ PDFのみ対象                        |
-  | ※ text_quote が空なら除外           |
-  +--------------------------------------+
-         |
-         v
-  +--------------------------------------+
-  | 各ページのPNG画像レンダリング        |
-  | (逐次処理)                           |
-  |                                      |
-  | pymupdf で page.get_pixmap(dpi=300)  |
-  | -> PNG bytes                         |
-  +--------------------------------------+
-         |
-         v
-  +==============================================+
-  ||  ThreadPoolExecutor (max_workers=4)        ||
-  ||                                            ||
-  ||  ページごとに並列:                         ||
-  ||                                            ||
-  ||  +--------------------------------------+  ||
-  ||  | get_bboxes_for_page()                |  ||
-  ||  | (gemini.py)                          |  ||
-  ||  |                                      |  ||
-  ||  | 入力:                                |  ||
-  ||  |   page_image (PNG bytes)             |  ||
-  ||  |   {field_path: text_quote}           |  ||
-  ||  |                                      |  ||
-  ||  | Gemini API 呼び出し:                 |  ||
-  ||  |   model: BBOX_MODEL_NAME             |  ||
-  ||  |   contents: [image_part, prompt]     |  ||
-  ||  |   response_mime: application/json    |  ||
-  ||  |   temperature: 0.0                   |  ||
-  ||  |                                      |  ||
-  ||  | 出力:                                |  ||
-  ||  |   {field_path:                       |  ||
-  ||  |     [y_min, x_min, y_max, x_max]}   |  ||
-  ||  |   座標: 0-1000 正規化               |  ||
-  ||  +--------------------------------------+  ||
-  ||                                            ||
-  +==============================================+
-         |
-         v
-  +--------------------------------------+
-  | 結果を field_metadata に反映         |
-  |                                      |
-  | source_refs[].bbox = {               |
-  |   y_min, x_min, y_max, x_max        |
-  | }                                    |
-  +--------------------------------------+
-         |
-         v
-  field_metadata (bbox付き) を返却
-```
-
----
-
-## データフロー（AA図）
-
-入力から出力までのデータ変換の流れ:
-
-```
-  [入力: GCS上のドキュメントバイナリ]
-         |
-         |  .pdf    .xlsx         .docx        .png/.jpg
-         |   |       |             |              |
-         v   v       v             v              v
-  +------+  extract_xlsx()  extract_docx()  (そのまま)
-  | PDF  |  -> OcrResult    -> OcrResult    -> image bytes
-  | bytes|  -> text str     -> text str
-  +------+
-         |
-         v
-  [中間データ]
-    pdf_contents:  [(doc_id, pdf_bytes), ...]
-    text_contents: [(doc_id, text_str), ...]
-    image_entries: [(doc_id, fname, bytes), ...]
-         |
-         v
-  [Gemini 入力 (parts)]
-    Pattern A: テキスト文字列のみ (contents=[])
-    Pattern B: Part.from_bytes(pdf) + テキスト文字列
-    Pattern C: Part.from_bytes(image) + OCRテキスト + テキスト文字列
-         |
-         v
-  [Gemini 出力: JSON]
-    {
-      "case_data": { ... FieldValue構造 ... },
-      "review": { ... }
+  AIに渡すもの:
+  ┌─────────────────────────────────────────┐
+  │                                         │
+  │  [PDF原本] オファーレター.pdf            │  ← バイナリで直接渡す
+  │  (document_id: doc_001)                 │
+  │                                         │
+  │  [PDF原本] 会社書類.pdf                  │  ← バイナリで直接渡す
+  │  (document_id: doc_002)                 │
+  │                                         │
+  │  --- document: doc_003 ---              │  ← テキストに変換して渡す
+  │  オファーレター（日本語翻訳版）.docx       │
+  │  月給（総額）: 260,000円...              │
+  │                                         │
+  │  --- document: doc_004 ---              │  ← テキストに変換して渡す
+  │  [Excelのセル内容]                       │
+  │  AMIT TAMANG  NEPAL  1998/07/12...      │
+  │                                         │
+  │  + 指示文:                              │
+  │  「上記の書類から、以下の項目を          │
+  │    JSON形式で抽出してください」           │
+  │                                         │
+  └─────────────────────────────────────────┘
+       |
+       v
+  AIの回答（JSON）:
+  {
+    "applicant": {
+      "nationality": { "value": "NEPAL", "source": "doc_004|1|NEPAL|0.9" },
+      "name_roman": { "value": "AMIT TAMANG", "source": "doc_004|1|AMIT TAMANG|1.0" },
+      ...
+    },
+    "employment_conditions": {
+      "monthly_salary": { "value": "260000", "source": "doc_001|1|260,000 yen|1.0" },
+      ...
+    },
+    "review": {
+      "missing_items": ["性別"],
+      "findings": ["建築工学と施工管理の関連性あり"]
     }
-         |
-         v
-  [後処理 (_build_extraction_result)]
-    1. _unflatten_field_values()   -- compact形式 → source_refs形式
-    2. _normalize_employment_keys() -- employment_terms → employment_conditions
-    3. _normalize_corporate_number() -- ハイフン除去
-    4. _is_new_format() で判定
-       YES (新形式):
-         _extract_field_metadata()   -- FieldValue → field_metadata 自動生成
-         _extract_display_values()   -- FieldValue → 表示用case_data
-       NO (旧形式):
-         _map_field_metadata()       -- list→dict 正規化
-    5. _normalize_source_refs_in_metadata() -- doc_id→document_id, page正規化
-         |
-         v
-  [ExtractionResult]
-    .case_data          -- 生のFieldValue構造 (新形式)
-    .display_case_data  -- value のみ (表示用、Firestore保存用)
-    .review             -- レビュー情報
-    .field_metadata     -- {field_path: {source_refs, confidence, ...}}
-         |
-         v
-  [bbox後処理] (pdf_direct / text_and_image のみ)
-    locate_bboxes() で field_metadata に bbox 座標追加
-         |
-         v
-  [Firestore 保存]
-    case_data       = display_case_data (表示用)
-    review          = review
-    field_metadata  = field_metadata (bbox付き)
-    workflow_state  = "needs_review"
+  }
 ```
+
+**source の読み方**: `"doc_001|1|260,000 yen|1.0"` = 「doc_001のページ1から "260,000 yen" という文字を引用、確信度1.0」
+
+---
+
+## ステップ4: ハイライト位置の計算（bbox）
+
+メイン抽出で「どの書類のどのページから取ったか」はわかった。
+次に「そのページの**どの位置**にあるか」を特定する。
+
+```
+  メイン抽出の結果から:
+  「employer.company_name は 会社書類.pdf の 1ページ目にある」
+  「employer.capital は 会社書類.pdf の 2ページ目にある」
+  「employment_conditions.job_title は オファーレター.pdf の 1ページ目にある」
+       |
+       v
+  ┌──────────────────────────────────────────┐
+  │ ステップ4-1: 参照ページをグループ化       │
+  │                                          │
+  │  グループA: 会社書類.pdf p1              │
+  │    → company_name, corporate_number      │
+  │                                          │
+  │  グループB: 会社書類.pdf p2              │
+  │    → capital, representative_name        │
+  │                                          │
+  │  グループC: オファーレター.pdf p1         │
+  │    → job_title, monthly_salary, ...      │
+  │                                          │
+  │  ※ 会社書類が23ページあっても、          │
+  │    参照されていないページは無視する       │
+  └──────────────┬───────────────────────────┘
+                 v
+  ┌──────────────────────────────────────────┐
+  │ ステップ4-2: 参照ページだけを画像化       │
+  │                                          │
+  │  会社書類.pdf の p1 → PNG画像            │
+  │  会社書類.pdf の p2 → PNG画像            │
+  │  オファーレター.pdf の p1 → PNG画像       │
+  │                                          │
+  │  ※ 23ページ全部を画像化するわけではない  │
+  │    → 参照された3ページだけ               │
+  └──────────────┬───────────────────────────┘
+                 v
+  ┌──────────────────────────────────────────┐
+  │ ステップ4-3: AIに座標を聞く（並列）      │
+  │                                          │
+  │  ┌──────────────────────────────────┐    │
+  │  │ 4並列で同時にAIに質問            │    │
+  │  │                                  │    │
+  │  │ Q1: 「この画像の中で             │    │
+  │  │      "株式会社フジタ" はどこ？」  │    │
+  │  │ → A1: [x=100, y=200, w=300, h=30]│    │
+  │  │                                  │    │
+  │  │ Q2: 「この画像の中で             │    │
+  │  │      "140億円" はどこ？」         │    │
+  │  │ → A2: [x=400, y=500, w=200, h=25]│    │
+  │  │                                  │    │
+  │  │ Q3: 「この画像の中で             │    │
+  │  │      "260,000 yen" はどこ？」     │    │
+  │  │ → A3: [x=150, y=300, w=250, h=28]│    │
+  │  └──────────────────────────────────┘    │
+  └──────────────┬───────────────────────────┘
+                 v
+  レビュー画面でフィールドをクリックすると
+  PDFのその位置にオレンジの枠（ハイライト）が表示される
+```
+
+**ここが重要**: PDFが何ページあっても、AIに座標を聞くのは「抽出結果が参照しているページだけ」。
+23ページのPDFでも、実際に値が載っているのが2ページなら、AIに聞くのは2回だけ。
 
 ---
 
 ## Gemini API 呼び出し回数まとめ
 
-| フェーズ | 関数 | 回数 | 並列 | 用途 |
+| いつ | 何を聞く | 回数 | 並列 | 時間 |
 |---|---|---|---|---|
-| メイン抽出 | `_call_gemini()` | 1回 | - | case_data + review の構造化抽出 |
-| bbox座標推定 | `get_bboxes_for_page()` | ページ数に依存 (典型: 3-6回) | 最大4並列 (`ThreadPoolExecutor`) | 対象22フィールドの座標推定 |
-| **合計** | | **4-7回** (典型) | | |
+| メイン抽出 | 「書類の中身を読み取って」 | **1回** | — | 15-25秒 |
+| bbox座標 | 「この値はPDFのどこ？」 | **3〜6回** | 4つ同時 | 3-4秒 |
+| **合計** | | **4〜7回** | | **約20-30秒** |
 
-補足:
-- bbox は `pdf_direct` と `text_and_image` (PDFあり時) のみ実行される
-- `text_only` パターンでは bbox 処理はスキップされるため、Gemini 呼び出しは1回のみ
-- bbox の並列数は環境変数 `BBOX_MAX_WORKERS` で制御 (デフォルト: 4)
-- メイン抽出のモデルは `GEMINI_MODEL` (デフォルト: `gemini-3-flash-preview`)
-- bbox のモデルは `GEMINI_BBOX_MODEL` (デフォルト: `gemini-3-flash-preview`)
+- bbox の回数 = 「参照されたユニークなページ数」（書類の総ページ数ではない）
+- 4並列なので、6回の質問でも2バッチ（3+3）で完了
 
 ---
 
-## OCR分岐の詳細 (vision.py: ocr_document)
+## 今後のスコープ分割後はどうなるか
 
-`text_only` / `text_and_image` パターンで使用される OCR の内部分岐:
+メイン抽出の1回を5回に分割する計画（並列実行）。
 
-```
-  ocr_document(file_bytes, file_name, document_id)
-         |
-    [拡張子判定]
-         |
-    +----+----+
-    |         |
-   .pdf    .png/.jpg/.jpeg
-    |         |
-    v         v
-  has_text_layer()?     ocr_image()
-  (pdf_text.py)         (Cloud Vision API)
-    |                   DOCUMENT_TEXT_DETECTION
-  +-+--+
-  |    |
- YES   NO
-  |    |
-  v    v
-extract_text()    ocr_pdf()
-(pdf_text.py      (vision.py)
- PyMuPDF          ページごとに
- テキスト         画像化(300dpi)
- レイヤー)        -> ocr_image()
-```
+| いつ | 何を聞く | 回数 | 並列 | 時間 |
+|---|---|---|---|---|
+| スコープ1〜5 | 「身分事項を読み取って」等 | **5回** | 5つ同時 | 5-8秒 |
+| レビュー | 「整合性をチェックして」 | **1回** | — | 5-10秒 |
+| bbox座標 | 「この値はPDFのどこ？」 | **3〜6回** | 4つ同時 | 3-4秒 |
+| **合計** | | **9〜12回** | | **約20-25秒** |
+
+回数は増えるが、並列実行するので**合計時間はほぼ同じか改善**。
+コストは1ケースあたり約1.6円（現在0.8円）で、実務上無視できるレベル。
+
+---
+
+## 技術詳細（エンジニア向け）
+
+### パターン選択ロジック
+
+`auto` 指定時の自動選択:
+- PDFファイルがある → `pdf_direct`（最もよく使われる）
+- PDFなし + 画像あり → `text_and_image`
+- テキストのみ → `pdf_direct`（空のPDFリストで通す）
+
+### 後処理の流れ
+
+AIの回答 → 以下の順で加工:
+1. `_unflatten_field_values()` — `"doc_001|1|text|0.9"` を構造化データに変換
+2. `_normalize_employment_keys()` — `employment_terms` → `employment_conditions` に統一
+3. `_normalize_corporate_number()` — 法人番号のハイフン除去
+4. `_extract_field_metadata()` — 証跡情報を自動生成（互換レイヤー）
+5. `_extract_display_values()` — 表示用の値のみ取り出し
+
+### 関連ファイル
+
+| ファイル | 役割 |
+|---|---|
+| `main.py` | APIエンドポイント、書類ダウンロード、Firestore保存 |
+| `gemini.py` | Gemini API呼び出し、後処理、結果構築 |
+| `bbox_locator.py` | PDF座標推定（ページグループ化→並列Gemini） |
+| `prompt_template.py` | AIへの指示文（プロンプト）生成 |
+| `schema.py` | AIの回答形式の定義（response_schema） |
+| `vision.py` | OCR（画像→テキスト変換、Cloud Vision API） |
+| `pdf_text.py` | PDFテキストレイヤー抽出（PyMuPDF） |
+| `xlsx.py` | Excelテキスト変換（openpyxl） |
+| `docx_text.py` | Wordテキスト変換（python-docx） |
