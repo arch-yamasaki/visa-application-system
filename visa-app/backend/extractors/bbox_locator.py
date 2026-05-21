@@ -11,34 +11,62 @@ from .gemini import get_bboxes_for_page, _map_field_metadata
 logger = logging.getLogger(__name__)
 
 BBOX_TARGET_FIELDS = [
+    # 活動内容
+    "activity_details.description",
     # 申請人
+    "applicant.date_of_birth",
+    "applicant.home_country_address",
+    "applicant.marital_status",
     "applicant.name_roman",
     "applicant.nationality",
-    "applicant.date_of_birth",
-    "applicant.passport_number",
-    # 雇用条件 (正規パス: employment_conditions)
-    "employment_conditions.job_title",
-    "employment_conditions.duties",
-    "employment_conditions.monthly_salary",
-    "employment_conditions.annual_salary",
-    "employment_conditions.bonus",
-    "employment_conditions.work_location",
-    "employment_conditions.working_hours",
-    "employment_conditions.joining_date",
-    "employment_conditions.holidays",
-    "employment_conditions.insurance",
-    "employment_conditions.contract_period",
-    "employment_conditions.contract_type",
+    "applicant.occupation",
+    "applicant.place_of_birth",
+    # 申請情報
+    "application.has_accompanying",
+    "application.planned_entry_date",
+    "application.planned_period_months",
+    "application.planned_period_years",
+    "application.purpose_of_entry",
+    # 契約
+    "contract.contract_type",
     # 学歴
-    "education.0.school_name",
-    "education.0.major",
+    "education.graduation_date",
+    "education.level",
+    "education.school_name",
     # 所属機関
-    "employer.company_name",
-    "employer.capital",
-    "employer.representative_name",
-    "employer.business_category",
-    "employer.business_type",
+    "employer.address",
+    "employer.annual_sales_jpy",
+    "employer.capital_jpy",
     "employer.corporate_number",
+    "employer.employee_count",
+    "employer.has_corporate_number",
+    "employer.industry_primary",
+    "employer.name",
+    "employer.office_name",
+    "employer.phone",
+    "employer.postal_code",
+    # 雇用条件
+    "employment_conditions.employment_period_months",
+    "employment_conditions.employment_period_type",
+    "employment_conditions.employment_period_years",
+    "employment_conditions.experience_months",
+    "employment_conditions.has_position",
+    "employment_conditions.job_category_primary",
+    "employment_conditions.joining_date",
+    "employment_conditions.monthly_salary",
+    "employment_conditions.position_title",
+    # 出入国歴
+    "immigration_history.entries_count",
+    "immigration_history.has_criminal_record",
+    "immigration_history.has_deportation",
+    "immigration_history.has_entries",
+    "immigration_history.has_prior_coe",
+    "immigration_history.prior_coe_count",
+    # 専攻
+    "major.field",
+    # 旅券
+    "passport.expiry_date",
+    "passport.number",
 ]
 
 
