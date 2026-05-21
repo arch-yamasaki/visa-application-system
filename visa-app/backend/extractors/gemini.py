@@ -4,13 +4,14 @@ import json
 import logging
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor
 
 from google import genai
 from google.genai import types
 
 logger = logging.getLogger(__name__)
 
-from .prompt_template import build_extraction_prompt
+from .prompt_template import build_extraction_prompt, build_scoped_prompt
 from .types import ExtractionResult, OcrResult
 
 # schema.py がまだ完成していない場合はコメントを外す
@@ -21,8 +22,24 @@ except ImportError:
     EXTRACTION_SCHEMA = None
     logger.info("schema.py not found; response_schema will not be used")
 
+try:
+    from .schema import SCOPE_SCHEMAS
+except ImportError:
+    SCOPE_SCHEMAS = {}
+    logger.info("SCOPE_SCHEMAS not found in schema.py; scoped extraction unavailable")
+
+# Mapping from logical scope names to schema registry keys
+_SCOPE_KEY_MAP = {
+    "identity": "S1",
+    "employer": "S2",
+    "education": "S3",
+    "review": "S6",
+}
+
 MODEL_NAME = os.environ.get("GEMINI_MODEL", "gemini-3-flash-preview")
 BBOX_MODEL_NAME = os.environ.get("GEMINI_BBOX_MODEL", "gemini-3-flash-preview")
+
+_SENTINEL = object()  # Default marker for _call_gemini schema parameter
 
 
 
@@ -82,14 +99,25 @@ def get_bboxes_for_page(
         return {}
 
 
-def _call_gemini(client: genai.Client, contents: list, prompt: str) -> dict:
+def _call_gemini(client: genai.Client, contents: list, prompt: str,
+                  schema: dict | None = _SENTINEL) -> dict:
+    """Call Gemini API for structured extraction.
+
+    Args:
+        schema: JSON Schema for response_schema. Pass None to disable schema.
+                Defaults to _SENTINEL which uses the legacy EXTRACTION_SCHEMA.
+    """
     config_kwargs = dict(
         response_mime_type="application/json",
         temperature=0.0,
         max_output_tokens=65536,
     )
-    if EXTRACTION_SCHEMA is not None:
-        config_kwargs["response_schema"] = EXTRACTION_SCHEMA
+    if schema is _SENTINEL:
+        # Legacy path: use EXTRACTION_SCHEMA if available
+        if EXTRACTION_SCHEMA is not None:
+            config_kwargs["response_schema"] = EXTRACTION_SCHEMA
+    elif schema is not None:
+        config_kwargs["response_schema"] = schema
 
     response = client.models.generate_content(
         model=MODEL_NAME,
@@ -406,6 +434,99 @@ def _normalize_source_refs_in_entry(meta: dict) -> None:
                 ref["page"] = int(ref["page"])
             except (ValueError, TypeError):
                 ref["page"] = 1
+
+
+# ---------------------------------------------------------------------------
+# Scoped (parallel) extraction — Phase 1
+# ---------------------------------------------------------------------------
+
+def extract_scoped(
+    scope: str,
+    client: genai.Client,
+    contents: list,
+    case_meta: dict,
+    documents: list[dict],
+    text_contents: list[tuple[str, str]] | None = None,
+) -> dict:
+    """Extract a single scope via Gemini (synchronous).
+
+    Args:
+        scope: Logical scope name ("identity", "employer", "education", "review").
+        client: Gemini client instance.
+        contents: Pre-built content parts (PDF bytes, text parts, etc.).
+        case_meta: Case metadata dict.
+        documents: Document manifest entries.
+        text_contents: Optional text-extracted document contents.
+
+    Returns:
+        Parsed JSON dict from Gemini response for this scope.
+    """
+    schema_key = _SCOPE_KEY_MAP.get(scope)
+    if not schema_key or schema_key not in SCOPE_SCHEMAS:
+        raise ValueError(f"Unknown or unavailable scope: {scope!r}")
+
+    schema = SCOPE_SCHEMAS[schema_key]
+    prompt = build_scoped_prompt(scope, case_meta, documents)
+
+    raw = _call_gemini(client, contents, prompt, schema=schema)
+    return raw
+
+
+def extract_all_scopes(
+    client: genai.Client,
+    contents: list,
+    case_meta: dict,
+    documents: list[dict],
+    text_contents: list[tuple[str, str]] | None = None,
+) -> ExtractionResult:
+    """Run all extraction scopes in parallel, then review, then build result.
+
+    Phase 1 scopes: identity (S1), employer (S2), education (S3) — parallel.
+    Then review (S6) — sequential, using merged results as context.
+    """
+    extraction_scopes = ["identity", "employer", "education"]
+
+    # Phase 1: S1, S2, S3 in parallel via ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        futures = {
+            scope: executor.submit(
+                extract_scoped, scope, client, contents,
+                case_meta, documents, text_contents,
+            )
+            for scope in extraction_scopes
+        }
+        scope_results: dict[str, dict] = {}
+        for scope, future in futures.items():
+            try:
+                scope_results[scope] = future.result()
+            except Exception as e:
+                logger.warning("Scope %s failed: %s", scope, e)
+                scope_results[scope] = {}
+
+    # Phase 2: Merge scope results into unified case_data
+    merged_case_data: dict = {}
+    for scope, result in scope_results.items():
+        # Each scope returns a flat dict of sections (e.g. {"applicant": {...}, "passport": {...}})
+        # or may be wrapped in "case_data" key — handle both
+        data = result.get("case_data", result) if isinstance(result, dict) else {}
+        merged_case_data.update(data)
+
+    # Phase 3: Review (S6) — sequential, with merged data as context
+    review: dict = {}
+    try:
+        review_schema_key = _SCOPE_KEY_MAP["review"]
+        review_schema = SCOPE_SCHEMAS.get(review_schema_key)
+        review_prompt = build_scoped_prompt(
+            "review", case_meta, documents, extra_context=merged_case_data,
+        )
+        review = _call_gemini(client, contents, review_prompt, schema=review_schema)
+    except Exception as e:
+        logger.warning("Review scope failed: %s", e)
+        review = {}
+
+    # Phase 4: Build ExtractionResult via existing _build_extraction_result
+    full_data = {"case_data": merged_case_data, "review": review}
+    return _build_extraction_result(full_data)
 
 
 def extract_text_only(

@@ -130,6 +130,132 @@ case_data のキーも必ず `employment_conditions.xxx` とすること（`empl
 """
 
 
+# ---------------------------------------------------------------------------
+# Scoped prompt support
+# ---------------------------------------------------------------------------
+
+SCOPE_DOCUMENT_ROLES: dict[str, list[str] | None] = {
+    "identity": None,   # 全書類（パスポート情報がどこにあるかわからない）
+    "employer": None,    # 全書類（会社情報が複数書類に散在）
+    "education": None,   # 全書類（卒業証明書がどのファイルかわからない）
+    "review": None,      # 全書類
+}
+
+_SCOPE_INSTRUCTIONS: dict[str, str] = {
+    "identity": (
+        "以下の書類から申請人の身分事項を抽出してください。"
+        "国籍、生年月日、氏名、性別、出生地、配偶者の有無、職業、"
+        "本国居住地、日本連絡先、旅券情報、入国目的、入国予定日、"
+        "上陸予定港、滞在予定期間、同伴者の有無、査証申請予定地、"
+        "出入国歴、在留資格認定証明書交付申請歴、犯罪歴、退去強制歴を抽出してください。"
+    ),
+    "employer": (
+        "以下の書類から所属機関・雇用条件・活動内容を抽出してください。"
+        "契約形態、会社名、法人番号、支店名、雇用保険番号、業種、所在地、"
+        "電話番号、資本金、売上高、従業員数、外国人職員数、技能実習生数、"
+        "就労予定期間、入社日、月額給与、実務経験月数、役職、職種、"
+        "活動内容詳細を抽出してください。"
+    ),
+    "education": (
+        "以下の書類から学歴・専攻・資格情報を抽出してください。"
+        "最終学歴区分、学校名、卒業年月日、専攻・専門分野、"
+        "情報処理技術者資格の有無と資格名を抽出してください。"
+    ),
+    "review": (
+        "以下の抽出済みデータと原本書類を照合し、レビューしてください。"
+    ),
+}
+
+_SCOPED_COMMON_RULES = """\
+## 出力形式
+
+各フィールドは `{"value": "...", "source": "document_id|page|text_quote|confidence"}` の形式で出力すること。
+
+### source フォーマット
+- document_id: 書類一覧の document_id と一致
+- page: ページ番号（1始まり）
+- text_quote: 原文から直接引用、50文字以内。パイプ文字(|)は含めない
+- confidence: 0.0〜1.0（0.9以上=明瞭、0.7-0.9=やや不明瞭、0.5-0.7=複数解釈可能、0.5未満=推測）
+- 値が見つからない場合は value を空文字、source を空文字とすること
+
+### 正規化ルール
+- 法人番号（`employer.corporate_number`）: 13桁の数字のみ。ハイフン・スペースは除去すること。
+- DOCX書類からの抽出: ページ概念がないため page は 1 とすること。
+
+### 出力言語ルール
+- 値は原本の言語をそのまま使用（例：ローマ字氏名はローマ字、日本語住所は日本語）
+- 説明テキスト（reason, message 等）は日本語で記述
+- text_quote は原文から直接引用
+"""
+
+
+def _format_doc_list(documents: list[dict]) -> str:
+    """Format document list for prompt insertion."""
+    lines = []
+    for doc in documents:
+        lines.append(
+            f"- {doc.get('file_name', 'unknown')} "
+            f"(role: {doc.get('document_role', 'unknown')}, "
+            f"document_id: {doc.get('document_id', 'unknown')})"
+        )
+    return "\n".join(lines) if lines else "(なし)"
+
+
+def build_scoped_prompt(
+    scope: str,
+    case_meta: dict,
+    documents: list[dict],
+    extra_context: dict | None = None,
+) -> str:
+    """Build a scope-specific extraction prompt.
+
+    Args:
+        scope: One of "identity", "employer", "education", "review".
+        case_meta: Case metadata (case_id, application_type, target_status).
+        documents: List of document dicts (file_name, document_role, document_id).
+        extra_context: Optional dict (e.g. merged case_data for review scope).
+
+    Returns:
+        Formatted prompt string.
+    """
+    if scope not in _SCOPE_INSTRUCTIONS:
+        raise ValueError(f"Unknown scope: {scope!r}. Must be one of {list(_SCOPE_INSTRUCTIONS)}")
+
+    instruction = _SCOPE_INSTRUCTIONS[scope]
+
+    # Filter documents by role if scope defines a filter (currently all None)
+    allowed_roles = SCOPE_DOCUMENT_ROLES.get(scope)
+    if allowed_roles is not None:
+        documents = [d for d in documents if d.get("document_role") in allowed_roles]
+
+    doc_text = _format_doc_list(documents)
+
+    parts: list[str] = []
+    parts.append("あなたは日本の在留資格申請の構造化データ抽出AIです。\n")
+
+    parts.append("## 抽出対象")
+    parts.append(f"- 案件ID: {case_meta.get('case_id', 'unknown')}")
+    parts.append(f"- 申請種別: {case_meta.get('application_type', 'unknown')}")
+    parts.append(f"- 対象在留資格: {case_meta.get('target_status', 'unknown')}\n")
+
+    parts.append("## 書類一覧")
+    parts.append(doc_text + "\n")
+
+    parts.append("## 指示")
+    parts.append(instruction + "\n")
+
+    if scope == "review" and extra_context:
+        import json as _json
+        parts.append("## 抽出済みデータ（照合対象）")
+        parts.append("```json")
+        parts.append(_json.dumps(extra_context, ensure_ascii=False, indent=2))
+        parts.append("```\n")
+
+    parts.append(_SCOPED_COMMON_RULES)
+
+    return "\n".join(parts)
+
+
 def build_extraction_prompt(
     case_context: dict,
     document_descriptions: list[dict],

@@ -22,7 +22,8 @@ from google.cloud import firestore, storage
 from google.cloud import run_v2
 from pydantic import BaseModel
 
-from extractors.gemini import extract_text_only, extract_pdf_direct, extract_with_images
+from google.genai import types as genai_types
+from extractors.gemini import extract_text_only, extract_pdf_direct, extract_with_images, extract_all_scopes
 from extractors.bbox_locator import locate_bboxes
 from extractors.vision import ocr_document
 from extractors.types import ExtractionResult
@@ -80,6 +81,7 @@ class UpdateCaseRequest(BaseModel):
 class ExtractRequest(BaseModel):
     backend: str = "gemini"  # "gemini" | "codex"
     pattern: str = "auto"  # "auto" | "text_only" | "pdf_direct" | "text_and_image"
+    scoped: bool = True  # True: スコープ別並列抽出（新方式）、False: 1回呼び出し（後方互換）
 
 
 # ---------------------------------------------------------------------------
@@ -697,8 +699,14 @@ def get_document_preview(
         )
 
 
-def _extract_with_gemini(case_doc: dict, pattern: str) -> ExtractionResult:
-    """Run Gemini extraction synchronously."""
+def _extract_with_gemini(case_doc: dict, pattern: str, scoped: bool = True) -> ExtractionResult:
+    """Run Gemini extraction synchronously.
+
+    Args:
+        case_doc: Full case document from Firestore.
+        pattern: Extraction pattern ("auto", "text_only", "pdf_direct", "text_and_image").
+        scoped: If True, use scope-parallel extraction (new); if False, legacy single-call.
+    """
     documents = case_doc["document_manifest"]["documents"]
     case_data = case_doc.get("case_data", {})
     case_info = case_data.get("case", case_data)
@@ -736,6 +744,40 @@ def _extract_with_gemini(case_doc: dict, pattern: str) -> ExtractionResult:
         elif ext in ("png", "jpg", "jpeg"):
             image_entries.append((did, fname, content))
 
+    # --- Scoped parallel extraction (new path) ---
+    if scoped:
+        from google import genai as _genai
+        client = _genai.Client()
+        # Build contents_parts in the same way as pdf_direct
+        contents_parts: list = []
+        if text_contents:
+            for doc_id, text in text_contents:
+                contents_parts.append(f"--- document: {doc_id} ---\n{text}")
+        for doc_id, pdf_bytes in pdf_contents:
+            contents_parts.append(
+                genai_types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf")
+            )
+            contents_parts.append(f"(document_id: {doc_id})")
+        # Add standalone images (non-PDF)
+        for did, fname, img_bytes in image_entries:
+            if not fname.lower().endswith(".pdf"):
+                mime = "image/png" if img_bytes[:4] == b"\x89PNG" else "image/jpeg"
+                contents_parts.append(
+                    genai_types.Part.from_bytes(data=img_bytes, mime_type=mime)
+                )
+                contents_parts.append(f"(document_id: {did})")
+
+        result = extract_all_scopes(
+            client, contents_parts, case_meta, documents,
+            text_contents=text_contents or None,
+        )
+        # Gemini bbox 付与（対象フィールドのみ、PDFのみ）
+        if pdf_contents:
+            pdf_bytes_map = {did: content for did, content in pdf_contents}
+            result.field_metadata = locate_bboxes(result.field_metadata, pdf_bytes_map)
+        return result
+
+    # --- Legacy single-call extraction ---
     if pattern == "auto":
         # Gemini can read image-based PDFs directly, so prefer pdf_direct
         # to avoid Cloud Vision API dependency. Fall back to text_and_image
@@ -786,20 +828,20 @@ def start_extraction(case_id: str, body: ExtractRequest = ExtractRequest()):
         )
 
     if body.backend == "gemini":
-        return _start_gemini_extraction(case_id, ref, data, body.pattern)
+        return _start_gemini_extraction(case_id, ref, data, body.pattern, body.scoped)
 
     return _start_codex_extraction(case_id, ref, data, documents)
 
 
 def _start_gemini_extraction(
-    case_id: str, case_ref, case_doc: dict, pattern: str
+    case_id: str, case_ref, case_doc: dict, pattern: str, scoped: bool = True
 ) -> dict:
     """Gemini backend: synchronous extraction."""
     now = _now_iso()
     case_ref.update({"workflow_state": "extracting", "updated_at": now})
 
     try:
-        result = _extract_with_gemini(case_doc, pattern)
+        result = _extract_with_gemini(case_doc, pattern, scoped=scoped)
     except Exception as exc:
         case_ref.update(
             {"workflow_state": "extraction_failed", "updated_at": _now_iso()}
