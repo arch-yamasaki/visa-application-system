@@ -2,33 +2,16 @@ import { useRef, useState } from 'react'
 import type { FieldMeta } from '../../types/caseData'
 import { useViewerStore } from '../../store/viewerStore'
 import { getDisplayValue } from '../../lib/fieldPaths'
-import FlagBadge from './FlagBadge'
 
 interface Props {
   label: string
   fieldPath: string
   value: unknown
   meta?: FieldMeta
-  flagType?: 'action_needed' | 'edited' | null
   onUpdate?: (fieldPath: string, value: string) => void
 }
 
-function ConfidenceDots({ confidence }: { confidence: number }) {
-  const filled = Math.round(confidence * 5)
-  const color = confidence >= 0.9 ? 'bg-green-500' : confidence >= 0.7 ? 'bg-yellow-500' : 'bg-red-400'
-  return (
-    <div className="flex items-center gap-px" title={`${Math.round(confidence * 100)}%`}>
-      {Array.from({ length: 5 }, (_, i) => (
-        <span
-          key={i}
-          className={`block w-1.5 h-1.5 rounded-full ${i < filled ? color : 'bg-gray-200'}`}
-        />
-      ))}
-    </div>
-  )
-}
-
-export default function FieldRow({ label, fieldPath, value, meta, flagType, onUpdate }: Props) {
+export default function FieldRow({ label, fieldPath, value, meta, onUpdate }: Props) {
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState('')
   const navigateToSource = useViewerStore((s) => s.navigateToSource)
@@ -38,11 +21,8 @@ export default function FieldRow({ label, fieldPath, value, meta, flagType, onUp
 
   const rawValue = value === null || value === undefined || value === '' ? '' : String(value)
   const displayValue = rawValue === '' ? '(未入力)' : getDisplayValue(rawValue) || rawValue
-  const confidence = meta?.source_refs?.[0]?.confidence
   const hasSource = meta?.source_refs && meta.source_refs.length > 0
-  const hasValueNoSource = rawValue !== '' && !hasSource
   const isActive = activeFieldPath === fieldPath
-  const isEdited = meta?.human_edited
 
   const handleClick = () => {
     setActiveFieldPath(fieldPath)
@@ -89,20 +69,18 @@ export default function FieldRow({ label, fieldPath, value, meta, flagType, onUp
     }
   }
 
-  const badgeType = flagType ?? null
-
   return (
     <div
       ref={rowRef}
       data-field-row
       tabIndex={0}
+      role="button"
+      aria-selected={isActive}
       className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer text-sm group outline-none transition-colors ${
         isActive
           ? 'bg-blue-100 border-l-2 border-blue-500'
-          : isEdited
-            ? 'bg-sky-50 hover:bg-blue-50'
-            : 'hover:bg-blue-50'
-      } ${hasSource ? '' : 'opacity-70'} focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-inset`}
+          : 'hover:bg-blue-50'
+      } focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-inset`}
       onClick={handleClick}
       onDoubleClick={startEditing}
       onKeyDown={handleKeyDown}
@@ -142,22 +120,10 @@ export default function FieldRow({ label, fieldPath, value, meta, flagType, onUp
         </span>
       )}
 
-      {confidence !== undefined && <ConfidenceDots confidence={confidence} />}
-
-      {badgeType && <FlagBadge type={badgeType} />}
-
-      {hasValueNoSource && (
-        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700">
-          要確認
-        </span>
-      )}
-
-      {hasSource ? (
-        <span className="text-[10px] text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">
+      {hasSource && (
+        <span className="text-xs text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">
           p.{meta?.source_refs?.[0]?.page}
         </span>
-      ) : (
-        <span className="text-[10px] text-gray-300 italic">(証跡なし)</span>
       )}
     </div>
   )

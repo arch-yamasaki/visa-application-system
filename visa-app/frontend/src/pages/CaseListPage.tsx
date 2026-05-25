@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { apiClient } from '../api/client'
+import { isExtractedWorkflowState, toWorkflowDisplayState, workflowStateColor, workflowStateLabel } from '../lib/workflowState'
 import type { CaseSummary } from '../types/caseData'
 
 export default function CaseListPage() {
@@ -19,28 +20,6 @@ export default function CaseListPage() {
       target_status: 'engineer_humanities_international',
     })
     navigate(`/cases/${created.case_id}/upload${location.search}`)
-  }
-
-  const stateLabel: Record<string, string> = {
-    draft: '下書き',
-    uploading: 'アップロード中',
-    extracting: '抽出中...',
-    needs_review: '要レビュー',
-    ready_to_fill: '入力準備完了',
-    archived: 'アーカイブ',
-    extraction_failed: '抽出失敗',
-    launch_failed: '起動失敗',
-  }
-
-  const stateColor: Record<string, string> = {
-    draft: 'bg-gray-100 text-gray-600',
-    uploading: 'bg-blue-100 text-blue-700',
-    extracting: 'bg-yellow-100 text-yellow-700',
-    needs_review: 'bg-orange-100 text-orange-700',
-    ready_to_fill: 'bg-green-100 text-green-700',
-    archived: 'bg-gray-100 text-gray-400',
-    extraction_failed: 'bg-red-100 text-red-700',
-    launch_failed: 'bg-red-100 text-red-700',
   }
 
   return (
@@ -68,7 +47,7 @@ export default function CaseListPage() {
             <div
               key={c.case_id}
               onClick={() => {
-                const dest = c.workflow_state === 'needs_review' || c.workflow_state === 'ready_to_fill'
+                const dest = isExtractedWorkflowState(c.workflow_state)
                   ? `/cases/${c.case_id}/review`
                   : `/cases/${c.case_id}/upload`
                 navigate(`${dest}${location.search}`)
@@ -85,10 +64,8 @@ export default function CaseListPage() {
                   </p>
                 )}
               </div>
-              <span
-                className={`px-2 py-0.5 rounded text-xs font-medium ${stateColor[c.workflow_state] || 'bg-gray-100 text-gray-600'}`}
-              >
-                {stateLabel[c.workflow_state] || c.workflow_state}
+              <span className={`px-2 py-0.5 rounded text-xs font-medium ${workflowStateColor[toWorkflowDisplayState(c.workflow_state)]}`}>
+                {workflowStateLabel[toWorkflowDisplayState(c.workflow_state)]}
               </span>
             </div>
           ))}

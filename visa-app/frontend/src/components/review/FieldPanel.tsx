@@ -8,7 +8,6 @@ interface Props {
   fieldMetadata: FieldMetadataMap
   review: Review
   onFieldUpdate: (fieldPath: string, value: string) => void
-  onMarkSectionReviewed?: (paths: string[]) => void
 }
 
 function issuePath(item: unknown): string | null {
@@ -22,8 +21,8 @@ function issuePath(item: unknown): string | null {
   return null
 }
 
-export default function FieldPanel({ caseData, fieldMetadata, review, onFieldUpdate, onMarkSectionReviewed }: Props) {
-  const fields = flattenCaseData(caseData)
+export default function FieldPanel({ caseData, fieldMetadata, review, onFieldUpdate }: Props) {
+  const fields = flattenCaseData(caseData).filter((field) => field.path !== 'case.workflow_state')
 
   // Build set of flagged paths
   const missingPaths = new Set(
@@ -31,11 +30,6 @@ export default function FieldPanel({ caseData, fieldMetadata, review, onFieldUpd
   )
   const errorPaths = new Set(
     review.validation_errors?.map(issuePath).filter((path): path is string => Boolean(path)) ?? [],
-  )
-  const reviewPaths = new Set(
-    review.findings
-      ?.filter((f) => f.severity === 'medium' || f.severity === 'high')
-      .flatMap((f) => f.evidence_refs ?? []) ?? [],
   )
   const visibleFields = [...fields]
   const existingPaths = new Set(visibleFields.map((field) => field.path))
@@ -54,12 +48,6 @@ export default function FieldPanel({ caseData, fieldMetadata, review, onFieldUpd
     sections.get(section)!.push(field)
   }
 
-  const getFlagType = (path: string): 'action_needed' | 'edited' | null => {
-    if (fieldMetadata[path]?.human_edited) return 'edited'
-    if (errorPaths.has(path) || missingPaths.has(path) || reviewPaths.has(path)) return 'action_needed'
-    return null
-  }
-
   // Sort sections by SECTION_ORDER; unknown sections go to the end
   const sortedSections = Array.from(sections.entries()).sort(([a], [b]) => {
     const ai = (SECTION_ORDER as readonly string[]).indexOf(a)
@@ -70,18 +58,11 @@ export default function FieldPanel({ caseData, fieldMetadata, review, onFieldUpd
   return (
     <div data-field-panel>
       {sortedSections.map(([section, sectionFields]) => {
-        const reviewedCount = sectionFields.filter((f) => fieldMetadata[f.path]?.human_reviewed).length
         return (
           <FieldSection
             key={section}
             title={section}
             fieldCount={sectionFields.length}
-            reviewedCount={reviewedCount}
-            onMarkAllReviewed={
-              onMarkSectionReviewed
-                ? () => onMarkSectionReviewed(sectionFields.map((f) => f.path))
-                : undefined
-            }
           >
             {sectionFields.map((f) => (
               <FieldRow
@@ -90,7 +71,6 @@ export default function FieldPanel({ caseData, fieldMetadata, review, onFieldUpd
                 fieldPath={f.path}
                 value={f.value}
                 meta={fieldMetadata[f.path]}
-                flagType={getFlagType(f.path)}
                 onUpdate={onFieldUpdate}
               />
             ))}

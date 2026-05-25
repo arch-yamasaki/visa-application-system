@@ -91,7 +91,6 @@ export default function ReviewPage() {
       const fm = { ...updated.field_metadata }
       fm[fieldPath] = {
         ...fm[fieldPath],
-        human_reviewed: true,
         human_edited: true,
       }
       updated.field_metadata = fm
@@ -99,27 +98,14 @@ export default function ReviewPage() {
     })
   }
 
-  const handleMarkSectionReviewed = (paths: string[]) => {
-    setCaseDoc((prev) => {
-      if (!prev) return prev
-      const fm = { ...prev.field_metadata }
-      for (const path of paths) {
-        fm[path] = { ...fm[path], human_reviewed: true }
-      }
-      return { ...prev, field_metadata: fm }
-    })
-  }
-
-  const handleConfirm = async () => {
-    if (!caseId || !caseDoc || !caseDoc.field_metadata || Object.keys(caseDoc.field_metadata).length === 0) return
+  const handleSave = async () => {
+    if (!caseId || !caseDoc) return
     setSaving(true)
     try {
       await apiClient.updateCase(caseId, {
         case_data: caseDoc.case_data,
         field_metadata: caseDoc.field_metadata,
-        workflow_state: 'ready_to_fill',
       })
-      setCaseDoc((prev) => prev ? { ...prev, workflow_state: 'ready_to_fill' } : prev)
     } finally {
       setSaving(false)
     }
@@ -178,8 +164,6 @@ export default function ReviewPage() {
       <ReviewBanner
         caseId={caseDoc.case_id}
         workflowState={caseDoc.workflow_state}
-        fieldMetadata={caseDoc.field_metadata}
-        review={caseDoc.review}
       />
 
       <div ref={containerRef} className="flex flex-1 overflow-hidden relative">
@@ -193,7 +177,6 @@ export default function ReviewPage() {
             fieldMetadata={caseDoc.field_metadata}
             review={caseDoc.review}
             onFieldUpdate={handleFieldUpdate}
-            onMarkSectionReviewed={handleMarkSectionReviewed}
           />
         </div>
 
@@ -211,19 +194,17 @@ export default function ReviewPage() {
         </div>
       </div>
 
-      {/* Bottom: Confirm Bar */}
+      {/* Bottom: Save Bar */}
       <div className="border-t border-gray-200 bg-white px-6 py-3 flex items-center justify-between">
         <span className="text-sm text-gray-500">
-          {caseDoc.workflow_state === 'ready_to_fill'
-            ? '確認済み — フォーム入力の準備ができています'
-            : '全フィールドを確認してから完了してください'}
+          編集内容を保存できます
         </span>
         <button
-          onClick={handleConfirm}
-          disabled={saving || caseDoc.workflow_state === 'ready_to_fill' || Object.keys(caseDoc.field_metadata).length === 0}
+          onClick={handleSave}
+          disabled={saving}
           className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-sm font-medium transition-colors"
         >
-          {saving ? '保存中...' : caseDoc.workflow_state === 'ready_to_fill' ? '確認済み' : '確認して完了'}
+          {saving ? '保存中...' : '保存'}
         </button>
       </div>
     </div>

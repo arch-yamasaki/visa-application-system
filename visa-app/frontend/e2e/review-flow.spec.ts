@@ -5,6 +5,7 @@ test.describe('CaseListPage', () => {
     await page.goto('/?demo=true')
     await expect(page.getByRole('heading', { name: '案件一覧' })).toBeVisible()
     await expect(page.getByRole('button', { name: '+ 新規案件' })).toBeVisible()
+    await expect(page.getByText('抽出済み')).toBeVisible()
   })
 })
 
@@ -15,6 +16,7 @@ test.describe('ReviewPage demo mode', () => {
 
   test('shows ReviewBanner with case_id', async ({ page }) => {
     await expect(page.getByText('demo-gijinkoku-001').first()).toBeVisible()
+    await expect(page.getByText('抽出済み')).toBeVisible()
   })
 
   test('shows at least one FieldSection', async ({ page }) => {
@@ -29,16 +31,15 @@ test.describe('ReviewPage demo mode', () => {
     expect(count).toBeGreaterThanOrEqual(1)
   })
 
-  test('shows FlagBadge elements in Japanese', async ({ page }) => {
-    const badges = page.locator('span').filter({ hasText: /^(OK|要確認|不足|エラー|編集済)$/ })
-    await expect(badges.first()).toBeVisible()
-  })
-
-  test('has confirm button', async ({ page }) => {
+  test('does not show review progress controls', async ({ page }) => {
     await expect(page.locator('[data-field-row]').first()).toBeVisible()
-    await expect(
-      page.getByRole('button', { name: '確認して完了' })
-    ).toBeVisible()
+    await expect(page.getByText('確認済:')).not.toBeVisible()
+    await expect(page.getByText('要対応')).not.toBeVisible()
+    await expect(page.getByText('編集済')).not.toBeVisible()
+    await expect(page.getByText('要レビュー')).not.toBeVisible()
+    await expect(page.getByRole('button', { name: '全て確認済み' })).not.toBeVisible()
+    await expect(page.getByRole('button', { name: '確認して完了' })).not.toBeVisible()
+    await expect(page.getByRole('button', { name: '保存' })).toBeVisible()
   })
 
   test('clicking a FieldRow activates it', async ({ page }) => {
@@ -68,22 +69,7 @@ test.describe('ReviewPage demo mode', () => {
     await expect(input).not.toBeVisible()
     await expect(firstRow.getByText('テスト編集値')).toBeVisible()
 
-    // Badge should change to 編集済
-    await expect(firstRow.locator('span').filter({ hasText: '編集済' })).toBeVisible()
-  })
-
-  test('mark all reviewed: button click changes to confirmed', async ({ page }) => {
-    await expect(page.locator('[data-field-row]').first()).toBeVisible()
-
-    // Find a section with "全て確認済み" button
-    const markAllButton = page.getByRole('button', { name: '全て確認済み' }).first()
-    await expect(markAllButton).toBeVisible()
-
-    // Click it
-    await markAllButton.click()
-
-    // The button should disappear and "確認完了" text should appear in that section
-    await expect(page.getByText('確認完了').first()).toBeVisible()
+    await expect(firstRow.locator('span').filter({ hasText: '編集済' })).not.toBeVisible()
   })
 
   test('keyboard: Enter to edit, Escape to cancel', async ({ page }) => {

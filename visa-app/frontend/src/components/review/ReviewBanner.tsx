@@ -1,83 +1,22 @@
-import type { FieldMetadataMap, Review } from '../../types/caseData'
+import { toWorkflowDisplayState, workflowStateColor, workflowStateLabel } from '../../lib/workflowState'
 
 interface Props {
   caseId: string
   workflowState: string
-  fieldMetadata: FieldMetadataMap
-  review: Review
 }
 
-export default function ReviewBanner({ caseId, workflowState, fieldMetadata, review }: Props) {
-  const entries = Object.entries(fieldMetadata)
-  const reviewed = entries.filter(([, m]) => m.human_reviewed).length
-  const total = entries.length
-  const progress = total > 0 ? reviewed / total : 0
-  const actionNeededCount =
-    (review.missing_items?.length ?? 0) +
-    (review.validation_errors?.length ?? 0) +
-    (review.findings?.filter((f) => f.severity === 'medium' || f.severity === 'high').length ?? 0)
-  const editedCount = entries.filter(([, m]) => m.human_edited).length
-
-  const stateLabel: Record<string, string> = {
-    needs_review: '要レビュー',
-    ready_to_fill: '入力準備完了',
-    extracting: '抽出中...',
-    draft: '下書き',
-    extraction_failed: '抽出失敗',
-    launch_failed: '起動失敗',
-  }
-
-  const stateColor: Record<string, string> = {
-    needs_review: 'bg-orange-100 text-orange-700',
-    ready_to_fill: 'bg-green-100 text-green-700',
-    extracting: 'bg-yellow-100 text-yellow-700',
-    draft: 'bg-gray-100 text-gray-600',
-    extraction_failed: 'bg-red-100 text-red-700',
-    launch_failed: 'bg-red-100 text-red-700',
-  }
-
-  const progressColor = progress >= 1 ? 'bg-green-500' : progress >= 0.5 ? 'bg-blue-500' : 'bg-orange-400'
+export default function ReviewBanner({ caseId, workflowState }: Props) {
+  const displayState = toWorkflowDisplayState(workflowState)
 
   return (
     <div className="bg-white border-b border-gray-200">
       <div className="px-6 py-2.5 flex items-center gap-5 text-sm">
         <span className="font-mono text-gray-500 text-xs">{caseId}</span>
-        <span className={`px-2 py-0.5 rounded text-xs font-medium ${stateColor[workflowState] || 'bg-gray-100'}`}>
-          {stateLabel[workflowState] || workflowState}
+        <span className={`px-2 py-0.5 rounded text-xs font-medium ${workflowStateColor[displayState]}`}>
+          {workflowStateLabel[displayState]}
         </span>
-
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          <span className="text-gray-500 text-xs shrink-0">
-            確認済: <strong className="text-gray-700">{reviewed}</strong>/{total}
-          </span>
-          <div className="flex-1 max-w-48 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-300 ${progressColor}`}
-              style={{ width: `${Math.round(progress * 100)}%` }}
-            />
-          </div>
-          <span className="text-[10px] text-gray-400">
-            {progress === 0 ? '未確認' : progress >= 1 ? '完了' : `${Math.round(progress * 100)}%`}
-          </span>
-        </div>
-
-        {actionNeededCount > 0 && (
-          <span className="text-orange-600 text-xs flex items-center gap-1">
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-              <path d="M8 1L15 14H1L8 1Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-              <path d="M8 6V9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              <circle cx="8" cy="11.5" r="0.75" fill="currentColor" />
-            </svg>
-            要対応 {actionNeededCount}件
-          </span>
-        )}
-        {editedCount > 0 && (
-          <span className="text-blue-600 text-xs flex items-center gap-1">
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-              <path d="M11 2L14 5L5 14H2V11L11 2Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-            </svg>
-            編集済 {editedCount}件
-          </span>
+        {displayState === 'extracted' && (
+          <span className="text-xs text-gray-500">抽出結果を確認・編集できます</span>
         )}
       </div>
     </div>
