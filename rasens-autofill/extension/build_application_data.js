@@ -57,8 +57,12 @@ function transformValue(value, transform) {
       return dateDigits(value, 8);
     case "date_yyyymm":
       return dateDigits(value, 6);
-    case "boolean_yes_no":
-      return value ? "有 Yes" : "無 No";
+    case "boolean_yes_no": {
+      const truthy = [true, "true", "yes", "有", "あり", 1, "1"];
+      return truthy.includes(typeof value === "string" ? value.toLowerCase() : value)
+        ? "有 Yes"
+        : "無 No";
+    }
     case "marital_yes_no":
       return value === "married" ? "有 Married" : "無 Single";
     case "sex_ja": {

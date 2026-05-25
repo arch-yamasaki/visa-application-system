@@ -47,7 +47,9 @@ def transform_value(value: Any, transform: str) -> str:
     if transform == "date_yyyymm":
         return date_digits(value, 6)
     if transform == "boolean_yes_no":
-        return "有 Yes" if bool(value) else "無 No"
+        truthy = {True, "true", "yes", "有", "あり", 1, "1"}
+        normalized = value.lower() if isinstance(value, str) else value
+        return "有 Yes" if normalized in truthy else "無 No"
     if transform == "marital_yes_no":
         return "有 Married" if value == "married" else "無 Single"
     if transform == "sex_ja":
