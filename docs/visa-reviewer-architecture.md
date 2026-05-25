@@ -42,8 +42,7 @@ visa-app/frontend/
 │   ├── store/
 │   │   └── viewerStore.ts    # Zustandストア（ドキュメントビューア状態）
 │   ├── lib/
-│   │   ├── fieldPaths.ts     # フィールドパス→日本語ラベル変換、値のフラット化
-│   │   └── buildApplicationData.ts  # Chrome拡張向けオートフィルデータ生成
+│   │   └── fieldPaths.ts     # フィールドパス→日本語ラベル変換、値のフラット化
 │   ├── pages/
 │   │   ├── CaseListPage.tsx  # 案件一覧
 │   │   ├── UploadPage.tsx    # 書類アップロード + 抽出開始
@@ -395,23 +394,8 @@ server: {
 
 ---
 
-## Chrome拡張連携（buildApplicationData）
+## Chrome拡張連携
 
-`lib/buildApplicationData.ts` は `CaseData` とマッピング定義から、入管オンライン申請フォームへの自動入力用データ（`ApplicationRow[]`）を生成する。
+現行のChrome拡張連携は backend の `/cases/{case_id}/autofill-data` と `rasens-autofill/extension/` 側の変換処理に依存している。
 
-```typescript
-interface ApplicationRow {
-  section: string        // フォームのセクション
-  no: string             // 設問番号
-  label: string          // ラベル
-  field_name: string     // HTMLフォームのname属性
-  field_id: string       // HTMLフォームのid属性
-  input_type: string     // text, select等
-  display_value: string  // 表示値
-  fill_value: string     // 入力値
-  canonical_id: string   // 正規フィールドID
-}
-```
-
-`transformValue()` で日付フォーマット変換、性別変換、婚姻状態変換等を行う。
-`isVisible()` で条件付き表示のフィールドをフィルタ。
+今後の整理では、visa-app backend が canonical `case_data` から `application_data` 行を生成するAPIを提供し、Chrome拡張は取得した rows を RASENS DOM に入力するだけの責務へ寄せる。

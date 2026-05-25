@@ -35,8 +35,8 @@ Chrome拡張（rasens-autofill）はバックエンドAPIに直接 `/cases/...` 
 
 ## autofill連携
 
-- `backend/autofill_adapter.py` — 抽出結果（case_data形式）をChrome拡張の `application_data` スキーマに変換するアダプタ。フィールド名の差分27箇所を吸収する。
-- `GET /cases/{case_id}/autofill-data` — Chrome拡張（rasens-autofill）が呼び出すエンドポイント。ケースの抽出結果を `autofill_adapter` で変換して返す。フロントエンドからは Vite proxy 経由で `/api/cases/...` としてアクセスする。
+- `backend/autofill_adapter.py` — 現行Gemini抽出結果をChrome拡張が扱いやすい case_data 風JSONへ寄せる互換アダプタ。canonical `case_data` 整備後は削除・縮小候補。
+- `GET /cases/{case_id}/autofill-data` — 現行Chrome拡張（rasens-autofill）が呼び出すエンドポイント。将来的には backend が `application_data` rows を生成して返すAPIへ寄せ、Chrome拡張側のマッピング責務を薄くする。
 
 ## デプロイ
 

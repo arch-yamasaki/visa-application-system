@@ -24,10 +24,8 @@ visa-eval/
 ## 重要ファイル
 
 - `README.md`: 評価ワークスペースの入口、データ機密性ルール
-- `docs/テスト設計.md`: raw → document_manifest → golden → generated のテスト構成
 - `docs/単票評価ワークフローまとめ.md`: 単票fixture → Chrome拡張投入までの全体像
 - `docs/AIブラインド抽出実行手順.md`: goldenを見せずにAI抽出を実行する手順
-- `docs/フォルダ整理案.md`: test_cases_from_raw / blind_runs_from_test_cases / eval_config の役割分担
 - `eval_config/suites/single_smoke.json`: 13ケースのスモーク評価スイート
 - `eval_config/prompts/blind_single_case_prompt.md`: AI抽出時のプロンプトテンプレート
 

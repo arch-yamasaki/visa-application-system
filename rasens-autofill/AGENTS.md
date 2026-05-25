@@ -8,7 +8,7 @@ Chrome拡張による在留申請オンラインシステム(RASENS)フォーム
 rasens-autofill/
   data/
     schemas/           # case_data, document_manifest, review の JSON Schema
-    cases/             # 案件単位の正規 case_data (正本)
+    cases/             # 合成デモ・fixture用 case_data。実運用案件の正本ではない
     form_definitions/  # フォーム項目台帳 (rasens_offer_fields 等)
     mappings/          # case_data -> フォーム入力への変換ルール
     generated/         # Chrome拡張投入用 application_data (派生物)
@@ -31,9 +31,9 @@ rasens-autofill/
 
 ## 重要ファイル
 
-- `docs/データ設計.md`: case_data / form_definitions / application_data の3層設計とフォルダ構成
+- `docs/データ設計.md`: Firestore case_data / form_definitions / application_data の役割整理とフォルダ構成
 - `docs/Chrome_DevTools_MCP_autoConnect.md`: DevTools MCP 接続手順
-- `data/cases/demo_case_data.json`: 架空デモ案件の正規データ (正本)
+- `data/cases/demo_case_data.json`: 架空デモ案件の fixture。実運用案件の正本ではない
 - `data/form_definitions/rasens_offer_fields.json`: フォーム全項目台帳の正本
 - `data/mappings/rasens_offer_mapping.json`: 正規 case_data からフォーム入力行への変換ルール
 - `data/generated/demo_application_data.json`: デモ案件から生成した Chrome 拡張投入用 JSON
@@ -44,13 +44,13 @@ rasens-autofill/
 
 ## データフロー
 
-Chrome拡張は visa-app API 経由でautofillデータを取得する。
+Chrome拡張は visa-app API 経由でautofillデータを取得する。現行実装では `/cases/{case_id}/autofill-data` から取得した case_data 風JSONを拡張側で `application_data` 行に変換する。
 
 ```
 visa-app (Gemini/Codex抽出) → /cases/{case_id}/autofill-data → Chrome拡張 (api_client.js) → content.js → RASENSフォーム
 ```
 
-visa-app の `autofill_adapter.py` が抽出結果（case_data形式）をChrome拡張の `application_data` スキーマに変換する。
+今後の整理では、backend が `/cases/{case_id}/application-data` のようなエンドポイントで投入行を生成し、Chrome拡張は rows を取得して RASENS DOM に入力するだけの薄い責務へ寄せる方針。
 
 ## Chrome拡張の接続先設定
 

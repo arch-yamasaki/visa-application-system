@@ -19,9 +19,7 @@
 
 ### visa-eval/docs/
 
-- [テスト設計.md](../visa-eval/docs/テスト設計.md): raw資料、document_manifest、golden expected、generated出力のテスト構成
 - [AIブラインド抽出実行手順.md](../visa-eval/docs/AIブラインド抽出実行手順.md): expected/goldenを見せずにAI抽出を実行する手順
-- [フォルダ整理案.md](../visa-eval/docs/フォルダ整理案.md): test_cases_from_raw、blind_runs_from_test_cases、eval_configの役割分担案
 - [単票評価ワークフローまとめ.md](../visa-eval/docs/単票評価ワークフローまとめ.md): 単票fixture、expected、Chrome拡張投入までの全体像
 
 ### rasens-autofill/docs/
@@ -36,7 +34,9 @@
 
 ## データの正本と生成物
 
-案件の正本は `rasens-autofill/data/cases/*case_data.json`。OCR、ヒアリング、人手補正、レビュー状態、根拠資料はここに寄せる。
+実運用のケース保存先は Firestore の `cases` コレクション。現時点の `case_data` は Gemini 抽出形式とのズレが残るため、canonical schema は未確定。
+
+`rasens-autofill/data/cases/*case_data.json` はデモ・fixture用途であり、実運用案件の正本ではない。
 
 フォーム項目の正本は `rasens-autofill/data/form_definitions/rasens_offer_fields.json`。在留申請オンラインシステムの `field_id`、`field_name`、選択肢、条件付き項目、繰り返し項目を保持する。
 

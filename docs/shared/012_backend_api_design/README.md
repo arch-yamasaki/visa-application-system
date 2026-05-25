@@ -2,7 +2,7 @@
 
 > 対象コード: `visa-app/backend/main.py` および `visa-app/backend/extractors/`
 >
-> 関連ドキュメント: `docs/shared/008_gemini_backend_design.md`（Gemini extractorの型定義・プロンプト設計に特化）。本ドキュメントはAPI全体設計とエンジン比較・使い分けに特化する。
+> 古いGemini extractor設計ドラフトは、現行実装とのズレが大きいため削除済み。実装判断はこの文書と対象コードを確認する。
 
 ---
 
