@@ -30,6 +30,10 @@ function byName(name) {
   return Array.from(document.querySelectorAll(`[name="${cssEscape(name)}"]`));
 }
 
+function isRasensOfferFormPage() {
+  return Boolean(document.querySelector("form#frm")) && Boolean(document.getElementById("select_256097"));
+}
+
 function rowContainer(element) {
   return element?.closest("dl, tr, .c-input, .form-group, fieldset, section, div") || null;
 }
@@ -360,21 +364,25 @@ if (window.__visaAutofillContentHandler) {
 window.__visaAutofillContentInstalled = true;
 window.__visaAutofillContentVersion = VISA_AUTOFILL_CONTENT_VERSION;
 window.__visaAutofillContentHandler = (message, _sender, sendResponse) => {
-    if (message.type === "VISA_AUTOFILL_PREVIEW") {
-      sendResponse({ message: previewRows(message.rows || []) });
-      return true;
-    }
-    if (message.type === "VISA_AUTOFILL_FILL") {
-      sendResponse({ message: fillRows(message.rows || []) });
-      return true;
-    }
-    if (message.type === "VISA_AUTOFILL_FILL_PROGRESSIVE") {
-      fillRowsProgressively(message.rows || []).then((messageText) => {
-        sendResponse({ message: messageText });
-      });
-      return true;
-    }
-    return false;
+  if (!isRasensOfferFormPage()) {
+    sendResponse({ message: "在留申請オンラインシステムの申請フォーム画面で実行してください" });
+    return true;
+  }
+  if (message.type === "VISA_AUTOFILL_PREVIEW") {
+    sendResponse({ message: previewRows(message.rows || []) });
+    return true;
+  }
+  if (message.type === "VISA_AUTOFILL_FILL") {
+    sendResponse({ message: fillRows(message.rows || []) });
+    return true;
+  }
+  if (message.type === "VISA_AUTOFILL_FILL_PROGRESSIVE") {
+    fillRowsProgressively(message.rows || []).then((messageText) => {
+      sendResponse({ message: messageText });
+    });
+    return true;
+  }
+  return false;
 };
 
 chrome.runtime.onMessage.addListener(window.__visaAutofillContentHandler);

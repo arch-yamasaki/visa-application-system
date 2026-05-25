@@ -15,7 +15,7 @@ const demoCaseData = {
     source_organization: 'Demo Recruiting Agency',
     application_type: 'certificate_of_eligibility',
     target_status: 'engineer_humanities_international',
-    workflow_state: 'needs_review',
+    workflow_state: 'extracted',
     routed_to_human_reason: [],
   },
   entry_plan: {
@@ -271,7 +271,7 @@ const DEMO_CASE_ID = 'demo-gijinkoku-001'
 
 const demoCaseDocument: CaseDocument = {
   case_id: DEMO_CASE_ID,
-  workflow_state: 'needs_review',
+  workflow_state: 'extracted',
   created_at: '2026-05-10T09:00:00Z',
   updated_at: '2026-05-10T12:00:00Z',
   case_data: demoCaseData as CaseDocument['case_data'],
@@ -283,7 +283,7 @@ const demoCaseDocument: CaseDocument = {
 
 const demoCaseSummary: CaseSummary = {
   case_id: DEMO_CASE_ID,
-  workflow_state: 'needs_review',
+  workflow_state: 'extracted',
   created_at: '2026-05-10T09:00:00Z',
   applicant_name_preview: 'NGUYEN VAN DEMO',
 }
@@ -334,7 +334,7 @@ export const mockApi = {
   }): Promise<{ case_id: string; workflow_state: string; created_at: string }> {
     return Promise.resolve({
       case_id: DEMO_CASE_ID,
-      workflow_state: 'needs_review',
+      workflow_state: 'extracted',
       created_at: '2026-05-10T09:00:00Z',
     })
   },

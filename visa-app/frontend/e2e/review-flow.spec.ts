@@ -7,6 +7,19 @@ test.describe('CaseListPage', () => {
     await expect(page.getByRole('button', { name: '+ 新規案件' })).toBeVisible()
     await expect(page.getByText('抽出済み')).toBeVisible()
   })
+
+  test('copies case_id without opening the case', async ({ page }) => {
+    await page.goto('/?demo=true')
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], {
+      origin: new URL(page.url()).origin,
+    })
+
+    await page.getByRole('button', { name: 'demo-gijinkoku-001 をコピー' }).click()
+
+    await expect(page).toHaveURL(/\?demo=true/)
+    await expect(page.getByText('コピー済')).toBeVisible()
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('demo-gijinkoku-001')
+  })
 })
 
 test.describe('ReviewPage demo mode', () => {
@@ -15,7 +28,7 @@ test.describe('ReviewPage demo mode', () => {
   })
 
   test('shows ReviewBanner with case_id', async ({ page }) => {
-    await expect(page.getByText('demo-gijinkoku-001').first()).toBeVisible()
+    await expect(page.getByRole('button', { name: 'demo-gijinkoku-001 をコピー' })).toBeVisible()
     await expect(page.getByText('抽出済み')).toBeVisible()
   })
 
@@ -95,8 +108,8 @@ test.describe('Demo mode navigation', () => {
     await page.goto('/?demo=true')
     await expect(page.getByRole('heading', { name: '案件一覧' })).toBeVisible()
 
-    // Click the demo case card
-    await page.getByText('demo-gijinkoku-001').click()
+    // Click the demo case card outside the copyable case_id control
+    await page.getByText('NGUYEN VAN DEMO').click()
 
     // Should navigate to review page with demo=true
     await expect(page).toHaveURL(/\/cases\/demo-gijinkoku-001\/review\?demo=true/)

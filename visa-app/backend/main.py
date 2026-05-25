@@ -472,8 +472,6 @@ def update_case(case_id: str, body: UpdateCaseRequest):
         updates["field_metadata"] = body.field_metadata
     if body.workflow_state is not None:
         updates["workflow_state"] = body.workflow_state
-        if body.workflow_state == "ready_to_fill":
-            updates["confirmed_at"] = _now_iso()
 
     ref.update(updates)
 
@@ -1135,16 +1133,16 @@ def start_extraction_stream(case_id: str, body: ExtractRequest = ExtractRequest(
                     "scoped": body.scoped,
                     "completed_at": _now_iso(),
                 },
-                "workflow_state": "needs_review",
+                "workflow_state": "extracted",
                 "updated_at": _now_iso(),
             })
 
-            final_state = "needs_review"
+            final_state = "extracted"
             _log_extract_metric(
                 "firestore_state_updated",
                 run_id=run_id,
                 case_id=case_id,
-                workflow_state="needs_review",
+                workflow_state="extracted",
             )
             _log_extract_metric(
                 "stream_completed",
@@ -1152,11 +1150,11 @@ def start_extraction_stream(case_id: str, body: ExtractRequest = ExtractRequest(
                 case_id=case_id,
                 elapsed_ms=round((time.monotonic() - stream_started_at) * 1000),
             )
-            yield send("complete", workflow_state="needs_review")
+            yield send("complete", workflow_state="extracted")
 
         except Exception as exc:
             logger.error("Stream extraction failed for case %s: %s", case_id, exc)
-            final_state = "extraction_failed"
+            final_state = "failed"
             try:
                 ref.update({
                     "extraction": {
@@ -1167,14 +1165,14 @@ def start_extraction_stream(case_id: str, body: ExtractRequest = ExtractRequest(
                         "failed_at": _now_iso(),
                         "error_type": type(exc).__name__,
                     },
-                    "workflow_state": "extraction_failed",
+                    "workflow_state": "failed",
                     "updated_at": _now_iso(),
                 })
                 _log_extract_metric(
                     "firestore_state_updated",
                     run_id=run_id,
                     case_id=case_id,
-                    workflow_state="extraction_failed",
+                    workflow_state="failed",
                 )
             except Exception:
                 pass
@@ -1201,7 +1199,7 @@ def start_extraction_stream(case_id: str, body: ExtractRequest = ExtractRequest(
                             "scoped": body.scoped,
                             "interrupted_at": _now_iso(),
                         },
-                        "workflow_state": "extraction_failed",
+                        "workflow_state": "failed",
                         "updated_at": _now_iso(),
                     })
                     _log_extract_metric(
@@ -1258,7 +1256,7 @@ def _start_gemini_extraction(
     now = _now_iso()
     case_ref.update({"workflow_state": "extracting", "updated_at": now})
 
-    final_state = "extraction_failed"
+    final_state = "failed"
     error_msg: str | None = None
     result: ExtractionResult | None = None
 
@@ -1270,33 +1268,33 @@ def _start_gemini_extraction(
                 "case_data": result.display_case_data,    # 表示用（従来形式）をFirestoreに保存
                 "review": result.review,
                 "field_metadata": result.field_metadata,  # 互換レイヤーで自動生成済み
-                "workflow_state": "needs_review",
+                "workflow_state": "extracted",
                 "updated_at": _now_iso(),
             }
         )
-        final_state = "needs_review"
+        final_state = "extracted"
 
     except Exception as exc:
         logger.error("Gemini extraction failed for case %s: %s", case_id, exc)
         error_msg = str(exc)
 
     finally:
-        if final_state != "needs_review":
+        if final_state != "extracted":
             # Extraction did not complete successfully — ensure Firestore
             # reflects the failure so the case is never stuck in 'extracting'.
             try:
                 case_ref.update(
-                    {"workflow_state": "extraction_failed", "updated_at": _now_iso()}
+                    {"workflow_state": "failed", "updated_at": _now_iso()}
                 )
             except Exception as update_exc:
                 logger.error(
-                    "Failed to update workflow_state to extraction_failed for case %s: %s",
+                    "Failed to update workflow_state to failed for case %s: %s",
                     case_id, update_exc,
                 )
 
-    if final_state == "needs_review":
-        return {"status": "completed", "workflow_state": "needs_review"}
-    return {"status": "extraction_failed", "error": error_msg or "unknown error"}
+    if final_state == "extracted":
+        return {"status": "completed", "workflow_state": "extracted"}
+    return {"status": "failed", "error": error_msg or "unknown error"}
 
 
 def _start_codex_extraction(
@@ -1369,7 +1367,7 @@ def _start_codex_extraction(
         run_ref.update({"status": "launch_failed", "error": str(exc)})
         session_ref.update({"status": "launch_failed", "updated_at": _now_iso()})
         case_ref.update(
-            {"workflow_state": "extraction_failed", "updated_at": _now_iso()}
+            {"workflow_state": "failed", "updated_at": _now_iso()}
         )
         return {
             "session_id": session_id,
@@ -1456,7 +1454,7 @@ def _harvest_extraction_results(
             check=True,
         )
 
-        updates: dict = {"updated_at": _now_iso(), "workflow_state": "needs_review"}
+        updates: dict = {"updated_at": _now_iso(), "workflow_state": "extracted"}
 
         # Look for generated/ files
         for name, field in [

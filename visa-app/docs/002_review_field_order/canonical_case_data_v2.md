@@ -45,7 +45,7 @@ application_data rows
 {
   "case_id": "case_xxx",
   "schema_version": "2.0",
-  "workflow_state": "needs_review",
+  "workflow_state": "extracted",
   "created_at": "2026-05-25T10:00:00+09:00",
   "updated_at": "2026-05-25T10:05:00+09:00",
   "case_data": {},
@@ -57,8 +57,7 @@ application_data rows
     "model": "gemini-3-flash-preview",
     "run_id": "run_xxx",
     "raw_stored": false
-  },
-  "confirmed_at": null
+  }
 }
 ```
 
@@ -68,7 +67,7 @@ application_data rows
 | `schema_version` | case document全体のスキーマ版 |
 | `workflow_state` | UI/拡張が参照する状態 |
 | `case_data` | 入力値の正本 |
-| `field_metadata` | 抽出根拠・人手確認状態 |
+| `field_metadata` | 抽出根拠・人手編集情報 |
 | `review` | 不足・矛盾・人判断の理由 |
 | `document_manifest` | アップロード書類一覧 |
 | `extraction` | 抽出エンジン・run情報。rawを保存する場合も正本ではない |
@@ -80,12 +79,11 @@ application_data rows
 | state | 意味 |
 |---|---|
 | `draft` | ケース作成直後 |
-| `uploading` | 書類アップロード中 |
 | `extracting` | AI抽出中 |
-| `needs_review` | 抽出済み。人の確認が必要 |
-| `ready_to_fill` | レビュー完了。Chrome拡張投入可能 |
-| `extraction_failed` | 抽出失敗 |
-| `archived` | 対象外・終了 |
+| `extracted` | 抽出結果が保存され、レビュー画面で確認・編集できる |
+| `failed` | 抽出失敗 |
+
+`needs_review`、`ready_to_fill`、`extraction_failed`、`launch_failed` は移行互換として読み取るだけにし、新規保存値としては増やしません。
 
 `filled` や `submitted` は、RASENS側の最終操作を自動化しない限り初期MVPでは使いません。
 

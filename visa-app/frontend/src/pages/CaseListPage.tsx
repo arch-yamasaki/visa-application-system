@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { apiClient } from '../api/client'
+import CopyableCaseId from '../components/common/CopyableCaseId'
 import { isExtractedWorkflowState, toWorkflowDisplayState, workflowStateColor, workflowStateLabel } from '../lib/workflowState'
 import type { CaseSummary } from '../types/caseData'
 
@@ -55,9 +56,11 @@ export default function CaseListPage() {
               className="flex items-center justify-between p-4 bg-white rounded-lg border border-gray-200 hover:border-blue-300 cursor-pointer transition-colors"
             >
               <div>
-                <p className="font-medium text-gray-800 text-sm font-mono">
-                  {c.case_id}
-                </p>
+                <CopyableCaseId
+                  caseId={c.case_id}
+                  className="font-medium text-gray-800 text-sm"
+                  stopPropagation
+                />
                 {c.applicant_name_preview && (
                   <p className="text-sm text-gray-500 mt-0.5">
                     {c.applicant_name_preview}

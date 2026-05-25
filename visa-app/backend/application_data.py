@@ -10,6 +10,7 @@ from typing import Any
 
 
 EMPTY_STRINGS = {"unknown", "not_applicable", "n/a", "na"}
+FILLABLE_WORKFLOW_STATES = {"extracted", "needs_review", "ready_to_fill"}
 
 
 def get_path(data: dict[str, Any], path: str) -> Any:
@@ -42,6 +43,10 @@ def is_empty_value(value: Any) -> bool:
         stripped = value.strip()
         return not stripped or stripped.lower() in EMPTY_STRINGS
     return False
+
+
+def is_fillable_workflow_state(workflow_state: str) -> bool:
+    return workflow_state in FILLABLE_WORKFLOW_STATES
 
 
 def transform_value(value: Any, transform: str = "") -> str:
@@ -100,6 +105,9 @@ def default_form_definitions_path() -> Path | None:
     workspace_path = WORKSPACE_DIR / "rasens-autofill/data/form_definitions/rasens_offer_fields.json"
     if workspace_path.exists():
         return workspace_path
+    backend_path = BACKEND_DIR / "data/form_definitions/rasens_offer_fields.json"
+    if backend_path.exists():
+        return backend_path
     return None
 
 
@@ -219,8 +227,8 @@ def build_application_data(
         source_data["settings"] = settings
     workflow_state = case_doc.get("workflow_state") or case_data.get("case", {}).get("workflow_state", "")
     rows = build_rows(source_data, mapping, form_definitions)
-    fillable = workflow_state == "ready_to_fill"
-    warnings = [] if fillable else ["workflow_state is not ready_to_fill"]
+    fillable = is_fillable_workflow_state(workflow_state)
+    warnings = [] if fillable else [f"workflow_state is not fillable: {workflow_state or 'unknown'}"]
 
     return {
         "schema_version": "1.0",

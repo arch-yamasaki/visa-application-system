@@ -13,10 +13,10 @@
         <h2>visa-app から読込</h2>
         <input id="caseId" type="text" placeholder="case_id を入力">
         <div id="workflowWarning" class="warning" hidden>
-          ⚠ このケースはまだレビューが完了していません（状態: <span id="wfState"></span>）
+          ⚠ このケースは入力可能状態ではありません（状態: <span id="wfState"></span>）
         </div>
         <div id="workflowReady" class="ready" hidden>
-          ✓ 入力準備完了
+          ✓ 抽出済み: 入力できます
         </div>
         <button id="loadFromApi" type="button">visa-appから読込</button>
         <a href="#" id="setApiUrl">接続先設定</a>

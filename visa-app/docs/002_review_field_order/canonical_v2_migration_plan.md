@@ -260,17 +260,17 @@ Tasks:
 
 - 実データ抽出と bbox 取得の成功判定を分離する。
 - scope単位の成功/失敗をログと保存状態から追えるようにする。
-- partial extraction は人間レビュー可能にする。ただし `ready_to_fill` には進めない。
+- partial extraction は人間レビュー可能にする。全主要scopeが失敗した場合だけ `failed` にする。
 - scopeごとに渡す文書と prompt 上の書類一覧を一致させる。
 - ファイル名推測から `document_role` / 自動分類結果ベースの文書ルーティングへ移行する。
 - ローカル実データQAの手順を [real_data_extraction_runbook.md](real_data_extraction_runbook.md) に集約する。
-- `/application-data` の `fillable` 条件に抽出完了・レビュー完了・warningなしを反映する。
+- `/application-data` の `fillable` 条件に抽出完了・warningなしを反映する。
 
 Done:
 
 - `/extract-stream` が中断されても `workflow_state=extracting` に残らない。
 - 一部scope失敗時も成功scopeの結果をレビュー可能にし、失敗scopeを `review.validation_errors` に残す。
-- `needs_review` のケースでは `/application-data.fillable=false` になる。
+- `extracted` 相当のケースでは `/application-data.fillable=true` になる。
 
 ### Phase 1: Gemini Output to Canonical v2
 
@@ -342,7 +342,7 @@ Tasks:
   - `date_yyyymm`
   - boolean yes/no
   - select/radio label/value mapping
-- `ready_to_fill` 前は preview可能だが `fillable: false` を返す。
+- `draft`、`extracting`、`failed` は preview可能だが `fillable: false` を返す。
 - `intermediary` は太田さん側の申請アカウントを持つ申請会社情報から注入する固定設定値として扱う。
 - `proxy` は代理人として案件データに持つ。住所・電話は `employer.*` から初期化できるが、氏名は会社名ではなく受入企業側の担当者として人確認する。
 

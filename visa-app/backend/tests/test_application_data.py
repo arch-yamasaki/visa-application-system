@@ -2,7 +2,7 @@
 
 import pytest
 
-from application_data import build_application_data, build_rows
+from application_data import build_application_data, build_rows, is_fillable_workflow_state
 
 
 FORM_DEFINITIONS = {
@@ -136,7 +136,7 @@ MAPPING = {
 
 CASE_DOC = {
     "case_id": "case_test01",
-    "workflow_state": "ready_to_fill",
+    "workflow_state": "extracted",
     "case_data": {
         "case": {"case_id": "case_test01"},
         "entry_plan": {"main_activity_category": "技術・人文知識・国際業務"},
@@ -201,13 +201,32 @@ def test_build_application_data_summary_and_fillable():
     assert result["mapping_version"] == "0.2.0"
 
 
-def test_not_ready_returns_rows_but_not_fillable():
-    case_doc = {**CASE_DOC, "workflow_state": "needs_review"}
+@pytest.mark.parametrize("workflow_state", ["extracted", "needs_review", "ready_to_fill"])
+def test_fillable_workflow_states(workflow_state):
+    assert is_fillable_workflow_state(workflow_state) is True
+
+    case_doc = {**CASE_DOC, "workflow_state": workflow_state}
+
+    result = build_application_data(case_doc, MAPPING, FORM_DEFINITIONS)
+
+    assert result["fillable"] is True
+    assert result["warnings"] == []
+    assert result["summary"]["rows_total"] == 5
+
+
+@pytest.mark.parametrize(
+    "workflow_state",
+    ["draft", "extracting", "failed", "extraction_failed", "launch_failed", ""],
+)
+def test_unfillable_workflow_states_return_rows_for_preview(workflow_state):
+    assert is_fillable_workflow_state(workflow_state) is False
+
+    case_doc = {**CASE_DOC, "workflow_state": workflow_state}
 
     result = build_application_data(case_doc, MAPPING, FORM_DEFINITIONS)
 
     assert result["fillable"] is False
-    assert result["warnings"] == ["workflow_state is not ready_to_fill"]
+    assert result["warnings"] == [f"workflow_state is not fillable: {workflow_state or 'unknown'}"]
     assert result["summary"]["rows_total"] == 5
 
 

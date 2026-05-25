@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { apiClient } from '../api/client'
+import CopyableCaseId from '../components/common/CopyableCaseId'
 import DropZone from '../components/upload/DropZone'
 import FileList from '../components/upload/FileList'
 import ExtractionProgress from '../components/upload/ExtractionProgress'
@@ -85,13 +86,13 @@ export default function UploadPage() {
     // Codex → 従来の同期リクエスト + ポーリング
     try {
       const result = await apiClient.startExtraction(caseId, { backend, pattern })
-      if (result.status === 'completed' || result.status === 'needs_review') {
+      if (result.status === 'completed' || result.status === 'extracted' || result.status === 'needs_review') {
         setExtracting(false)
         setExtractionStatus('completed')
         navigate(`/cases/${caseId}/review`)
         return
       }
-      if (result.status === 'extraction_failed' || result.status === 'launch_failed') {
+      if (result.status === 'failed' || result.status === 'extraction_failed' || result.status === 'launch_failed') {
         setExtracting(false)
         setExtractionStatus('failed')
         setExtractionError(result.error || null)
@@ -101,7 +102,7 @@ export default function UploadPage() {
       const poll = setInterval(async () => {
         const status = await apiClient.getExtractionStatus(caseId)
         setExtractionStatus(status.status)
-        if (status.status === 'completed' || status.status === 'needs_review') {
+        if (status.status === 'completed' || status.status === 'extracted' || status.status === 'needs_review') {
           clearInterval(poll)
           setExtracting(false)
           navigate(`/cases/${caseId}/review`)
@@ -121,9 +122,16 @@ export default function UploadPage() {
       <h2 className="text-xl font-semibold text-gray-800 mb-1">
         書類アップロード
       </h2>
-      <p className="text-sm text-gray-500 mb-6">
-        案件: <span className="font-mono">{caseId}</span>
-      </p>
+      <div className="text-sm text-gray-500 mb-6">
+        案件:{' '}
+        {caseId && (
+          <CopyableCaseId
+            caseId={caseId}
+            className="text-sm"
+            feedbackClassName="text-xs"
+          />
+        )}
+      </div>
 
       <DropZone onFilesSelected={handleFilesSelected} disabled={uploading || extracting} />
 
@@ -167,7 +175,7 @@ export default function UploadPage() {
         >
           {extracting ? '抽出中...' : '抽出開始'}
         </button>
-        {(extractionStatus === 'completed' || extractionStatus === 'needs_review') && (
+        {(extractionStatus === 'completed' || extractionStatus === 'extracted' || extractionStatus === 'needs_review') && (
           <button
             onClick={() => navigate(`/cases/${caseId}/review`)}
             className="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm"

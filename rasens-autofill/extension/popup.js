@@ -1,4 +1,5 @@
 const statusBox = document.querySelector("#status");
+const RASENS_URL_PATTERNS = ["https://www.rasens-immi.moj.go.jp/*"];
 
 function setStatus(message) {
   statusBox.textContent = message;
@@ -25,9 +26,30 @@ async function getActiveTab() {
   return tab;
 }
 
+function isRasensTab(tab) {
+  try {
+    const url = new URL(tab?.url || "");
+    return url.protocol === "https:" && url.hostname === "www.rasens-immi.moj.go.jp";
+  } catch {
+    return false;
+  }
+}
+
+async function getRasensTab() {
+  const activeTab = await getActiveTab();
+  if (isRasensTab(activeTab)) return activeTab;
+
+  const rasensTabs = await chrome.tabs.query({ url: RASENS_URL_PATTERNS });
+  if (rasensTabs.length === 1) return rasensTabs[0];
+  if (rasensTabs.length > 1) {
+    throw new Error("RASENSタブが複数あります。入力したいRASENSタブをアクティブにしてから実行してください");
+  }
+  throw new Error("在留申請オンラインシステムのページを開いてから実行してください");
+}
+
 async function ensureContentScript(tab) {
   if (!tab?.id) throw new Error("アクティブなタブを取得できませんでした");
-  if (!tab.url?.startsWith("https://www.rasens-immi.moj.go.jp/")) {
+  if (!isRasensTab(tab)) {
     throw new Error("在留申請オンラインシステムのページで実行してください");
   }
 
@@ -56,19 +78,20 @@ async function sendToTab(type) {
     return;
   }
 
-  const tab = await getActiveTab();
+  let tab;
   try {
-    setStatus("ページへ接続しています...");
-    const message = await sendMessageOrThrow(tab, type, visaRows);
-    setStatus(message);
-  } catch (error) {
+    tab = await getRasensTab();
     try {
+      setStatus("ページへ接続しています...");
+      const message = await sendMessageOrThrow(tab, type, visaRows);
+      setStatus(message);
+    } catch (error) {
       await ensureContentScript(tab);
       const message = await sendMessageOrThrow(tab, type, visaRows);
       setStatus(message);
-    } catch (retryError) {
-      setStatus(`ページに接続できませんでした\n${retryError.message || error.message}`);
     }
+  } catch (error) {
+    setStatus(`ページに接続できませんでした\n${error.message}`);
   }
 }
 
@@ -92,16 +115,23 @@ chrome.storage.local.get(["visaRows", "visaDataSource", "visaFillable"]).then(({
 
 // --- visa-app API integration ---
 
-const stateLabel = {
-  draft: "下書き",
-  uploading: "アップロード中",
-  extracting: "抽出中...",
-  needs_review: "要レビュー",
-  ready_to_fill: "入力準備完了",
-  archived: "アーカイブ",
-  extraction_failed: "抽出失敗",
-  launch_failed: "起動失敗"
+const workflowStateLabel = {
+  draft: "未抽出",
+  extracting: "抽出中",
+  extracted: "抽出済み",
+  failed: "抽出失敗"
 };
+
+function toWorkflowDisplayState(workflowState) {
+  if (workflowState === "extracting") return "extracting";
+  if (workflowState === "needs_review" || workflowState === "ready_to_fill" || workflowState === "extracted") {
+    return "extracted";
+  }
+  if (workflowState === "extraction_failed" || workflowState === "launch_failed" || workflowState === "failed") {
+    return "failed";
+  }
+  return "draft";
+}
 
 document.querySelector("#setApiUrl").addEventListener("click", (e) => {
   e.preventDefault();
@@ -127,12 +157,12 @@ document.querySelector("#loadFromApi").addEventListener("click", async () => {
     setStatus("visa-app から取得中...");
     const applicationData = await window.apiClient.getApplicationData(caseId);
 
-    // Show workflow_state banner
     const workflowState = applicationData.workflow_state;
-    if (workflowState === "ready_to_fill") {
+    const displayState = toWorkflowDisplayState(workflowState);
+    document.querySelector("#wfState").textContent = workflowStateLabel[displayState];
+    if (applicationData.fillable) {
       document.querySelector("#workflowReady").hidden = false;
-    } else if (workflowState) {
-      document.querySelector("#wfState").textContent = stateLabel[workflowState] || workflowState;
+    } else {
       document.querySelector("#workflowWarning").hidden = false;
     }
 

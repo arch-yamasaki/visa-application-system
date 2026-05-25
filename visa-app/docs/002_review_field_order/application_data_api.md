@@ -28,7 +28,7 @@ GET /cases/{case_id}/application-data
 {
   "schema_version": "1.0",
   "case_id": "case_xxx",
-  "workflow_state": "ready_to_fill",
+  "workflow_state": "extracted",
   "fillable": true,
   "mapping_version": "0.1.0",
   "form_definition": "rasens_offer_fields.json",
@@ -55,7 +55,13 @@ GET /cases/{case_id}/application-data
 | `summary` | 生成結果の概要 |
 | `rows` | Chrome拡張が入力する行 |
 
-`workflow_state` が `ready_to_fill` でない場合でも、preview目的で `rows` を返してよいです。ただし `fillable` は `false` にし、Chrome拡張側で警告を出します。
+`workflow_state` が入力不可状態でも、preview目的で `rows` を返してよいです。ただし `fillable` は `false` にし、Chrome拡張側で警告を出します。
+
+投入可能扱い:
+
+- `extracted`
+- `needs_review`（移行互換）
+- `ready_to_fill`（移行互換）
 
 ## Row schema
 
@@ -184,9 +190,9 @@ Chrome拡張から削るもの:
 | case not found | 404 | `{ "detail": "Case not found" }` |
 | case_data missing | 400 | `{ "detail": "case_data not found" }` |
 | mapping load failed | 500 | `{ "detail": "mapping load failed" }` |
-| not ready | 200 | `fillable: false`, `warnings: [...]` |
+| not fillable | 200 | `fillable: false`, `warnings: [...]` |
 
-`ready_to_fill` でなくても 200 を返すのは、Chrome拡張で preview したいケースがあるためです。実投入ボタンは `fillable` を見て制御します。
+入力不可状態でも 200 を返すのは、Chrome拡張で preview したいケースがあるためです。実投入ボタンは `fillable` を見て制御します。
 
 ## 検証
 

@@ -41,7 +41,7 @@
 12. 実装内部の配列pathは `applicant.education.0.school_name` の dot index 形式に統一する。
 13. レビュー画面は Phase 1 では canonical section順、Phase 2 では RASENS順の catalog駆動へ移行する。
 14. `case_data.golden` は canonical v2 正解、`application_data.golden` は backend generator の期待出力として分ける。
-15. bbox 取得はPDF由来の根拠に対して事前実行する。ただし bbox 失敗は値抽出の失敗扱いにしない。partial extraction は `ready_to_fill` に進めない。
+15. bbox 取得はPDF由来の根拠に対して事前実行する。ただし bbox 失敗は値抽出の失敗扱いにしない。partial extraction はレビュー画面で確認できる形で `extracted` に保存し、全主要scopeが失敗した場合だけ `failed` にする。
 
 ## 正本の分担
 

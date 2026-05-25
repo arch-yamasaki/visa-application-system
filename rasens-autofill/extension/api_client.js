@@ -3,16 +3,15 @@
  * Fetches generated application-data rows from visa-app backend.
  */
 
+const DEFAULT_API_URL = "http://localhost:8080";
+
 /**
  * Retrieve visa-app API URL from chrome.storage.local.
  * @returns {Promise<string>}
  */
 async function getApiUrl() {
   const { visaAppApiUrl } = await chrome.storage.local.get(["visaAppApiUrl"]);
-  if (!visaAppApiUrl) {
-    throw new Error("API URLが未設定です。設定画面からAPI URLを入力してください。");
-  }
-  return visaAppApiUrl;
+  return visaAppApiUrl?.trim() || DEFAULT_API_URL;
 }
 
 /**
@@ -45,7 +44,7 @@ async function getApplicationData(caseId) {
  */
 async function listCases() {
   const apiUrl = await getApiUrl();
-  const url = `${apiUrl}/cases?workflow_state=ready_to_fill&limit=20`;
+  const url = `${apiUrl}/cases?limit=20`;
 
   const response = await fetch(url);
 

@@ -273,13 +273,14 @@ const valueLabels: Record<string, string> = {
   extension_of_stay: '在留期間更新許可申請',
 
   // ワークフロー
-  draft: '下書き',
-  uploading: 'アップロード中',
+  draft: '未抽出',
   extracting: '抽出中',
-  needs_review: '要レビュー',
-  ready_to_fill: '入力準備完了',
-  archived: 'アーカイブ',
+  extracted: '抽出済み',
+  needs_review: '抽出済み',
+  ready_to_fill: '抽出済み',
+  failed: '抽出失敗',
   extraction_failed: '抽出失敗',
+  launch_failed: '抽出失敗',
 
   // 性別
   male: '男',
