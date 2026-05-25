@@ -37,7 +37,7 @@ AI/Codex
   -> generated/review.json
   -> generated/run_notes.md
 
-build_application_data.py
+backend generator / 評価用CLI
   -> generated/application_data.json
 
 人間レビュー
@@ -90,15 +90,14 @@ codex exec \
   "$(cat visa-eval/blind_runs_from_test_cases/<run_id>/AGENT_TASK.md)"
 
 # 3. application_data を生成
-python3 rasens-autofill/scripts/build_application_data.py \
-  visa-eval/blind_runs_from_test_cases/<run_id>/generated/case_data.json \
-  rasens-autofill/data/mappings/rasens_offer_mapping.json \
-  visa-eval/blind_runs_from_test_cases/<run_id>/generated/application_data.json
+# canonical v2移行後のbackend generator / 評価用CLIで生成する
 ```
 
 `<run_id>` は手順1で生成されるディレクトリ名（例: `20260512_114953_gijinkoku_a_company_round1__amit_tamang`）に置き換える。
 
 `-C` オプションで run ディレクトリを作業ディレクトリに指定するため、AI は `expected/` にアクセスできない。
+
+canonical v2移行後、`generated/case_data.json` は value-only の canonical path に統一します。配列pathは `applicant.education.0.school_name` の dot index 形式を使い、`application.*`, top-level `passport.*`, `employment_conditions.*` は出力しません。`generated/application_data.json` はAIが手書きせず、backend generator の出力として作ります。
 
 ## 3. AIに渡すもの
 
@@ -127,7 +126,7 @@ AIに渡してよいファイル:
 - `rasens-autofill/data/schemas/document_manifest.schema.json`
 - `rasens-autofill/data/mappings/rasens_offer_mapping.json`
 - `rasens-autofill/data/form_definitions/rasens_offer_fields.json`
-- `rasens-autofill/scripts/build_application_data.py`
+- backend generator またはそれを呼ぶ評価用CLI
 
 AIに渡してはいけないファイル:
 
@@ -156,20 +155,11 @@ generated/run_notes.md
 
 `generated/run_notes.md` は、どの資料を読んだか、どこが弱いか、次に人間が見るべき点のメモです。個人情報を長く貼り付けず、項目名と判断理由中心にします。
 
-AIに `generated/application_data.json` を手作業で作らせません。フォーム投入用JSONは deterministic に生成します。
+AIに `generated/application_data.json` を手作業で作らせません。フォーム投入用JSONは backend generator で deterministic に生成します。
 
 ## 5. application_dataを生成する
 
-AIが `generated/case_data.json` を作った後、人間またはスクリプトで次を実行します。
-
-```bash
-python3 rasens-autofill/scripts/build_application_data.py \
-  <run_dir>/generated/case_data.json \
-  rasens-autofill/data/mappings/rasens_offer_mapping.json \
-  <run_dir>/generated/application_data.json
-```
-
-これで、Chrome拡張と同じ形式のフォーム投入用行配列ができます。
+AIが `generated/case_data.json` を作った後、人間または評価用CLIが backend generator を呼び、Chrome拡張と同じ形式のフォーム投入用行配列を生成します。生成コマンドは canonical v2 の backend generator 実装時に確定します。
 
 ## 6. 人間レビューでgoldenと比較する
 
@@ -251,7 +241,7 @@ AI実行後:
 | AIが `expected/case_data.golden.json` を読む | 正解を写せるため評価不能 | runディレクトリだけ渡す。禁止文を明記する。 |
 | AIがExcelだけ見てPDFを読まない | 実運用で足りない項目が抜ける | `documents/` 全件を読んだメモを `run_notes.md` に書かせる。 |
 | 不明値を推測する | 実申請で危険 | 不明は空欄・`null`・`review.missing_items` にする。 |
-| `application_data` をAIが手書きする | マッピング検証と混ざる | `build_application_data.py` で生成する。 |
+| `application_data` をAIが手書きする | マッピング検証と混ざる | backend generator で生成する。 |
 | Consoleやチャットに実値を貼る | PII漏えい | 出力JSON内だけに保持し、共有時はマスクする。 |
 | Chrome拡張に実データを残す | 次案件へ混線する | 専用Chromeプロファイルと `chrome.storage.local` 削除を徹底する。 |
 

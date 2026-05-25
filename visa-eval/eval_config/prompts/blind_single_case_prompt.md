@@ -37,14 +37,9 @@
 - `generated/field_metadata.json`
 - `generated/run_notes.md`
 
-`generated/application_data.json` は手動で作成してはならない。`case_data.json` から以下のスクリプトで決定論的に生成すること：
+`generated/application_data.json` は手動で作成してはならない。canonical v2移行後は、backend generator またはそれを呼ぶ評価用CLIで `case_data.json` から決定論的に生成すること。旧 `rasens-autofill/scripts/build_application_data.py` 前提には戻さない。
 
-```bash
-python3 rasens-autofill/scripts/build_application_data.py \
-  <run_dir>/generated/case_data.json \
-  rasens-autofill/data/mappings/rasens_offer_mapping.json \
-  <run_dir>/generated/application_data.json
-```
+生成コマンドは移行実装で確定する。確定後はこのプロンプトに具体的なCLIを記載する。
 
 ## 出力言語に関するルール
 
@@ -61,7 +56,7 @@ python3 rasens-autofill/scripts/build_application_data.py \
 5. 職歴および資格。
 6. 雇用主・所属機関の情報。
 7. 雇用条件：職名、職務内容、給与、雇用期間、勤務地。
-8. `application.activity_details`（活動内容詳細）：技術・人文知識・国際業務の審査に適した記述にすること。
+8. `employment.activity_details`（活動内容詳細）：技術・人文知識・国際業務の審査に適した記述にすること。
 9. レビュー所見：欠損項目、根拠の弱い項目、矛盾点、人の判断が必要な理由。
 
 ## field_metadata.json 出力要件
@@ -87,7 +82,7 @@ case_data.json の各フィールドについて、抽出根拠を `generated/fi
 
 ### ルール
 
-- `field_path` は case_data のドットパス表記に対応する（例: `applicant.name_roman`, `education.0.school_name`, `employer.capital_jpy`）
+- `field_path` は canonical v2 `case_data` のドットパス表記に対応する（例: `applicant.name_roman`, `applicant.education.0.school_name`, `employer.capital_jpy`）
 - 複数の資料から値を確認できた場合は `source_refs` に複数エントリを記載する
 - `text_quote` は原文から直接引用し、50文字以内に収める。値そのものが短い場合はそのまま記載する
 - `confidence` の基準:
@@ -96,7 +91,7 @@ case_data.json の各フィールドについて、抽出根拠を `generated/fi
   - 0.5〜0.7: 複数の解釈が可能、または部分的にしか読み取れない
   - 0.5未満: 根拠が不十分だが推測で記入した（review.json にも記録すること）
 - 値が見つからない場合は `source_refs` を空配列 `[]` とし、`review.json` の `missing_items` に記録する
-- 配列要素（education, employment_history 等）は `education.0.school_name`, `education.1.school_name` のようにインデックス付きで記録する
+- 配列要素（`applicant.education`, `applicant.employment_history` 等）は `applicant.education.0.school_name`, `applicant.education.1.school_name` のようにインデックス付きで記録する
 
 ## レビュー方針
 

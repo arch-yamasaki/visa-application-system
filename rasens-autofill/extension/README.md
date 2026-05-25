@@ -1,6 +1,8 @@
 # Visa Application Autofill
 
-在留申請オンラインシステムの入力ページで、同梱JSONの値をフォームに投入するChrome拡張です。
+在留申請オンラインシステムの入力ページで、`application_data.rows` の値をフォームに投入するChrome拡張です。
+
+canonical v2 移行後は、Chrome拡張は `case_data`、mapping、`transform`、`visible_when` を解釈しません。visa-app backend の `/cases/{case_id}/application-data` が生成した `rows` を受け取り、RASENS DOM に入力するだけの薄い責務にします。
 
 ## 使い方
 
@@ -20,11 +22,11 @@
 
 ## データファイル
 
-- `application_data.json`: 拡張に同梱するデモ/検証用の自動入力データ。案件正本ではありません。
+- `application_data.json`: 拡張に同梱するデモ/検証用の自動入力データ。案件正本ではありません。実運用では `/application-data` から取得します。
 - `../data/cases/demo_case_data.json`: 架空デモ案件の正規データ。
 - `../data/generated/demo_application_data.json`: `demo_case_data.json` から生成した投入用JSON。
 - `../data/form_definitions/rasens_offer_fields.json`: フォーム全項目台帳の正本。
-- `../data/mappings/rasens_offer_mapping.json`: 正規データからフォーム入力行への変換ルール。
+- `../data/mappings/rasens_offer_mapping.json`: 正規データからフォーム入力行への変換ルール。canonical v2 では backend が読み、拡張には同梱しません。
 
 デモ投入JSONの再生成:
 
@@ -34,6 +36,8 @@ python3 ../scripts/build_application_data.py \
   ../data/mappings/rasens_offer_mapping.json \
   ../data/generated/demo_application_data.json
 ```
+
+canonical v2 移行時には、`build_application_data.js` と拡張同梱mappingを削除し、`popup.js` は `/application-data` の取得と `fillable` / `warnings` 表示だけに寄せます。`content.js` のDOM入力責務は残します。
 
 ## 注意
 

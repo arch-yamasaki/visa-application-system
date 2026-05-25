@@ -1,252 +1,115 @@
-# レビュー画面フィールド順序設計
+# レビュー項目・データ契約設計
 
-レビュー画面（ReviewPage）の左サイドバーに表示するフィールドのセクション構成・順序を、RASENSオンライン申請フォームに準拠して定義する。
+このディレクトリは、visa-app が扱う申請データの契約と、レビュー画面での表示順を定義するための設計場所です。
 
-## 設計方針
+## 目的
 
-- セクション名・順序はRASENSフォーム（在留資格認定証明書交付申請）の実際の入力画面に合わせる
-- セクション内のフィールド順序もRASENSフォームの項目番号（No.）に従う
-- Gemini抽出対象外のフィールド（代理人・取次者）もセクションとして表示し、手入力やデフォルト値で対応する
-- 内部メタデータ（case_id, workflow_state等）はサイドバーに表示しない
+現在の課題は、同じ意味の情報が次の3つの名前体系に分かれていることです。
 
-## RASENSフォームのセクション順序（原本）
+| 層 | 役割 | 問題 |
+|---|---|---|
+| Gemini抽出結果 | 書類から情報を拾うためのAI出力 | Gemini都合の短い/古いフィールド名が残っている |
+| Firestore `case_data` | visa-app の案件正本 | 現状はGemini出力に引きずられ、正本として安定していない |
+| RASENS / Chrome拡張 | 入管オンライン申請フォームへの投入 | 画面の物理ID・nameと混ざると内部データが壊れやすい |
 
-rasens_offer_fields.json に定義された公式セクション順:
+この設計では、Firestore の `case_data` を唯一の canonical data とし、Gemini raw と RASENS物理フィールドをそこから分離します。
 
-| 順番 | セクション名 | 項目数 | visa-appでの扱い |
-|------|-------------|--------|----------------|
-| 1 | 申請概要 | 1 | 非表示（在留資格種別は固定値） |
-| 2 | 身分事項 | 78 | **表示** |
-| 3 | 申請人に関する情報等 | 66 | **表示** |
+## ドキュメント構成
 
-### 身分事項 78項目の内訳
+| ファイル | 役割 |
+|---|---|
+| [canonical_case_data_v2.md](canonical_case_data_v2.md) | Firestore `CaseDocument v2`、`case_data`、`field_metadata`、`review` の正本設計 |
+| [review_field_catalog.md](review_field_catalog.md) | RASENSフォーム全体の順番を基準に、各項目を visa-app でどう扱うかを決める台帳 |
+| [application_data_api.md](application_data_api.md) | backend から Chrome拡張へ渡す `application_data` rows API の設計 |
+| [canonical_v2_migration_plan.md](canonical_v2_migration_plan.md) | 旧Gemini名互換変換をなくし、Chrome拡張をrows入力だけに薄くする移行計画 |
 
-| No. | 項目群 | 項目数 | 内容 |
-|-----|--------|--------|------|
-| 1〜8 | 申請人基本情報 | 8 | 国籍、生年月日、氏名、性別、出生地、配偶者、職業、本国居所 |
-| 9 | 日本の連絡先 | 6 | 郵便番号、住所、電話、携帯、メール、メール確認 |
-| 10 | 旅券 | 2 | 旅券番号、有効期限 |
-| 11〜16 | 入国計画 | 9 | 入国目的、予定日、上陸予定港(2)、滞在期間(2)、同伴者、査証申請地 |
-| 17 | 出入国歴 | 4 | 有無、回数、直近入国日、直近出国日 |
-| 18 | 過去のCOE申請 | 3 | 有無、回数、不交付回数 |
-| 19 | 犯罪歴 | 1 | 犯罪を理由とする処分の有無 |
-| 20 | 退去強制 | 3 | 有無、回数、直近年月日 |
-| **21** | **在日親族及び同居者** | **43** | **有無(1) + 最大6人 × 7属性(続柄、氏名、生年月日、国籍、同居予定、勤務先、在留カード番号)** |
-| | **合計** | **78** | |
+## 基本方針
 
-### 申請人に関する情報等 66項目の内訳
+1. Firestore `cases/{case_id}.case_data` は value-only の canonical data にする。
+2. OCR/Gemini根拠は `case_data` に埋めず、top-level `field_metadata` に置く。
+3. `review` は frontend が扱える object array 形式にする。Geminiの string array は保存前に正規化する。
+4. RASENSの `field_id`, `field_name`, `item[187].textData` は `case_data` に入れない。
+5. Chrome拡張は backend が返す `application_data.rows` を入力するだけにする。
+6. RASENS画面上の番号は `画面番号（参考）` として扱い、技術的なIDや一意キーにはしない。
+7. `case_data` の top-level section は増やしすぎない。申請人に属する旅券・履歴・家族・学歴・資格は `applicant.*` に寄せる。
+8. 所属機関そのものは `employer.*`、今回の契約・就労条件・活動内容は `employment.*` に分ける。
+9. `proxy` は代理人、`intermediary` は取次者として扱う。取次者は太田さん側の申請アカウントを持つ申請会社情報を固定設定値として注入する。
+10. RASENS mapping は274行台帳を正とし、MVP対象だけを自動投入する。`transform` と `visible_when` は backend だけが処理する。
+11. 旧path互換は作らない。既存Firestoreデータは削除・再抽出で対応する。
+12. 実装内部の配列pathは `applicant.education.0.school_name` の dot index 形式に統一する。
+13. レビュー画面は Phase 1 では canonical section順、Phase 2 では RASENS順の catalog駆動へ移行する。
+14. `case_data.golden` は canonical v2 正解、`application_data.golden` は backend generator の期待出力として分ける。
 
-| No. | 項目群 | 項目数 | 内容 |
-|-----|--------|--------|------|
-| — | 職歴の有無 | 7 | 有無(1) + 国・地域名(6社分) |
-| 23 | 最終学歴 | 5 | 区分、詳細区分、その他、学校名、卒業年月日 |
-| 24 | 専攻・専門分野 | 4 | 分野(2枠)、その他(2枠) |
-| 25 | 情報処理資格 | 2 | 有無、資格名 |
-| **26** | **職歴** | **48** | **最大6社 × 8項目(入社月不詳、入社年、入社月、退社月不詳、退社年、退社月、勤務先英字、勤務先漢字)** |
-| | **合計** | **66** | |
-| 4 | 代理人 | 6 | **表示** |
-| 5 | 取次者 | 5 | **表示** |
-| 6 | 所属機関に関する情報等 | 54 | **表示** |
-| 7 | 高度専門職ポイント表 | 57 | 非表示（技人国では対象外） |
-| 8 | 受領方法等 | 3 | 非表示（対象外） |
-| 9 | 入力情報確認 | 4 | 非表示（対象外） |
+## 正本の分担
 
-## サイドバーのセクション構成
+| データ | 正本 | 備考 |
+|---|---|---|
+| 案件情報 | Firestore `cases/{case_id}` | アプリの実運用正本 |
+| 入力値 | Firestore `case_data` | canonical path / value-only |
+| 抽出根拠 | Firestore `field_metadata` | canonical path keyed |
+| レビュー結果 | Firestore `review` | 不足・矛盾・人手確認理由 |
+| フォーム物理項目 | `rasens-autofill/data/form_definitions/rasens_offer_fields.json` | RASENS画面の台帳 |
+| フォーム変換 | `rasens-autofill/data/mappings/rasens_offer_mapping.json` | canonical path -> RASENS field。274行台帳を元にcanonical v2で作り直す |
+| Chrome投入行 | `/cases/{case_id}/application-data` の `rows` | 派生物。保存正本にしない |
+| 評価正解 | `visa-eval/test_cases_from_raw/**/expected/*.golden.json` | restricted test data。`case_data` と `application_data` を別物として比較する |
 
-### セクション1: 身分事項
+## canonical section 方針
 
-RASENSフォーム No.1〜21 に対応。申請人の基本情報、旅券、入国計画、出入国歴、在日親族を含む。
+`case_data` の top-level は次を基本にします。
 
-| No. | RASENSラベル | visa-appフィールド | データソース | 備考 |
-|-----|-------------|-------------------|------------|------|
-| 1 | 国籍・地域 | `applicant.nationality` | Gemini抽出 | |
-| 2 | 生年月日 | `applicant.date_of_birth` | Gemini抽出 | |
-| 3 | 氏名（ローマ字） | `applicant.name_roman` | Gemini抽出 | |
-| 4 | 性別 | `applicant.gender` | Gemini抽出 | 抽出漏れが多い |
-| 5 | 出生地 | `applicant.place_of_birth` | Gemini抽出 | |
-| 6 | 配偶者の有無 | `applicant.marital_status` | Gemini抽出 | |
-| 7 | 職業 | `applicant.occupation` | Gemini抽出 | |
-| 8 | 本国における居所 | `applicant.home_country_address` | Gemini抽出 | |
-| 9 | 日本の連絡先 郵便番号 | `applicant.japan_postal_code` | Gemini抽出 | |
-| 9 | 日本の連絡先 住所 | `applicant.japan_address` | Gemini抽出 | |
-| 9 | 日本の連絡先 電話番号 | `applicant.japan_phone` | Gemini抽出 | |
-| 9 | 日本の連絡先 携帯番号 | `applicant.japan_mobile` | Gemini抽出 | |
-| 9 | メールアドレス | `applicant.email` | Gemini抽出 | |
-| 10 | 旅券番号 | `passport.number` | Gemini抽出 | |
-| 10 | 旅券有効期限 | `passport.expiry_date` | Gemini抽出 | |
-| 11 | 入国目的 | `application.purpose_of_entry` | Gemini抽出 | |
-| 12 | 入国予定日 | `application.planned_entry_date` | Gemini抽出 | |
-| 13 | 上陸予定港 | `application.planned_port` | Gemini抽出 | |
-| 14 | 滞在予定期間（年） | `application.planned_period_years` | Gemini抽出 | |
-| 14 | 滞在予定期間（月） | `application.planned_period_months` | Gemini抽出 | |
-| 15 | 同伴者の有無 | `application.has_accompanying` | Gemini抽出 | |
-| 16 | 査証申請予定地 | `application.visa_application_location` | Gemini抽出 | |
-| 17 | 過去の出入国歴 有無 | `immigration_history.has_entries` | Gemini抽出 | |
-| 17 | 回数 | `immigration_history.entries_count` | Gemini抽出 | |
-| 17 | 直近の入国日 | `immigration_history.latest_entry_start` | Gemini抽出 | |
-| 17 | 直近の出国日 | `immigration_history.latest_entry_end` | Gemini抽出 | |
-| 18 | 過去のCOE申請 有無 | `immigration_history.has_prior_coe` | Gemini抽出 | |
-| 18 | 回数 | `immigration_history.prior_coe_count` | Gemini抽出 | |
-| 18 | 不交付回数 | `immigration_history.prior_coe_denial_count` | Gemini抽出 | |
-| 19 | 犯罪歴 | `immigration_history.has_criminal_record` | Gemini抽出 | |
-| 20 | 退去強制・出国命令 有無 | `immigration_history.has_deportation` | Gemini抽出 | |
-| 20 | 回数 | `immigration_history.deportation_count` | Gemini抽出 | |
-| 20 | 直近の年月日 | `immigration_history.deportation_latest` | Gemini抽出 | |
-| 21 | 在日親族 | `family.*` | Gemini抽出 | 将来スコープ |
-
-**含まれるcase_dataトップレベルキー**: `applicant`, `passport`, `application`, `immigration_history`, `family`, `family_in_japan`, `past_history`
-
-### セクション2: 申請人に関する情報等
-
-RASENSフォーム No.23〜26 に対応。学歴、専攻、資格、職歴を含む。
-
-| No. | RASENSラベル | visa-appフィールド | データソース | 備考 |
-|-----|-------------|-------------------|------------|------|
-| 23 | 最終学歴 区分 | `education.level` | Gemini抽出（S3スコープ） | |
-| 23 | 最終学歴 区分詳細 | `education.level_detail` | Gemini抽出 | |
-| 23 | 最終学歴 学校名 | `education.school_name` | Gemini抽出 | |
-| 23 | 卒業年月日 | `education.graduation_date` | Gemini抽出 | autofill_adapterで日付正規化 |
-| 24 | 専攻・専門分野 | `major.field` | Gemini抽出（S3スコープ） | |
-| 24 | 専攻 その他 | `major.field_other` | Gemini抽出 | |
-| 25 | 情報処理資格 有無 | `it_qualification.has_qualification` | Gemini抽出（S3スコープ） | |
-| 25 | 資格名 | `it_qualification.qualification_name` | Gemini抽出 | |
-| 26 | 職歴 | `employment_history.*` | 将来実装 | 現在Gemini抽出スコープ外 |
-
-**含まれるcase_dataトップレベルキー**: `education`, `major`, `it_qualification`, `transcript_subjects`, `employment_history`, `qualifications`
-
-### セクション3: 代理人
-
-RASENSフォーム No.27 に対応。在留資格認定証明書交付申請では、申請人（外国人）が海外にいるため、受入れ先企業が代理人として申請するのが一般的。
-
-| No. | RASENSラベル | visa-appフィールド | データソース | 備考 |
-|-----|-------------|-------------------|------------|------|
-| 27.1 | 氏名 | `proxy.name` | 手入力 | 企業の担当者名 |
-| 27.2 | 本人との関係 | `proxy.relationship` | 手入力 / 初期値 | 例: 「雇用先の職員」 |
-| 27.3 | 郵便番号 | `proxy.postal_code` | `employer.postal_code` から初期値 | |
-| 27.4 | 住所 | `proxy.address` | `employer.address` から初期値 | |
-| 27.5 | 電話番号 | `proxy.phone` | `employer.phone` から初期値 | 任意 |
-| 27.6 | 携帯電話番号 | `proxy.mobile` | 手入力 | 任意 |
-
-**含まれるcase_dataトップレベルキー**: `proxy`
-
-**特記事項**:
-- Gemini抽出対象外。employer情報から初期値を自動生成し、担当者名は手入力。
-- 受入れ先企業（雇用主）が代理人となるケースがほとんど。
-- 代理人の住所・電話は employer と同一になることが多い。
-
-### セクション4: 取次者
-
-RASENSフォームの取次者セクションに対応。行政書士が申請を取り次ぐ場合に必須。
-
-| 項目 | visa-appフィールド | デフォルト値 | 備考 |
-|------|-------------------|------------|------|
-| 氏名 | `intermediary.name` | 太田智子 | 設定画面で変更可能 |
-| 郵便番号 | `intermediary.postal_code` | 6310845 | |
-| 住所 | `intermediary.address` | 奈良県奈良市宝来４丁目１３番７号 | |
-| 所属機関等 | `intermediary.organization` | 太田行政書士事務所 | |
-| 電話番号 | `intermediary.phone` | 0742405620 | |
-
-**含まれるcase_dataトップレベルキー**: `intermediary`
-
-**特記事項**:
-- Gemini抽出対象外。全案件で固定値（太田智子 / 太田行政書士事務所）。
-- 将来的にはアカウント設定画面（`/settings`）で管理し、Firestoreに保存する。
-- 案件ごとにレビューする必要はないが、サイドバーには表示してフォーム上の存在を確認できるようにする。
-
-### セクション5: 所属機関に関する情報等
-
-RASENSフォーム No.2〜12 に対応。雇用主の基本情報、雇用条件、活動内容を含む。
-
-| No. | RASENSラベル | visa-appフィールド | データソース | 備考 |
-|-----|-------------|-------------------|------------|------|
-| 2 | 契約の形態 | `contract.contract_type` | Gemini抽出（S2スコープ） | |
-| 3.1 | 名称 | `employer.name` | Gemini抽出（S2スコープ） | |
-| 3.2 | 法人番号 有無 | `employer.has_corporate_number` | Gemini抽出 | |
-| 3.2 | 法人番号 | `employer.corporate_number` | Gemini抽出 | 13桁数字 |
-| 3.3 | 支店・事業所名 | `employer.office_name` | Gemini抽出 | |
-| 3.4 | 雇用保険適用事業所番号 | `employer.employment_insurance_no` | Gemini抽出 | |
-| 3.5 | 業種（主たる業種） | `employer.industry_primary` | Gemini抽出 | |
-| 3.6 | 業種 その他 | `employer.industry_other` | Gemini抽出 | |
-| 3.9 | 郵便番号 | `employer.postal_code` | Gemini抽出 | |
-| 3.10 | 所在地 | `employer.address` | Gemini抽出 | |
-| 3.11 | 電話番号 | `employer.phone` | Gemini抽出 | |
-| 3.12 | 資本金 | `employer.capital_jpy` | Gemini抽出 | |
-| 3.13 | 年間売上高 | `employer.annual_sales_jpy` | Gemini抽出 | |
-| 3.14 | 従業員数 | `employer.employee_count` | Gemini抽出 | |
-| 3.15 | うち外国人職員数 | `employer.foreign_employee_count` | Gemini抽出 | |
-| 3.16 | うち技能実習生 | `employer.technical_intern_count` | Gemini抽出 | |
-| 5 | 就労予定期間 区分 | `employment_conditions.employment_period_type` | Gemini抽出 | |
-| 5 | 年数 | `employment_conditions.employment_period_years` | Gemini抽出 | |
-| 5 | 月数 | `employment_conditions.employment_period_months` | Gemini抽出 | |
-| 6 | 雇用開始（入社）年月日 | `employment_conditions.joining_date` | Gemini抽出 | |
-| 7 | 月額給与 | `employment_conditions.monthly_salary` | Gemini抽出 | 税引き前 |
-| 8 | 実務経験月数 | `employment_conditions.experience_months` | Gemini抽出 | |
-| 9 | 役職 有無 | `employment_conditions.has_position` | Gemini抽出 | |
-| 9 | 役職名 | `employment_conditions.position_title` | Gemini抽出 | |
-| 10 | 職種 | `employment_conditions.job_category_primary` | Gemini抽出 | |
-| 11 | 活動内容詳細 | `activity_details.description` | Gemini抽出 | 自由記述 |
-
-**含まれるcase_dataトップレベルキー**: `employer`, `employment_conditions`, `employment_terms`, `employment_contract`, `contract`, `activity_details`
-
-## 非表示セクション
-
-以下はサイドバーに表示しない:
-
-| セクション | 理由 |
-|-----------|------|
-| 申請概要 | 在留資格種別は固定値（技人国）。case_id, workflow_state等は内部メタデータ |
-| 高度専門職ポイント表 | 技人国では対象外 |
-| 受領方法等 | 技人国の初期MVPでは対象外 |
-| 入力情報確認 | フォーム確認画面でありデータ項目ではない |
-| 審査 | AI内部の品質指標。ReviewBannerの「要対応」で代替 |
-
-## case_dataキー → セクション マッピング
-
-fieldPaths.ts の `sectionMap` に設定する対応表:
-
-| case_dataキー | セクション |
-|--------------|-----------|
-| `applicant` | 身分事項 |
-| `passport` | 身分事項 |
-| `application` | 身分事項 |
-| `immigration_history` | 身分事項 |
-| `family` | 身分事項 |
-| `family_in_japan` | 身分事項 |
-| `past_history` | 身分事項 |
-| `education` | 申請人に関する情報等 |
-| `major` | 申請人に関する情報等 |
-| `it_qualification` | 申請人に関する情報等 |
-| `transcript_subjects` | 申請人に関する情報等 |
-| `employment_history` | 申請人に関する情報等 |
-| `qualifications` | 申請人に関する情報等 |
-| `proxy` | 代理人 |
-| `intermediary` | 取次者 |
-| `employer` | 所属機関に関する情報等 |
-| `employment_conditions` | 所属機関に関する情報等 |
-| `employment_terms` | 所属機関に関する情報等 |
-| `employment_contract` | 所属機関に関する情報等 |
-| `contract` | 所属機関に関する情報等 |
-| `activity_details` | 所属機関に関する情報等 |
-
-`case`, `assessments`, `supporting_documents`, `review` はマッピングしない（非表示）。
-
-## SECTION_ORDER
-
-```typescript
-export const SECTION_ORDER = [
-  '身分事項',
-  '申請人に関する情報等',
-  '代理人',
-  '取次者',
-  '所属機関に関する情報等',
-]
+```text
+case
+applicant
+entry_plan
+employer
+employment
+proxy
+intermediary
+receiving_method
 ```
 
-SECTION_ORDERに含まれないセクションは末尾の「その他」として表示。
+独立top-levelを増やすと、Gemini schema、Firestore、review UI、Chrome拡張mappingのすべてでpathが増えます。そのため、`passport`, `family`, `immigration_history`, `education`, `employment_history`, `qualifications` は原則 `applicant.*` 配下に置きます。
 
-## 変更対象ファイル
+`contract` と `activity_details` は独立sectionにしません。会社そのものではなく今回の就労関係に属するため、`employment.contract_type` と `employment.activity_details` に統一します。
 
-| ファイル | 変更内容 |
-|---------|---------|
-| `frontend/src/lib/fieldPaths.ts` | sectionMap、SECTION_ORDER を本設計に合わせて更新 |
-| `frontend/src/components/review/FieldPanel.tsx` | SECTION_ORDER に基づくソート（変更済みの場合は確認のみ） |
+## RASENSフォームとの対応方針
+
+[review_field_catalog.md](review_field_catalog.md) では、RASENSフォームの出現順に沿って、各項目を次の観点で棚卸しします。
+
+| 観点 | 意味 |
+|---|---|
+| フォーム順 | フォーム台帳内の出現順。表示・検証順に使うが、永続IDではない |
+| 画面番号（参考） | RASENS画面に出る番号・見出し。人間向けの目印で、IDではない |
+| `canonical path` | Firestore `case_data` の保存先 |
+| 入力方針 | Gemini抽出、手入力、固定値、設定値、派生計算、非対応のどれか |
+| mapping | Chrome拡張の `application_data` rows へ変換できるか |
+
+## RASENS用語の分離
+
+次の3項目は名前が似ていますが、RASENS上は別項目です。
+
+| RASENS項目 | canonical path | 扱い |
+|---|---|---|
+| 主たる活動内容 | `entry_plan.main_activity_category` | 申請概要の大分類select。技人国MVPでは固定値候補 |
+| 入国目的 | `entry_plan.purpose_of_entry` | 身分事項 No.11 のselect。ユーザー確認画像の項目 |
+| 活動内容詳細 | `employment.activity_details` | 所属機関セクション No.11 の600文字textarea。職務内容を文章で説明する |
+
+`主たる活動内容` は `活動内容詳細` ではありません。前者はフォーム全体の分岐に使うカテゴリ、後者は申請人が今回の会社で行う業務説明です。
+
+## 実装への反映順
+
+1. `canonical_case_data_v2.md` を基準に `case_data.schema.json` と `caseData.ts` を作り直す。
+2. Gemini `schema.py` と `prompt_template.py` を canonical path に寄せる。
+3. Firestore保存時に Gemini raw を canonical `case_data` + `field_metadata` + `review` へ正規化する。
+4. `review_field_catalog.md` に合わせて `fieldPaths.ts` の section / label / ordering を整理する。
+5. `rasens_offer_fields.json` から RASENS全274行の扱い台帳を作り、MVP範囲と非対応範囲を明示する。
+6. backend に `/cases/{case_id}/application-data` を追加する。
+7. Chrome拡張から mapping と build logic を外し、rows入力だけにする。
+8. `visa-eval` の golden とQA手順を canonical v2 / backend generator 前提に更新する。
+
+## 現時点の注意
+
+- 既存実装には `applicant.date_of_birth`, `applicant.gender`, `applicant.nationality`, `passport.*`, `application.*`, `family.*`, `immigration_history.*`, `education.*`, `employment_history.*`, `contract.*`, `employment_conditions.*`, `activity_details.description` など、canonical v2では移動対象になるpathがあります。
+- `case_data.schema.json` は現状 loose なドラフトであり、canonical v2 の正本としては作り直し対象です。
+- `rasens_offer_mapping.json` は主要55項目だけの部分マッピングであり、現行フォーム台帳との不一致疑いがあります。canonical v2 実装時は延命せず作り直します。
+- `review_field_catalog.md` はMVP主要項目から設計を始めています。RASENS全274行の完全な扱い台帳へ広げる場合は、`rasens_offer_fields.json` を生成元にして更新します。

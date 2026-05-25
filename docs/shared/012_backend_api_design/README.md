@@ -199,11 +199,11 @@ pattern = "text_and_image" if has_images_only else "pdf_direct"
 対象フィールド（`BBOX_TARGET_FIELDS`）:
 
 ```
-applicant.name_roman, applicant.nationality, applicant.date_of_birth,
-applicant.passport_number, employment_terms.job_title,
-employment_terms.monthly_salary, employment_terms.work_location,
-education.0.school_name, education.0.major, employer.company_name,
-employer.capital, employer.representative_name, ...
+applicant.name_roman, applicant.nationality_region, applicant.birth_date,
+applicant.passport.number, employment.job_title,
+employment.monthly_salary, employment.work_location,
+applicant.education.0.school_name, applicant.education.0.major_field,
+employer.name, employer.capital_jpy, ...
 ```
 
 処理手順:
@@ -279,14 +279,12 @@ cases/
        ├─ confirmed_at: string | null     # ready_to_fill 移行時に記録
        ├─ extraction_session_id: string | null  # Codex抽出時のsession_id
        ├─ case_data: {                    # 抽出された構造化データ
-       │    schema_version: "1.0",
+       │    schema_version: "2.0",
        │    case: {case_id, application_type, target_status, workflow_state},
-       │    applicant: {name_roman, nationality, date_of_birth, passport_number, ...},
-       │    application: {...},
-       │    education: [{school_name, major, ...}],
-       │    employment_terms: {job_title, monthly_salary, work_location, ...},
-       │    employer: {company_name, capital, representative_name, ...},
-       │    activity_details: {...}
+       │    applicant: {name_roman, nationality_region, birth_date, passport: {...}, education: [...], ...},
+       │    entry_plan: {...},
+       │    employment: {job_title, monthly_salary, work_location, activity_details, ...},
+       │    employer: {name, capital_jpy, representative_name, ...}
        │  }
        ├─ field_metadata: {               # フィールドごとの抽出根拠
        │    "applicant.name_roman": {
@@ -443,11 +441,12 @@ GET /cases/case_1a2b3c4d5e6f
   "case_id": "case_1a2b3c4d5e6f",
   "workflow_state": "needs_review",
   "case_data": {
-    "schema_version": "1.0",
+    "schema_version": "2.0",
     "case": {"case_id": "case_1a2b3c4d5e6f", "application_type": "certificate_of_eligibility", "target_status": "engineer_humanities_international"},
-    "applicant": {"name_roman": "YAMADA TARO", "nationality": "Vietnam", "date_of_birth": "1995-03-15", "passport_number": "B12345678"},
-    "employer": {"company_name": "Example株式会社", "capital": "10,000,000"},
-    "employment_terms": {"job_title": "ソフトウェアエンジニア", "monthly_salary": "250,000"}
+    "applicant": {"name_roman": "YAMADA TARO", "nationality_region": "Vietnam", "birth_date": "1995-03-15", "passport": {"number": "B12345678"}},
+    "entry_plan": {"main_activity_category": "技術・人文知識・国際業務", "purpose_of_entry": "技術・人文知識・国際業務"},
+    "employer": {"name": "Example株式会社", "capital_jpy": "10,000,000"},
+    "employment": {"job_title": "ソフトウェアエンジニア", "monthly_salary": "250,000"}
   },
   "field_metadata": {
     "applicant.name_roman": {

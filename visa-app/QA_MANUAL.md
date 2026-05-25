@@ -36,9 +36,14 @@ curl -X POST http://localhost:8080/cases/{case_id}/extract
 
 - [ ] バッジ: 問題なしフィールドはバッジなし、要対応のみオレンジ表示
 - [ ] ハイライト: フィールドクリックで該当セルのみハイライト（複数ハイライトされない）
-- [ ] 雇用条件: employment_conditions セクションにフィールドが表示される
+- [ ] canonical v2: 旧path（`application.*`, top-level `passport.*`, `employment_conditions.*`）が表示・保存されない
+- [ ] 雇用条件: `employment` セクションに契約形態、給与、活動内容詳細が表示される
+- [ ] 旅券: `applicant.passport.number` / `applicant.passport.expiry_date` が表示される
+- [ ] 入国目的: `entry_plan.purpose_of_entry` が表示される
 - [ ] 証跡: source_refs がある場合、ドキュメントビューアに証跡表示
 - [ ] PDFハイライト: bbox 座標でのハイライト表示
+- [ ] application-data: `/cases/{case_id}/application-data` が `rows`, `fillable`, `warnings` を返す
+- [ ] Chrome拡張: `/application-data` の rows を入力し、拡張内で mapping / transform / visible_when を処理しない
 
 ## Playwright E2E
 

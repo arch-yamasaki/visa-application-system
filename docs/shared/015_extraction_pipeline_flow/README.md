@@ -107,7 +107,7 @@
       "name_roman": { "value": "AMIT TAMANG", "source": "doc_004|1|AMIT TAMANG|1.0" },
       ...
     },
-    "employment_conditions": {
+    "employment": {
       "monthly_salary": { "value": "260000", "source": "doc_001|1|260,000 yen|1.0" },
       ...
     },
@@ -129,19 +129,19 @@
 
 ```
   メイン抽出の結果から:
-  「employer.company_name は 会社書類.pdf の 1ページ目にある」
-  「employer.capital は 会社書類.pdf の 2ページ目にある」
-  「employment_conditions.job_title は オファーレター.pdf の 1ページ目にある」
+  「employer.name は 会社書類.pdf の 1ページ目にある」
+  「employer.capital_jpy は 会社書類.pdf の 2ページ目にある」
+  「employment.job_title は オファーレター.pdf の 1ページ目にある」
        |
        v
   ┌──────────────────────────────────────────┐
   │ ステップ4-1: 参照ページをグループ化       │
   │                                          │
   │  グループA: 会社書類.pdf p1              │
-  │    → company_name, corporate_number      │
+  │    → name, corporate_number              │
   │                                          │
   │  グループB: 会社書類.pdf p2              │
-  │    → capital, representative_name        │
+  │    → capital_jpy, representative_name    │
   │                                          │
   │  グループC: オファーレター.pdf p1         │
   │    → job_title, monthly_salary, ...      │
@@ -232,7 +232,7 @@
 
 AIの回答 → 以下の順で加工:
 1. `_unflatten_field_values()` — `"doc_001|1|text|0.9"` を構造化データに変換
-2. `_normalize_employment_keys()` — `employment_terms` → `employment_conditions` に統一
+2. `_normalize_employment_keys()` — 旧 `employment_terms` / `employment_conditions` を canonical v2 の `employment` に統一
 3. `_normalize_corporate_number()` — 法人番号のハイフン除去
 4. `_extract_field_metadata()` — 証跡情報を自動生成（互換レイヤー）
 5. `_extract_display_values()` — 表示用の値のみ取り出し

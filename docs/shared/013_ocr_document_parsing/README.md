@@ -260,7 +260,7 @@ config = types.GenerateContentConfig(
 
 ### _flatten_keys
 
-`case_data` のネストされた dict/list 構造をドットパス表記（例: `education.0.school_name`）にフラット化するユーティリティ。`field_metadata` の補完に使用。
+`case_data` のネストされた dict/list 構造をドットパス表記（例: `applicant.education.0.school_name`）にフラット化するユーティリティ。`field_metadata` の補完に使用。
 
 ---
 
@@ -272,10 +272,10 @@ config = types.GenerateContentConfig(
 
 合計約20フィールド。主なものは:
 
-- `applicant.name_roman`, `applicant.nationality`, `applicant.date_of_birth`, `applicant.passport_number`
-- `employment_terms.job_title`, `employment_terms.monthly_salary`, `employment_terms.work_location`（`employment_conditions.*`, `employment_contract.*` の同等フィールドも含む）
-- `education.0.school_name`, `education.0.major`
-- `employer.company_name`, `employer.capital`, `employer.representative_name`, `employer.business_category`, `employer.business_type`, `employer.corporate_number`
+- `applicant.name_roman`, `applicant.nationality_region`, `applicant.birth_date`, `applicant.passport.number`
+- `employment.job_title`, `employment.monthly_salary`, `employment.work_location`
+- `applicant.education.0.school_name`, `applicant.education.0.major_field`
+- `employer.name`, `employer.capital_jpy`, `employer.representative_name`, `employer.industry_primary`, `employer.corporate_number`
 
 ### 処理フロー（locate_bboxes）
 

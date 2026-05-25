@@ -6,6 +6,10 @@
 
 ## データの流れ
 
+実運用では、`case_data` から投入JSONを作る処理は visa-app backend の `/application-data` に寄せます。Chrome拡張は backend が返す `rows` を入力するだけです。
+
+このディレクトリの mapping と generated JSON は、設計資産・合成デモ・検証用です。実案件の正本や本番投入ロジックの置き場所ではありません。
+
 ```text
 reference_form.html
   -> form_definitions/rasens_offer_fields.json
@@ -43,9 +47,11 @@ cases/demo_case_data.json
 
 フォーム項目台帳の正本は `form_definitions/rasens_offer_fields.json` です。サイト構造が変わった場合は、この台帳と `mappings/` を更新します。
 
-`mappings/` では、17.2〜17.4 のような条件付き項目を `visible_when`、21.2〜21.8 や職歴01〜06のような繰り返し項目を `groups` で表します。`field_id` や `field_name` は画面依存なので、案件正本のキーには使いません。
+`mappings/` では、17.2〜17.4 のような条件付き項目を `visible_when`、21.2〜21.8 や職歴01〜06のような繰り返し項目を `groups` で表します。`field_id` や `field_name` は画面依存なので、案件正本のキーには使いません。`visible_when` と `transform` の評価は backend generator が担当し、Chrome拡張には持たせません。
 
-現時点の `mappings/rasens_offer_mapping.json` は主要項目だけの初期版です。フォーム台帳全体を網羅しているわけではなく、代理人・取次者、受領方法、学歴区分、専攻、在日親族詳細、職歴複数件などは追加対応が必要です。
+現時点の `mappings/rasens_offer_mapping.json` は主要項目だけの初期版です。canonical v2 実装時は延命せず、`form_definitions/rasens_offer_fields.json` の274行台帳を正として作り直します。自動投入はMVP対象だけに絞りますが、274行すべてに `manual`, `settings`, `derived`, `unsupported`, `future` などの扱いを付けます。
+
+代理人は `proxy` として案件ごとに扱います。取次者は `intermediary` として、太田さん側の申請アカウントを持つ申請会社情報を固定設定値から注入します。
 
 ## デモ生成
 

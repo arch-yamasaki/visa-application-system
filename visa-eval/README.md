@@ -65,8 +65,8 @@ visa-eval/
 - `catalog.json`: raw資料の分類結果。案件ID、文書種別、ページ数、Excelシートなどのメタデータを持つ。
 - `test_cases_from_raw/<case_id>/<applicant_id>/...`: 申請人1人=1フォームの単票ケース。まずここでPDF/Excel読取、正規case_data生成、フォーム投入JSON生成を検証する。
 - `.../input/document_manifest.json`: そのケースでAIエージェントへ渡す入力資料リスト。
-- `.../expected/case_data.golden.json`: 人手で完成させる正規case_dataの正解データ。
-- `.../expected/application_data.golden.json`: case_dataから生成されるフォーム投入用JSONの正解データ。
+- `.../expected/case_data.golden.json`: 人手で完成させる canonical v2 `case_data` の正解データ。旧path互換は持たせない。
+- `.../expected/application_data.golden.json`: canonical v2 `case_data` から backend generator が生成するフォーム投入用JSONの正解データ。
 - `.../expected/review.golden.json`: 不足確認・リスク判定・人レビュー要否の正解データ。現状はExcel起点のscaffoldを含むため、人手確認でgolden化する。
 - `.../generated/`: AIエージェントやスクリプトが出力した結果。expectedと比較する。
 
@@ -91,16 +91,24 @@ python3 rasens-autofill/scripts/classify_test_documents.py
 
 1. `document_manifest.json` をCodex/AIエージェントへ渡す。
 2. AIが `generated/case_data.json` と `generated/review.json` を作る。
-3. `generated/case_data.json` を deterministic な変換処理に渡して `generated/application_data.json` を作る。
+3. `generated/case_data.json` を backend generator に渡して `generated/application_data.json` を作る。
 4. 人が `generated/*.json` を確認し、必要な補正後に `expected/*.golden.json` として確定する。
 
 ### 評価モード
 
 1. `document_manifest.json` をAIエージェントへ渡す。
 2. AIが `generated/case_data.json` と `generated/review.json` を作る。
-3. `generated/case_data.json` を deterministic な変換処理に渡して `generated/application_data.json` を作る。
+3. `generated/case_data.json` を backend generator に渡して `generated/application_data.json` を作る。
 4. `expected/*.golden.json` と比較する。
 5. 比較は、自然文全文一致ではなく、安定キー、文書種別、必須項目、レビューコードを中心に行う。
+
+### Canonical v2 方針
+
+- `case_data.golden.json` は value-only の canonical v2 とする。
+- `field_metadata` と `review` の path は `applicant.education.0.school_name` のような dot index 形式で揃える。
+- `application_data.golden.json` は手編集した正本ではなく、backend generator の期待出力として扱う。
+- RASENSの `field_id`, `field_name`, select value は `application_data` 側にだけ出し、`case_data` には保存しない。
+- `application.*`, top-level `passport.*`, `employment_conditions.*`, `application.activity_details` などの旧pathは golden に残さない。
 
 ## Suite解決ルール
 

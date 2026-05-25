@@ -210,12 +210,12 @@ sequenceDiagram
 
 ### 5.3 各書類から抽出されるフィールド
 
-**オファーレターPDF → employment_conditions / employment_terms**
+**オファーレターPDF → employment**
 
 ```python
 # field_metadata の例（実際のGemini出力に基づく）
 {
-    "employment_conditions.job_title": {
+    "employment.job_title": {
         "source_refs": [{
             "document_id": "doc_abc123",
             "page": 1,
@@ -224,7 +224,7 @@ sequenceDiagram
             "bbox": {"y_min": 320, "x_min": 150, "y_max": 345, "x_max": 400}
         }]
     },
-    "employment_conditions.monthly_salary": {
+    "employment.monthly_salary": {
         "source_refs": [{
             "document_id": "doc_abc123",
             "page": 1,
@@ -233,15 +233,17 @@ sequenceDiagram
             "bbox": {"y_min": 380, "x_min": 200, "y_max": 405, "x_max": 350}
         }]
     },
-    "employment_conditions.work_location": { ... }
+    "employment.work_location": { ... }
 }
 ```
+
+旧実装には `employment_conditions` / `employment_terms` が残るが、canonical v2 では今回の契約・就労条件・活動内容を `employment.*` に寄せる。
 
 **会社書類PDF → employer**
 
 ```python
 {
-    "employer.company_name": {
+    "employer.name": {
         "source_refs": [{
             "document_id": "doc_def456",
             "page": 1,
@@ -250,14 +252,14 @@ sequenceDiagram
             "bbox": {"y_min": 50, "x_min": 100, "y_max": 80, "x_max": 500}
         }]
     },
-    "employer.capital": { ... },
+    "employer.capital_jpy": { ... },
     "employer.representative_name": { ... },
-    "employer.business_type": { ... },
+    "employer.industry_primary": { ... },
     "employer.corporate_number": { ... }
 }
 ```
 
-**申請人情報XLSX → applicant / education / employment_history**
+**申請人情報XLSX → applicant**
 
 ```python
 # XLSXにはbboxなし（テキスト抽出のみ）
@@ -270,11 +272,11 @@ sequenceDiagram
             "confidence": 0.9
         }]
     },
-    "applicant.date_of_birth": { ... },
+    "applicant.birth_date": { ... },
     "applicant.nationality_region": { ... },
-    "education.0.school_name": { ... },
-    "education.0.major": { ... },
-    "employment_history.0.company_name_en": { ... }
+    "applicant.education.0.school_name": { ... },
+    "applicant.education.0.major_field": { ... },
+    "applicant.employment_history.0.company_name_en": { ... }
 }
 ```
 
