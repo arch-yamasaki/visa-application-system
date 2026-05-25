@@ -1,6 +1,6 @@
 /**
  * visa-app API client for Chrome extension.
- * Fetches case data from visa-app backend (plain JSON).
+ * Fetches generated application-data rows from visa-app backend.
  */
 
 /**
@@ -16,13 +16,13 @@ async function getApiUrl() {
 }
 
 /**
- * Fetch a case's autofill data from visa-app API.
+ * Fetch a case's application-data rows from visa-app API.
  * @param {string} caseId
- * @returns {Promise<object>} Plain JSON object
+ * @returns {Promise<object>} application-data response
  */
-async function getCase(caseId) {
+async function getApplicationData(caseId) {
   const apiUrl = await getApiUrl();
-  const url = `${apiUrl}/cases/${encodeURIComponent(caseId)}/autofill-data`;
+  const url = `${apiUrl}/cases/${encodeURIComponent(caseId)}/application-data`;
 
   const response = await fetch(url);
 
@@ -57,4 +57,4 @@ async function listCases() {
 }
 
 // Export for use by popup.js
-window.apiClient = { getCase, listCases };
+window.apiClient = { getApplicationData, listCases };

@@ -4,22 +4,14 @@ export interface CaseData {
   schema_version: string
   case: CaseMeta
   applicant: Applicant
-  application: Application
-  passport?: Passport
-  residence_card?: ResidenceCard
-  immigration_history?: ImmigrationHistory
-  family?: Family
-  education?: Education[]
+  entry_plan?: EntryPlan
   transcript_subjects?: TranscriptSubject[]
-  employment_history?: EmploymentRecord[]
-  qualifications?: Qualification[]
   employer?: Employer
-  proxy?: Record<string, unknown>
-  intermediary?: Record<string, unknown>
-  receiving_method?: Record<string, unknown>
+  employment?: Employment
+  proxy?: Proxy
+  receiving_method?: ReceivingMethod
   supporting_documents?: SupportingDocument[]
   assessments?: Assessment[]
-  field_metadata?: Record<string, unknown>
 }
 
 export interface CaseMeta {
@@ -49,10 +41,17 @@ export interface Applicant {
     mobile?: string
     email?: string
   }
+  passport?: Passport
+  residence_card?: ResidenceCard
+  immigration_history?: ImmigrationHistory
+  family?: Family
+  education?: Education[]
+  employment_history?: EmploymentRecord[]
+  qualifications?: Qualification[]
 }
 
-export interface Application {
-  desired_status_label?: string
+export interface EntryPlan {
+  main_activity_category?: string
   purpose_of_entry?: string
   planned_entry_date?: string
   planned_port?: string
@@ -60,13 +59,6 @@ export interface Application {
   planned_period_years?: string
   planned_period_months?: string
   visa_application_location?: string
-  activity_details?: string
-  activity_details_structured?: {
-    department?: string
-    role?: string
-    duties?: string[]
-    simple_labor_risk_terms?: string[]
-  }
   previous_denial_reason?: string
   amendment_history?: unknown[]
 }
@@ -105,8 +97,11 @@ export interface Family {
 }
 
 export interface Education {
+  level?: string
+  level_detail?: string
   school_name?: string
-  major?: string
+  major_field?: string
+  major_field_other?: string
   graduation_date?: string
   source_refs?: string[]
 }
@@ -127,9 +122,14 @@ export interface EmploymentRecord {
 }
 
 export interface Qualification {
+  type?: string
   name?: string
   issuer?: string
   date?: string
+  it?: {
+    has_qualification?: boolean
+    qualification_name?: string
+  }
 }
 
 export interface Employer {
@@ -144,6 +144,36 @@ export interface Employer {
   phone?: string
   representative_name?: string
   representative_title?: string
+}
+
+export interface Employment {
+  contract_type?: string
+  employment_period_type?: string
+  employment_period_years?: string
+  employment_period_months?: string
+  joining_date?: string
+  monthly_salary?: number | string
+  experience_months?: number | string
+  has_position?: boolean
+  position_title?: string
+  job_category_primary?: string
+  activity_details?: string
+  work_location?: string
+}
+
+export interface Proxy {
+  name?: string
+  relationship?: string
+  postal_code?: string
+  address?: string
+  phone?: string
+  mobile?: string
+}
+
+export interface ReceivingMethod {
+  method?: string
+  postal_code?: string
+  address?: string
 }
 
 export interface SupportingDocument {

@@ -30,6 +30,35 @@ function normalizeFieldMetadata(raw: unknown): FieldMetadataMap {
   return map
 }
 
+function setValueAtPath<T>(root: T, path: string, value: unknown): T {
+  const parts = path.split('.')
+  const clone = Array.isArray(root) ? [...root] : { ...(root as Record<string, unknown>) }
+  let current: unknown = clone
+
+  for (let i = 0; i < parts.length - 1; i++) {
+    const part = parts[i]
+    const nextPart = parts[i + 1]
+    const key = Array.isArray(current) ? Number(part) : part
+    const container = current as Record<string, unknown> | unknown[]
+    const existing = container[key as keyof typeof container]
+    const next = Array.isArray(existing)
+      ? [...existing]
+      : existing && typeof existing === 'object'
+        ? { ...(existing as Record<string, unknown>) }
+        : /^\d+$/.test(nextPart)
+          ? []
+          : {}
+
+    ;(container as Record<string, unknown>)[String(key)] = next
+    current = next
+  }
+
+  const last = parts[parts.length - 1]
+  const key = Array.isArray(current) ? Number(last) : last
+  ;(current as Record<string, unknown>)[String(key)] = value
+  return clone as T
+}
+
 export default function ReviewPage() {
   const { caseId } = useParams<{ caseId: string }>()
   const navigate = useNavigate()
@@ -57,15 +86,7 @@ export default function ReviewPage() {
     setCaseDoc((prev) => {
       if (!prev) return prev
       const updated = { ...prev }
-      const parts = fieldPath.split('.')
-      let obj: Record<string, unknown> = { ...updated.case_data } as unknown as Record<string, unknown>
-      updated.case_data = obj as unknown as CaseDocument['case_data']
-      for (let i = 0; i < parts.length - 1; i++) {
-        const next = { ...(obj[parts[i]] as Record<string, unknown>) }
-        obj[parts[i]] = next
-        obj = next
-      }
-      obj[parts[parts.length - 1]] = value
+      updated.case_data = setValueAtPath(updated.case_data, fieldPath, value)
 
       const fm = { ...updated.field_metadata }
       fm[fieldPath] = {

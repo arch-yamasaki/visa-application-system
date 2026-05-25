@@ -4,10 +4,20 @@ function setStatus(message) {
   statusBox.textContent = message;
 }
 
-async function saveRows(rows, source) {
-  const fillable = rows.filter((row) => (row.fill_value || "").trim());
-  await chrome.storage.local.set({ visaRows: fillable, visaDataSource: source });
-  setStatus(`${source}\n${fillable.length}件の入力値を保存しました`);
+function setFillButtonsEnabled(enabled) {
+  document.querySelector("#fill").disabled = !enabled;
+  document.querySelector("#fillProgressive").disabled = !enabled;
+}
+
+async function saveRows(rows, source, canFill = true) {
+  const inputRows = rows.filter((row) => (row.fill_value || "").trim());
+  await chrome.storage.local.set({
+    visaRows: inputRows,
+    visaDataSource: source,
+    visaFillable: inputRows.length > 0 && Boolean(canFill),
+  });
+  setFillButtonsEnabled(inputRows.length > 0 && Boolean(canFill));
+  setStatus(`${source}\n${inputRows.length}件の入力値を保存しました`);
 }
 
 async function getActiveTab() {
@@ -36,9 +46,13 @@ async function sendMessageOrThrow(tab, type, rows) {
 }
 
 async function sendToTab(type) {
-  const { visaRows } = await chrome.storage.local.get(["visaRows"]);
+  const { visaRows, visaFillable } = await chrome.storage.local.get(["visaRows", "visaFillable"]);
   if (!visaRows?.length) {
     setStatus("先にデータを読み込んでください");
+    return;
+  }
+  if (type !== "VISA_AUTOFILL_PREVIEW" && !visaFillable) {
+    setStatus("このケースはまだ入力可能状態ではありません。入力対象の確認だけ実行できます。");
     return;
   }
 
@@ -67,9 +81,12 @@ document.querySelector("#fill").addEventListener("click", () => sendToTab("VISA_
 document.querySelector("#fillProgressive").addEventListener("click", () => sendToTab("VISA_AUTOFILL_FILL_PROGRESSIVE"));
 document.querySelector("#preview").addEventListener("click", () => sendToTab("VISA_AUTOFILL_PREVIEW"));
 
-chrome.storage.local.get(["visaRows", "visaDataSource"]).then(({ visaRows, visaDataSource }) => {
+chrome.storage.local.get(["visaRows", "visaDataSource", "visaFillable"]).then(({ visaRows, visaDataSource, visaFillable }) => {
   if (visaRows?.length) {
+    setFillButtonsEnabled(Boolean(visaFillable));
     setStatus(`${visaDataSource || "保存済みデータ"}\n${visaRows.length}件の入力値が保存されています`);
+  } else {
+    setFillButtonsEnabled(false);
   }
 });
 
@@ -108,10 +125,10 @@ document.querySelector("#loadFromApi").addEventListener("click", async () => {
 
   try {
     setStatus("visa-app から取得中...");
-    const caseData = await window.apiClient.getCase(caseId);
+    const applicationData = await window.apiClient.getApplicationData(caseId);
 
     // Show workflow_state banner
-    const workflowState = caseData.case?.workflow_state;
+    const workflowState = applicationData.workflow_state;
     if (workflowState === "ready_to_fill") {
       document.querySelector("#workflowReady").hidden = false;
     } else if (workflowState) {
@@ -119,18 +136,17 @@ document.querySelector("#loadFromApi").addEventListener("click", async () => {
       document.querySelector("#workflowWarning").hidden = false;
     }
 
-    // Fetch bundled mapping
-    const mappingResponse = await fetch(chrome.runtime.getURL("rasens_offer_mapping.json"));
-    const mappingData = await mappingResponse.json();
-
-    // Build rows
-    const rows = window.buildApplicationData.buildRows(caseData, mappingData);
+    const rows = applicationData.rows || [];
     if (!rows.length) {
-      setStatus("マッピング対象の入力値がありません。case_data の内容を確認してください。");
+      setStatus("入力対象の値がありません。visa-app のレビュー内容を確認してください。");
       return;
     }
 
-    await saveRows(rows, `visa-app: ${caseId}`);
+    const warningText = (applicationData.warnings || []).join("\n");
+    await saveRows(rows, `visa-app: ${caseId}`, applicationData.fillable);
+    if (warningText) {
+      setStatus(`visa-app: ${caseId}\n${rows.length}件の入力値を保存しました\n${warningText}`);
+    }
   } catch (error) {
     setStatus(`読込エラー\n${error.message}`);
   }

@@ -209,7 +209,7 @@ def prepare(fixture_dir: Path) -> Path:
                 "rasens-autofill/data/schemas/case_data.schema.json",
                 "rasens-autofill/data/schemas/review.schema.json",
                 "rasens-autofill/data/schemas/document_manifest.schema.json",
-                "rasens-autofill/data/mappings/rasens_offer_mapping.json",
+                "rasens-autofill/data/mappings/rasens_offer_mapping_v2.json",
                 "rasens-autofill/data/form_definitions/rasens_offer_fields.json",
                 "rasens-autofill/scripts/build_application_data.py",
             ]

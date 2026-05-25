@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { apiClient } from '../api/client'
 import type { CaseSummary } from '../types/caseData'
 
 export default function CaseListPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [cases, setCases] = useState<CaseSummary[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -17,7 +18,7 @@ export default function CaseListPage() {
       application_type: 'certificate_of_eligibility',
       target_status: 'engineer_humanities_international',
     })
-    navigate(`/cases/${created.case_id}/upload`)
+    navigate(`/cases/${created.case_id}/upload${location.search}`)
   }
 
   const stateLabel: Record<string, string> = {
@@ -70,7 +71,7 @@ export default function CaseListPage() {
                 const dest = c.workflow_state === 'needs_review' || c.workflow_state === 'ready_to_fill'
                   ? `/cases/${c.case_id}/review`
                   : `/cases/${c.case_id}/upload`
-                navigate(dest)
+                navigate(`${dest}${location.search}`)
               }}
               className="flex items-center justify-between p-4 bg-white rounded-lg border border-gray-200 hover:border-blue-300 cursor-pointer transition-colors"
             >

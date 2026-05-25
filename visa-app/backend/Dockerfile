@@ -18,7 +18,8 @@ COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/main.py .
-COPY backend/autofill_adapter.py .
+COPY backend/application_data.py .
+COPY backend/data/ data/
 COPY backend/extractors/ extractors/
 COPY --from=frontend-build /build/dist/ static/
 

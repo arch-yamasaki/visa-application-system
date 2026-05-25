@@ -5,9 +5,6 @@ import os
 import sys
 from pathlib import Path
 
-# Set API key before imports
-os.environ["GOOGLE_API_KEY"] = "AIzaSyBDsK0vJkm4rwwsdHsg2pBAxDAeRPziNCc"
-
 # Add parent to path for extractors import
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -139,7 +136,7 @@ def show_summary(result):
     print(f"国籍: {applicant.get('nationality_region', '?')}")
     print(f"生年月日: {applicant.get('birth_date', '?')}")
     print(f"雇用主: {cd.get('employer', {}).get('name', '?')}")
-    print(f"活動内容: {cd.get('application', {}).get('activity_details', '?')[:80]}...")
+    print(f"活動内容: {cd.get('employment', {}).get('activity_details', '?')[:80]}...")
 
     review = result.review
     print(f"\nレビュー: {review.get('expected_route', '?')}")

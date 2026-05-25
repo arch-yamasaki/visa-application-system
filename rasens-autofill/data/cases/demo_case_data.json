@@ -9,14 +9,34 @@
     "workflow_state": "ready_to_fill",
     "routed_to_human_reason": []
   },
-  "application": {
-    "desired_status_label": "技術・人文知識・国際業務",
+  "entry_plan": {
+    "main_activity_category": "技術・人文知識・国際業務",
     "purpose_of_entry": "技術・人文知識・国際業務",
     "planned_entry_date": "2026-08-01",
     "planned_port": "関西国際空港",
     "planned_period_years": "5",
     "planned_period_months": "0",
-    "visa_application_location": "ハノイ",
+    "visa_application_location": "ハノイ"
+  },
+  "employment": {
+    "contract_type": "雇用",
+    "period_type": "期間の定めなし",
+    "period_years": "",
+    "period_months": "",
+    "joining_date": "2026-07-01",
+    "monthly_salary": 250000,
+    "job_title": "技術総合職",
+    "work_location": "大阪本社",
+    "annual_salary": 3000000,
+    "bonus": "あり",
+    "allowances": "通勤手当",
+    "working_hours": "9:00-18:00",
+    "holidays": "土日祝",
+    "insurance": "社会保険加入",
+    "experience_months": 36,
+    "has_position": false,
+    "position_title": "",
+    "job_category_primary": "技術職",
     "activity_details": "技術総合職として、製造設備の制御設計、品質管理、工程改善に関する資料作成及び海外拠点との技術連絡業務に従事します。",
     "activity_details_structured": {
       "department": "技術管理部",
@@ -41,70 +61,70 @@
       "phone": "0660000000",
       "mobile": "09000000000",
       "email": "demo.applicant@example.com"
-    }
-  },
-  "passport": {
-    "number": "P0000000",
-    "expiry_date": "2030-04-14"
-  },
-  "residence_card": {
-    "number": "",
-    "status": "",
-    "expiry_date": ""
-  },
-  "family": {
-    "has_accompanying_members": false,
-    "has_japan_relatives_or_cohabitants": false,
-    "japan_relatives_or_cohabitants": []
-  },
-  "immigration_history": {
-    "has_entries": true,
-    "entries_count": 1,
-    "latest_entry": {
-      "start_date": "2024-06-01",
-      "end_date": "2024-06-10"
     },
-    "prior_coe_applications": {
-      "has_history": false,
-      "count": 0,
-      "denial_count": 0
+    "passport": {
+      "number": "P0000000",
+      "expiry_date": "2030-04-14"
     },
-    "criminal_record": false,
-    "deportation_or_departure_order": false
+    "residence_card": {
+      "number": "",
+      "status": "",
+      "expiry_date": ""
+    },
+    "family": {
+      "has_accompanying_members": false,
+      "has_japan_relatives_or_cohabitants": false,
+      "japan_relatives_or_cohabitants": []
+    },
+    "immigration_history": {
+      "has_entries": true,
+      "entries_count": 1,
+      "latest_entry": {
+        "start_date": "2024-06-01",
+        "end_date": "2024-06-10"
+      },
+      "prior_coe_applications": {
+        "has_history": false,
+        "count": 0,
+        "denial_count": 0
+      },
+      "criminal_record": false,
+      "deportation_or_departure_order": false
+    },
+    "education": [
+      {
+        "id": "edu_01",
+        "level": "university",
+        "school_name": "Demo University of Technology",
+        "major": "Mechanical Engineering",
+        "graduation_date": "2023-03-31",
+        "source_refs": ["demo_transcript.pdf#p1"]
+      }
+    ],
+    "transcript_subjects": [
+      { "name": "Control Engineering", "matched_duty": "制御設計補助" },
+      { "name": "Quality Management", "matched_duty": "品質管理" }
+    ],
+    "employment_history": [
+      {
+        "id": "emp_01",
+        "country_region": "ベトナム Viet Nam",
+        "start_date": "2023-04",
+        "end_date": "2026-03",
+        "company_name_en": "Demo Engineering Co., Ltd.",
+        "company_name_local": "Demo Engineering Co., Ltd.",
+        "duties": ["製造設備の設計補助", "品質管理資料作成"]
+      }
+    ],
+    "qualifications": [
+      {
+        "type": "language",
+        "name": "JLPT",
+        "level": "N2",
+        "issue_date": "2025-01-31"
+      }
+    ]
   },
-  "education": [
-    {
-      "id": "edu_01",
-      "level": "university",
-      "school_name": "Demo University of Technology",
-      "major": "Mechanical Engineering",
-      "graduation_date": "2023-03-31",
-      "source_refs": ["demo_transcript.pdf#p1"]
-    }
-  ],
-  "transcript_subjects": [
-    { "name": "Control Engineering", "matched_duty": "制御設計補助" },
-    { "name": "Quality Management", "matched_duty": "品質管理" }
-  ],
-  "employment_history": [
-    {
-      "id": "emp_01",
-      "country_region": "ベトナム Viet Nam",
-      "start_date": "2023-04",
-      "end_date": "2026-03",
-      "company_name_en": "Demo Engineering Co., Ltd.",
-      "company_name_local": "Demo Engineering Co., Ltd.",
-      "duties": ["製造設備の設計補助", "品質管理資料作成"]
-    }
-  ],
-  "qualifications": [
-    {
-      "type": "language",
-      "name": "JLPT",
-      "level": "N2",
-      "issue_date": "2025-01-31"
-    }
-  ],
   "employer": {
     "name": "デモテクノロジー株式会社",
     "corporate_number": "1234567890123",
@@ -128,6 +148,15 @@
     "address": "大阪府大阪市北区梅田1-1-1",
     "phone": "0660000000",
     "mobile": "09000000000"
+  },
+  "settings": {
+    "intermediary": {
+      "organization": "中央ビジネスグループ",
+      "name": "太田",
+      "postal_code": "5300001",
+      "address": "大阪府大阪市北区梅田1-1-1",
+      "phone": "0660000000"
+    }
   },
   "supporting_documents": [
     { "document_type": "passport", "status": "received", "source": "demo_passport.pdf" },

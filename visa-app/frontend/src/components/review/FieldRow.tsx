@@ -53,7 +53,7 @@ export default function FieldRow({ label, fieldPath, value, meta, flagType, onUp
 
   const startEditing = () => {
     if (!onUpdate) return
-    setEditValue(displayValue === '(未入力)' ? '' : displayValue)
+    setEditValue(rawValue)
     setEditing(true)
   }
 

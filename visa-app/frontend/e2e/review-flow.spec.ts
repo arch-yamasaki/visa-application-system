@@ -19,7 +19,7 @@ test.describe('ReviewPage demo mode', () => {
 
   test('shows at least one FieldSection', async ({ page }) => {
     await expect(page.locator('[data-field-row]').first()).toBeVisible()
-    await expect(page.getByText('案件情報')).toBeVisible()
+    await expect(page.getByText('身分事項')).toBeVisible()
   })
 
   test('shows FieldRows inside sections', async ({ page }) => {
@@ -169,7 +169,7 @@ test.describe('UploadPage backend selection', () => {
 test.describe('Navigation', () => {
   test('redirects unknown paths to /', async ({ page }) => {
     await page.goto('/nonexistent-path?demo=true')
-    await page.waitForURL(/^http:\/\/localhost:\d+\/(\?.*)?$/)
+    await page.waitForURL(/^http:\/\/(localhost|127\.0\.0\.1):\d+\/(\?.*)?$/)
     await expect(page.getByRole('heading', { name: '案件一覧' })).toBeVisible()
   })
 })

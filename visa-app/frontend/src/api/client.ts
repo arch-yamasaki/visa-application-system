@@ -98,6 +98,7 @@ export const apiClient = {
   },
 
   getDocumentSheets(caseId: string, documentId: string): Promise<{ sheets: string[] }> {
+    if (isDemoMode()) return mockApi.getDocumentSheets(caseId, documentId)
     return request(`/cases/${caseId}/documents/${documentId}/sheets`)
   },
 
@@ -129,9 +130,11 @@ export const apiClient = {
     },
   ): { abort: () => void } {
     const controller = new AbortController()
+    const startedAt = performance.now()
 
     ;(async () => {
       try {
+        console.info('ui.extract.fetch_started', { caseId })
         const res = await fetch(`${BASE}/cases/${caseId}/extract-stream`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -144,9 +147,18 @@ export const apiClient = {
 
         if (!res.ok) {
           const text = await res.text().catch(() => res.statusText)
+          console.info('ui.extract.fetch_failed', {
+            caseId,
+            status: res.status,
+            elapsed_ms: Math.round(performance.now() - startedAt),
+          })
           callbacks.onError(`API error ${res.status}: ${text}`)
           return
         }
+        console.info('ui.extract.response_opened', {
+          caseId,
+          elapsed_ms: Math.round(performance.now() - startedAt),
+        })
 
         const reader = res.body?.getReader()
         if (!reader) {
@@ -156,6 +168,7 @@ export const apiClient = {
 
         const decoder = new TextDecoder()
         let buffer = ''
+        let finished = false
 
         while (true) {
           const { done, value } = await reader.read()
@@ -172,11 +185,28 @@ export const apiClient = {
 
             try {
               const parsed = JSON.parse(json)
+              const logBase = {
+                caseId,
+                run_id: parsed.run_id,
+                elapsed_ms: Math.round(performance.now() - startedAt),
+                server_elapsed_ms: parsed.elapsed_ms,
+              }
               if (parsed.event === 'progress') {
+                console.info('ui.extract.progress', { ...logBase, phase: parsed.phase })
                 callbacks.onProgress({ phase: parsed.phase, message: parsed.message })
               } else if (parsed.event === 'complete') {
+                finished = true
+                console.info('ui.extract.complete', {
+                  ...logBase,
+                  workflow_state: parsed.workflow_state,
+                })
                 callbacks.onComplete({ workflow_state: parsed.workflow_state })
               } else if (parsed.event === 'error') {
+                finished = true
+                console.info('ui.extract.error', {
+                  ...logBase,
+                  error_type: typeof parsed.error,
+                })
                 callbacks.onError(parsed.error)
               }
             } catch {
@@ -184,8 +214,21 @@ export const apiClient = {
             }
           }
         }
+
+        if (!finished) {
+          console.info('ui.extract.stream_closed_without_finish', {
+            caseId,
+            elapsed_ms: Math.round(performance.now() - startedAt),
+          })
+          callbacks.onError('抽出ストリームが完了前に切断されました')
+        }
       } catch (err) {
         if ((err as Error).name !== 'AbortError') {
+          console.info('ui.extract.connection_error', {
+            caseId,
+            elapsed_ms: Math.round(performance.now() - startedAt),
+            error_type: (err as Error).name,
+          })
           callbacks.onError((err as Error).message ?? '接続エラー')
         }
       }

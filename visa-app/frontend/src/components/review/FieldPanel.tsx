@@ -11,21 +11,44 @@ interface Props {
   onMarkSectionReviewed?: (paths: string[]) => void
 }
 
+function issuePath(item: unknown): string | null {
+  if (typeof item === 'object' && item !== null && 'path' in item) {
+    const path = (item as { path?: unknown }).path
+    return typeof path === 'string' && path ? path : null
+  }
+  if (typeof item === 'string' && item.includes('.') && !/\s/.test(item)) {
+    return item
+  }
+  return null
+}
+
 export default function FieldPanel({ caseData, fieldMetadata, review, onFieldUpdate, onMarkSectionReviewed }: Props) {
   const fields = flattenCaseData(caseData)
 
   // Build set of flagged paths
-  const missingPaths = new Set(review.missing_items?.map((i) => i.path) ?? [])
-  const errorPaths = new Set(review.validation_errors?.map((i) => i.path) ?? [])
+  const missingPaths = new Set(
+    review.missing_items?.map(issuePath).filter((path): path is string => Boolean(path)) ?? [],
+  )
+  const errorPaths = new Set(
+    review.validation_errors?.map(issuePath).filter((path): path is string => Boolean(path)) ?? [],
+  )
   const reviewPaths = new Set(
     review.findings
       ?.filter((f) => f.severity === 'medium' || f.severity === 'high')
       .flatMap((f) => f.evidence_refs ?? []) ?? [],
   )
+  const visibleFields = [...fields]
+  const existingPaths = new Set(visibleFields.map((field) => field.path))
+  for (const path of [...missingPaths, ...errorPaths]) {
+    if (!existingPaths.has(path)) {
+      visibleFields.push({ path, value: undefined })
+      existingPaths.add(path)
+    }
+  }
 
   // Group by section
   const sections = new Map<string, { path: string; value: unknown }[]>()
-  for (const field of fields) {
+  for (const field of visibleFields) {
     const section = getSectionForPath(field.path)
     if (!sections.has(section)) sections.set(section, [])
     sections.get(section)!.push(field)

@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[2]
 TEST_ROOT = ROOT / "visa-eval"
 CATALOG = TEST_ROOT / "catalog.json"
 SINGLE_ROOT = TEST_ROOT / "test_cases_from_raw"
-MAPPING = ROOT / "rasens-autofill" / "data" / "mappings" / "rasens_offer_mapping.json"
+MAPPING = ROOT / "rasens-autofill" / "data" / "mappings" / "rasens_offer_mapping_v2.json"
 
 
 def rel(path: Path) -> str:
@@ -198,39 +198,40 @@ def applicant_from_sheet(sheet: dict[str, Any], source_path: str) -> dict[str, A
             "home_country_address": qa.get("home_country_address", ""),
             "nationality_region": "ネパール Nepal",
             "sex": "unknown",
-        },
-        "passport": {
-            "number": qa.get("passport_number", ""),
-            "expiry_date": parse_date(qa.get("passport_expiry_date", "")),
-        },
-        "immigration_history": {
-            "has_entries": yes_no(qa.get("has_entries", "")),
-            "entries_count": qa.get("entries_count", ""),
-            "latest_entry": split_period(qa.get("latest_entry_period_raw", "")),
-            "prior_coe_applications": {
-                "has_history": yes_no(qa.get("prior_coe_has_history", "")),
-                "count": qa.get("prior_coe_count", ""),
-                "denial_count": "",
+            "passport": {
+                "number": qa.get("passport_number", ""),
+                "expiry_date": parse_date(qa.get("passport_expiry_date", "")),
             },
-            "criminal_record": yes_no(qa.get("criminal_record", "")),
-            "deportation_or_departure_order": None,
+            "residence_card": {},
+            "immigration_history": {
+                "has_entries": yes_no(qa.get("has_entries", "")),
+                "entries_count": qa.get("entries_count", ""),
+                "latest_entry": split_period(qa.get("latest_entry_period_raw", "")),
+                "prior_coe_applications": {
+                    "has_history": yes_no(qa.get("prior_coe_has_history", "")),
+                    "count": qa.get("prior_coe_count", ""),
+                    "denial_count": "",
+                },
+                "criminal_record": yes_no(qa.get("criminal_record", "")),
+                "deportation_or_departure_order": None,
+            },
+            "family": {
+                "has_accompanying_members": None,
+                "has_japan_relatives_or_cohabitants": bool(has_relative),
+                "japan_relatives_or_cohabitants": [relative] if has_relative else [],
+            },
+            "education": [
+                {
+                    "id": "edu_01",
+                    "school_name": qa.get("school_name", ""),
+                    "graduation_date": parse_date(qa.get("graduation_date", "")),
+                    "major": qa.get("major", ""),
+                    "source_refs": [f"{source_path}#{sheet['sheet_name']}"],
+                }
+            ],
+            "employment_history": [],
+            "qualifications": [],
         },
-        "family": {
-            "has_accompanying_members": None,
-            "has_japan_relatives_or_cohabitants": bool(has_relative),
-            "japan_relatives_or_cohabitants": [relative] if has_relative else [],
-        },
-        "education": [
-            {
-                "id": "edu_01",
-                "school_name": qa.get("school_name", ""),
-                "graduation_date": parse_date(qa.get("graduation_date", "")),
-                "major": qa.get("major", ""),
-                "source_refs": [f"{source_path}#{sheet['sheet_name']}"],
-            }
-        ],
-        "employment_history": [],
-        "qualifications": [],
         "raw_intake_pairs": sheet["raw_pairs"],
     }
 
@@ -289,8 +290,8 @@ def build_case(case: dict[str, Any], catalog: dict[str, Any]) -> dict[str, Any]:
     missing_items = []
     if any(app["applicant"]["sex"] == "unknown" for app in applicants):
         missing_items.append({"path": "applicants[].applicant.sex", "reason": "intake_spreadsheet_does_not_include_sex"})
-    if any(app["immigration_history"]["deportation_or_departure_order"] is None for app in applicants):
-        missing_items.append({"path": "applicants[].immigration_history.deportation_or_departure_order", "reason": "not_in_intake_spreadsheet"})
+    if any(app["applicant"]["immigration_history"]["deportation_or_departure_order"] is None for app in applicants):
+        missing_items.append({"path": "applicants[].applicant.immigration_history.deportation_or_departure_order", "reason": "not_in_intake_spreadsheet"})
 
     return {
         "schema_version": "1.0",
@@ -305,8 +306,11 @@ def build_case(case: dict[str, Any], catalog: dict[str, Any]) -> dict[str, Any]:
             "source_organization": "A社",
             "routed_to_human_reason": [],
         },
-        "application": {
-            "desired_status_label": "技術・人文知識・国際業務",
+        "entry_plan": {
+            "main_activity_category": "技術・人文知識・国際業務",
+            "purpose_of_entry": "技術・人文知識・国際業務",
+        },
+        "employment": {
             "activity_details": "",
             "activity_details_structured": {
                 "duties": [],
@@ -370,7 +374,7 @@ def build_review(case_data: dict[str, Any]) -> dict[str, Any]:
         "stats": {
             "applicant_count": len(applicants),
             "has_japan_relatives_count": sum(
-                1 for applicant in applicants if applicant.get("family", {}).get("has_japan_relatives_or_cohabitants")
+                1 for applicant in applicants if applicant.get("applicant", {}).get("family", {}).get("has_japan_relatives_or_cohabitants")
             ),
         },
     }
@@ -390,19 +394,12 @@ def single_case_from_intake(case_data: dict[str, Any], applicant: dict[str, Any]
             "source_organization": case_data["case"]["source_organization"],
             "routed_to_human_reason": [],
         },
-        "application": deepcopy(case_data["application"]),
+        "entry_plan": deepcopy(case_data["entry_plan"]),
         "applicant": deepcopy(applicant["applicant"]),
-        "passport": deepcopy(applicant["passport"]),
-        "residence_card": {},
-        "immigration_history": deepcopy(applicant["immigration_history"]),
-        "family": deepcopy(applicant["family"]),
-        "education": deepcopy(applicant["education"]),
-        "transcript_subjects": [],
-        "employment_history": deepcopy(applicant["employment_history"]),
-        "qualifications": deepcopy(applicant["qualifications"]),
         "employer": deepcopy(case_data["employer"]),
+        "employment": deepcopy(case_data["employment"]),
         "proxy": {},
-        "intermediary": {},
+        "settings": {},
         "receiving_method": {},
         "supporting_documents": [
             {
@@ -426,10 +423,10 @@ def review_from_single_case(case_data: dict[str, Any]) -> dict[str, Any]:
     missing_items = []
     if case_data.get("applicant", {}).get("sex") in {"", "unknown"}:
         missing_items.append({"path": "applicant.sex", "reason": "intake_spreadsheet_does_not_include_sex"})
-    if case_data.get("immigration_history", {}).get("deportation_or_departure_order") is None:
-        missing_items.append({"path": "immigration_history.deportation_or_departure_order", "reason": "not_in_intake_spreadsheet"})
-    if not case_data.get("residence_card"):
-        missing_items.append({"path": "residence_card", "reason": "not_present_in_intake_spreadsheet"})
+    if case_data.get("applicant", {}).get("immigration_history", {}).get("deportation_or_departure_order") is None:
+        missing_items.append({"path": "applicant.immigration_history.deportation_or_departure_order", "reason": "not_in_intake_spreadsheet"})
+    if not case_data.get("applicant", {}).get("residence_card"):
+        missing_items.append({"path": "applicant.residence_card", "reason": "not_present_in_intake_spreadsheet"})
 
     return {
         "schema_version": "0.1.0",

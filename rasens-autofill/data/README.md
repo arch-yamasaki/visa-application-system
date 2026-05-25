@@ -13,16 +13,16 @@
 ```text
 reference_form.html
   -> form_definitions/rasens_offer_fields.json
-  -> mappings/rasens_offer_mapping.json
+  -> mappings/rasens_offer_mapping_v2.json
 
 cases/demo_case_data.json
-  + mappings/rasens_offer_mapping.json
+  + mappings/rasens_offer_mapping_v2.json
   -> generated/demo_application_data.json
 ```
 
 ## ディレクトリ
 
-- `schemas/`: case_data、AIレビュー出力、入力資料manifestのJSON Schema。現行 `case_data.schema.json` は canonical v2 設計前の部分スキーマ。
+- `schemas/`: canonical v2 case_data、AIレビュー出力、入力資料manifestのJSON Schema。
 - `cases/`: 合成デモ・fixture用の `case_data`。実運用案件の正本ではない。
 - `form_definitions/`: 入管オンライン申請フォームの項目台帳。`reference_form.html` から抽出したもの。
 - `mappings/`: 正規 `case_data` からフォーム入力項目への変換ルール。
@@ -49,7 +49,7 @@ cases/demo_case_data.json
 
 `mappings/` では、17.2〜17.4 のような条件付き項目を `visible_when`、21.2〜21.8 や職歴01〜06のような繰り返し項目を `groups` で表します。`field_id` や `field_name` は画面依存なので、案件正本のキーには使いません。`visible_when` と `transform` の評価は backend generator が担当し、Chrome拡張には持たせません。
 
-現時点の `mappings/rasens_offer_mapping.json` は主要項目だけの初期版です。canonical v2 実装時は延命せず、`form_definitions/rasens_offer_fields.json` の274行台帳を正として作り直します。自動投入はMVP対象だけに絞りますが、274行すべてに `manual`, `settings`, `derived`, `unsupported`, `future` などの扱いを付けます。
+`mappings/rasens_offer_mapping_v2.json` は canonical v2 のMVP自動投入対象です。`form_definitions/rasens_offer_fields.json` の274行台帳を正とし、自動投入しない行は今後 `manual`, `settings`, `derived`, `unsupported`, `future` などの扱いを付けていきます。
 
 代理人は `proxy` として案件ごとに扱います。取次者は `intermediary` として、太田さん側の申請アカウントを持つ申請会社情報を固定設定値から注入します。
 
@@ -58,6 +58,6 @@ cases/demo_case_data.json
 ```bash
 python3 rasens-autofill/scripts/build_application_data.py \
   rasens-autofill/data/cases/demo_case_data.json \
-  rasens-autofill/data/mappings/rasens_offer_mapping.json \
+  rasens-autofill/data/mappings/rasens_offer_mapping_v2.json \
   rasens-autofill/data/generated/demo_application_data.json
 ```

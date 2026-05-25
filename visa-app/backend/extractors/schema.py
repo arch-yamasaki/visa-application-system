@@ -50,86 +50,6 @@ def _object_of_fields(field_names: list[str]) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Sections
-# ---------------------------------------------------------------------------
-
-_APPLICANT_SCHEMA = _object_of_fields([
-    "name_roman",
-    "nationality",
-    "date_of_birth",
-    "gender",
-    "passport_number",
-    "passport_expiration",
-    "place_of_birth",
-    "hometown",
-    "marital_status",
-    "occupation",
-])
-
-_EMPLOYMENT_CONDITIONS_SCHEMA = _object_of_fields([
-    "company_name",
-    "job_title",
-    "duties",
-    "monthly_salary",
-    "annual_salary",
-    "bonus",
-    "working_hours",
-    "holidays",
-    "insurance",
-    "joining_date",
-    "contract_type",
-    "contract_period",
-    "contract_start_date",
-    "contract_end_date",
-    "work_location",
-    "allowances",
-])
-
-# education is an ARRAY of objects
-_EDUCATION_ITEM_SCHEMA = _object_of_fields([
-    "school_name",
-    "major",
-    "graduation_date",
-])
-
-_EDUCATION_SCHEMA = {
-    "type": "ARRAY",
-    "items": _EDUCATION_ITEM_SCHEMA,
-}
-
-_EMPLOYER_SCHEMA = _object_of_fields([
-    "company_name",
-    "address",
-    "capital",
-    "employees",
-    "corporate_number",
-    "representative_name",
-    "business_category",
-    "sales",
-])
-
-_ENTRY_HISTORY_SCHEMA = _object_of_fields([
-    "past_entry",
-    "past_coe",
-    "past_entry_count",
-    "past_coe_count",
-    "latest_entry",
-    "departure_order",
-])
-
-_CRIMINAL_RECORD_SCHEMA = _object_of_fields([
-    "has_record",
-])
-
-_FAMILY_IN_JAPAN_SCHEMA = _object_of_fields([
-    "members",
-])
-
-_ACTIVITY_DETAILS_SCHEMA = _object_of_fields([
-    "description",
-])
-
-# ---------------------------------------------------------------------------
 # Review section — NOT wrapped in FieldValue
 # ---------------------------------------------------------------------------
 
@@ -153,42 +73,6 @@ _REVIEW_SCHEMA = {
     "required": ["expected_route", "missing_items", "findings", "validation_errors"],
 }
 
-# ---------------------------------------------------------------------------
-# Top-level extraction schema (legacy — kept for backward compatibility)
-# ---------------------------------------------------------------------------
-
-EXTRACTION_SCHEMA = {
-    "type": "OBJECT",
-    "properties": {
-        "case_data": {
-            "type": "OBJECT",
-            "properties": {
-                "applicant": _APPLICANT_SCHEMA,
-                "employment_conditions": _EMPLOYMENT_CONDITIONS_SCHEMA,
-                "education": _EDUCATION_SCHEMA,
-                "employer": _EMPLOYER_SCHEMA,
-                "entry_history": _ENTRY_HISTORY_SCHEMA,
-                "criminal_record": _CRIMINAL_RECORD_SCHEMA,
-                "family_in_japan": _FAMILY_IN_JAPAN_SCHEMA,
-                "activity_details": _ACTIVITY_DETAILS_SCHEMA,
-            },
-            "required": [
-                "applicant",
-                "employment_conditions",
-                "education",
-                "employer",
-                "entry_history",
-                "criminal_record",
-                "family_in_japan",
-                "activity_details",
-            ],
-        },
-        "review": _REVIEW_SCHEMA,
-    },
-    "required": ["case_data", "review"],
-}
-
-
 # ===========================================================================
 # Scoped schemas — Phase 1 (S1, S2, S3, S6)
 # ===========================================================================
@@ -197,20 +81,15 @@ EXTRACTION_SCHEMA = {
 # SCOPE1: Identity (身分事項, RASENS No.1〜20)
 # ---------------------------------------------------------------------------
 
-_S1_APPLICANT = _object_of_fields([
-    "nationality",
-    "date_of_birth",
+_S1_APPLICANT_BASE = _object_of_fields([
+    "nationality_region",
+    "birth_date",
     "name_roman",
-    "gender",
-    "place_of_birth",
+    "sex",
+    "birth_place",
     "marital_status",
     "occupation",
     "home_country_address",
-    "japan_postal_code",
-    "japan_address",
-    "japan_phone",
-    "japan_mobile",
-    "email",
 ])
 
 _S1_PASSPORT = _object_of_fields([
@@ -218,47 +97,84 @@ _S1_PASSPORT = _object_of_fields([
     "expiry_date",
 ])
 
-_S1_APPLICATION = _object_of_fields([
+_S1_JAPAN_CONTACT = _object_of_fields([
+    "postal_code",
+    "address",
+    "phone",
+    "mobile",
+    "email",
+])
+
+_S1_FAMILY = _object_of_fields([
+    "has_accompanying_members",
+    "has_japan_relatives_or_cohabitants",
+])
+
+_S1_ENTRY_PLAN = _object_of_fields([
     "purpose_of_entry",
     "planned_entry_date",
     "planned_port",
     "planned_period_years",
     "planned_period_months",
-    "has_accompanying",
     "visa_application_location",
 ])
 
 _S1_IMMIGRATION_HISTORY = _object_of_fields([
     "has_entries",
     "entries_count",
-    "latest_entry_start",
-    "latest_entry_end",
-    "has_prior_coe",
-    "prior_coe_count",
-    "prior_coe_denial_count",
-    "has_criminal_record",
-    "has_deportation",
+    "criminal_record",
+    "deportation_or_departure_order",
     "deportation_count",
     "deportation_latest",
 ])
+
+_S1_LATEST_ENTRY = _object_of_fields([
+    "start_date",
+    "end_date",
+])
+
+_S1_PRIOR_COE = _object_of_fields([
+    "has_history",
+    "count",
+    "denial_count",
+])
+
+_S1_IMMIGRATION_HISTORY["properties"]["latest_entry"] = _S1_LATEST_ENTRY
+_S1_IMMIGRATION_HISTORY["properties"]["prior_coe_applications"] = _S1_PRIOR_COE
+_S1_IMMIGRATION_HISTORY["required"].extend(["latest_entry", "prior_coe_applications"])
+
+_S1_APPLICANT = _S1_APPLICANT_BASE
+_S1_APPLICANT["properties"]["japan_contact"] = _S1_JAPAN_CONTACT
+_S1_APPLICANT["properties"]["passport"] = _S1_PASSPORT
+_S1_APPLICANT["properties"]["immigration_history"] = _S1_IMMIGRATION_HISTORY
+_S1_APPLICANT["properties"]["family"] = _S1_FAMILY
+_S1_APPLICANT["required"].extend(["japan_contact", "passport", "immigration_history", "family"])
 
 SCOPE1_IDENTITY_SCHEMA = {
     "type": "OBJECT",
     "properties": {
         "applicant": _S1_APPLICANT,
-        "passport": _S1_PASSPORT,
-        "application": _S1_APPLICATION,
-        "immigration_history": _S1_IMMIGRATION_HISTORY,
+        "entry_plan": _S1_ENTRY_PLAN,
     },
-    "required": ["applicant", "passport", "application", "immigration_history"],
+    "required": ["applicant", "entry_plan"],
 }
 
 # ---------------------------------------------------------------------------
 # SCOPE2: Employer + Employment conditions + Activity (所属機関+雇用条件+活動内容, No.2〜11)
 # ---------------------------------------------------------------------------
 
-_S2_CONTRACT = _object_of_fields([
+_S2_EMPLOYMENT = _object_of_fields([
     "contract_type",
+    "employment_period_type",
+    "employment_period_years",
+    "employment_period_months",
+    "joining_date",
+    "monthly_salary",
+    "experience_months",
+    "has_position",
+    "position_title",
+    "job_category_primary",
+    "activity_details",
 ])
 
 _S2_EMPLOYER = _object_of_fields([
@@ -266,7 +182,7 @@ _S2_EMPLOYER = _object_of_fields([
     "has_corporate_number",
     "corporate_number",
     "office_name",
-    "employment_insurance_no",
+    "employment_insurance_office_number",
     "industry_primary",
     "industry_other",
     "postal_code",
@@ -279,31 +195,13 @@ _S2_EMPLOYER = _object_of_fields([
     "technical_intern_count",
 ])
 
-_S2_EMPLOYMENT_CONDITIONS = _object_of_fields([
-    "employment_period_type",
-    "employment_period_years",
-    "employment_period_months",
-    "joining_date",
-    "monthly_salary",
-    "experience_months",
-    "has_position",
-    "position_title",
-    "job_category_primary",
-])
-
-_S2_ACTIVITY_DETAILS = _object_of_fields([
-    "description",
-])
-
 SCOPE2_EMPLOYER_SCHEMA = {
     "type": "OBJECT",
     "properties": {
-        "contract": _S2_CONTRACT,
         "employer": _S2_EMPLOYER,
-        "employment_conditions": _S2_EMPLOYMENT_CONDITIONS,
-        "activity_details": _S2_ACTIVITY_DETAILS,
+        "employment": _S2_EMPLOYMENT,
     },
-    "required": ["contract", "employer", "employment_conditions", "activity_details"],
+    "required": ["employer", "employment"],
 }
 
 # ---------------------------------------------------------------------------
@@ -315,12 +213,9 @@ _S3_EDUCATION = _object_of_fields([
     "level_detail",
     "level_other",
     "school_name",
+    "major_field",
+    "major_field_other",
     "graduation_date",
-])
-
-_S3_MAJOR = _object_of_fields([
-    "field",
-    "field_other",
 ])
 
 _S3_IT_QUALIFICATION = _object_of_fields([
@@ -328,14 +223,32 @@ _S3_IT_QUALIFICATION = _object_of_fields([
     "qualification_name",
 ])
 
+_S3_QUALIFICATIONS = {
+    "type": "OBJECT",
+    "properties": {
+        "it": _S3_IT_QUALIFICATION,
+    },
+    "required": ["it"],
+}
+
+_S3_APPLICANT = {
+    "type": "OBJECT",
+    "properties": {
+        "education": {
+            "type": "ARRAY",
+            "items": _S3_EDUCATION,
+        },
+        "qualifications": _S3_QUALIFICATIONS,
+    },
+    "required": ["education", "qualifications"],
+}
+
 SCOPE3_EDUCATION_SCHEMA = {
     "type": "OBJECT",
     "properties": {
-        "education": _S3_EDUCATION,
-        "major": _S3_MAJOR,
-        "it_qualification": _S3_IT_QUALIFICATION,
+        "applicant": _S3_APPLICANT,
     },
-    "required": ["education", "major", "it_qualification"],
+    "required": ["applicant"],
 }
 
 # ---------------------------------------------------------------------------
@@ -371,4 +284,37 @@ SCOPE_SCHEMAS: dict[str, dict] = {
     "S2": SCOPE2_EMPLOYER_SCHEMA,
     "S3": SCOPE3_EDUCATION_SCHEMA,
     "S6": SCOPE6_REVIEW_SCHEMA,
+}
+
+
+def _combined_applicant_schema() -> dict:
+    """Build the non-scoped fallback applicant schema from scoped pieces."""
+    import copy
+
+    applicant = copy.deepcopy(_S1_APPLICANT)
+    applicant["properties"]["education"] = {
+        "type": "ARRAY",
+        "items": _S3_EDUCATION,
+    }
+    applicant["properties"]["qualifications"] = _S3_QUALIFICATIONS
+    applicant["required"].extend(["education", "qualifications"])
+    return applicant
+
+
+EXTRACTION_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "case_data": {
+            "type": "OBJECT",
+            "properties": {
+                "applicant": _combined_applicant_schema(),
+                "entry_plan": _S1_ENTRY_PLAN,
+                "employer": _S2_EMPLOYER,
+                "employment": _S2_EMPLOYMENT,
+            },
+            "required": ["applicant", "entry_plan", "employer", "employment"],
+        },
+        "review": _REVIEW_SCHEMA,
+    },
+    "required": ["case_data", "review"],
 }

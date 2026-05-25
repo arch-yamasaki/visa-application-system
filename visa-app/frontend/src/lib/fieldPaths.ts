@@ -34,59 +34,31 @@ export function flattenCaseData(
   return result
 }
 
-/**
- * RASENS フォーム準拠のセクション定義。
- * 表示順は SECTION_ORDER で制御する。
- */
-const sectionMap: Record<string, string> = {
-  // 1. 申請概要
-  case: '申請概要',
-  application: '申請概要',
-  // 2. 身分事項
-  applicant: '身分事項',
-  passport: '身分事項',
-  residence_card: '身分事項',
-  immigration_history: '身分事項',
-  family: '身分事項',
-  family_in_japan: '身分事項',
-  past_history: '身分事項',
-  // 3. 学歴・資格
-  education: '学歴・資格',
-  major: '学歴・資格',
-  transcript_subjects: '学歴・資格',
-  employment_history: '学歴・資格',
-  qualifications: '学歴・資格',
-  it_qualification: '学歴・資格',
-  // 4. 所属機関
-  employer: '所属機関',
-  employment_conditions: '所属機関',
-  employment_terms: '所属機関',
-  employment_contract: '所属機関',
-  contract: '所属機関',
-  activity_details: '所属機関',
-  // 5. 代理人・取次者
-  proxy: '代理人・取次者',
-  intermediary: '代理人・取次者',
-  receiving_method: '代理人・取次者',
-  // 6. 審査
-  assessments: '審査',
-  supporting_documents: '審査',
-  review: '審査',
-}
+const sectionRules: [RegExp, string][] = [
+  [/^case\./, '申請概要'],
+  [/^applicant\.(education|employment_history|qualifications)\b/, '申請人に関する情報等'],
+  [/^applicant\./, '身分事項'],
+  [/^entry_plan\./, '入国計画'],
+  [/^employer\./, '所属機関'],
+  [/^employment\./, '雇用・活動内容'],
+  [/^(proxy|receiving_method)\./, '代理人・受領方法'],
+  [/^(supporting_documents|assessments)\./, '審査'],
+]
 
 /** セクションの表示順。定義にないセクションは末尾の「その他」に配置。 */
 export const SECTION_ORDER = [
   '申請概要',
   '身分事項',
-  '学歴・資格',
+  '入国計画',
+  '申請人に関する情報等',
   '所属機関',
-  '代理人・取次者',
+  '雇用・活動内容',
+  '代理人・受領方法',
   '審査',
 ] as const
 
 export function getSectionForPath(path: string): string {
-  const top = path.split('.')[0]
-  return sectionMap[top] ?? 'その他'
+  return sectionRules.find(([pattern]) => pattern.test(path))?.[1] ?? 'その他'
 }
 
 /** Convert a dot-path to a human-friendly label. */
@@ -100,19 +72,14 @@ const labelOverrides: Record<string, string> = {
   'case.source_organization': '送出機関',
   'case.routed_to_human_reason': '人的判断理由',
 
-  // 申請内容
-  'application.desired_status_label': '希望する在留資格',
-  'application.purpose_of_entry': '入国目的',
-  'application.planned_entry_date': '入国予定日',
-  'application.planned_port': '入国予定港',
-  'application.planned_period_years': '希望期間（年）',
-  'application.planned_period_months': '希望期間（月）',
-  'application.visa_application_location': '査証申請予定地',
-  'application.activity_details': '活動内容詳細',
-  'application.activity_details_structured.department': '配属部署',
-  'application.activity_details_structured.role': '職種',
-  'application.activity_details_structured.duties': '職務内容',
-  'application.activity_details_structured.simple_labor_risk_terms': '単純労働リスク語',
+  // 入国計画
+  'entry_plan.main_activity_category': '主たる活動内容',
+  'entry_plan.purpose_of_entry': '入国目的',
+  'entry_plan.planned_entry_date': '入国予定日',
+  'entry_plan.planned_port': '入国予定港',
+  'entry_plan.planned_period_years': '希望期間（年）',
+  'entry_plan.planned_period_months': '希望期間（月）',
+  'entry_plan.visa_application_location': '査証申請予定地',
 
   // 申請人
   'applicant.name_roman': '氏名（ローマ字）',
@@ -129,67 +96,62 @@ const labelOverrides: Record<string, string> = {
   'applicant.japan_contact.phone': '電話番号',
   'applicant.japan_contact.mobile': '携帯番号',
   'applicant.japan_contact.email': 'メール',
-  'applicant.nationality': '国籍',
-  'applicant.date_of_birth': '生年月日',
-  'applicant.passport_number': '旅券番号',
-  'applicant.gender': '性別',
-  'applicant.hometown_city': '出身地',
-  'applicant.passport_expiration_date': '旅券有効期限',
-  'applicant.place_of_birth': '出生地',
 
   // 旅券
-  'passport.number': '旅券番号',
-  'passport.expiry_date': '旅券有効期限',
+  'applicant.passport.number': '旅券番号',
+  'applicant.passport.expiry_date': '旅券有効期限',
 
   // 在留カード
-  'residence_card.number': '在留カード番号',
-  'residence_card.status': '在留資格',
-  'residence_card.expiry_date': '有効期限',
+  'applicant.residence_card.number': '在留カード番号',
+  'applicant.residence_card.status': '在留資格',
+  'applicant.residence_card.expiry_date': '有効期限',
 
   // 家族
-  'family.has_accompanying_members': '同伴家族の有無',
-  'family.has_japan_relatives_or_cohabitants': '在日親族の有無',
-  'family.japan_relatives_or_cohabitants': '在日親族・同居者',
+  'applicant.family.has_accompanying_members': '同伴者の有無',
+  'applicant.family.has_japan_relatives_or_cohabitants': '在日親族の有無',
+  'applicant.family.japan_relatives_or_cohabitants': '在日親族・同居者',
 
   // 出入国歴
-  'immigration_history.has_entries': '入国歴の有無',
-  'immigration_history.entries_count': '入国回数',
-  'immigration_history.latest_entry.start_date': '直近入国日',
-  'immigration_history.latest_entry.end_date': '直近出国日',
-  'immigration_history.prior_coe_applications.has_history': '在留資格認定証明書申請歴',
-  'immigration_history.prior_coe_applications.count': '申請回数',
-  'immigration_history.prior_coe_applications.denial_count': '不交付回数',
-  'immigration_history.criminal_record': '犯罪歴の有無',
-  'immigration_history.deportation_or_departure_order': '退去強制・出国命令歴',
+  'applicant.immigration_history.has_entries': '過去の出入国歴の有無',
+  'applicant.immigration_history.entries_count': '過去の出入国歴 回数',
+  'applicant.immigration_history.latest_entry.start_date': '直近入国日',
+  'applicant.immigration_history.latest_entry.end_date': '直近出国日',
+  'applicant.immigration_history.prior_coe_applications.has_history': '在留資格認定証明書申請歴',
+  'applicant.immigration_history.prior_coe_applications.count': '申請回数',
+  'applicant.immigration_history.prior_coe_applications.denial_count': '不交付回数',
+  'applicant.immigration_history.criminal_record': '犯罪歴の有無',
+  'applicant.immigration_history.deportation_or_departure_order': '退去強制・出国命令歴',
 
   // 学歴（配列項目）
-  'education.id': '学歴ID',
-  'education.level': '学歴区分',
-  'education.school_name': '学校名',
-  'education.major': '専攻・学科',
-  'education.graduation_date': '卒業年月日',
-  'education.source_refs': '証跡',
-  'education.degree': '学位',
+  'applicant.education.id': '学歴ID',
+  'applicant.education.level': '学歴区分',
+  'applicant.education.level_detail': '学歴詳細',
+  'applicant.education.school_name': '学校名',
+  'applicant.education.major_field': '専攻・専門分野',
+  'applicant.education.major_field_other': '専攻・専門分野 その他',
+  'applicant.education.graduation_date': '卒業年月日',
+  'applicant.education.degree': '学位',
 
   // 成績科目（配列項目）
   'transcript_subjects.name': '科目名',
   'transcript_subjects.matched_duty': '対応職務',
 
   // 職歴（配列項目）
-  'employment_history.id': '職歴ID',
-  'employment_history.country_region': '勤務国・地域',
-  'employment_history.start_date': '入社年月',
-  'employment_history.end_date': '退社年月',
-  'employment_history.company_name_en': '会社名（英語）',
-  'employment_history.company_name_local': '会社名（現地語）',
-  'employment_history.duties': '職務内容',
-  'employment_history.source_refs': '証跡',
+  'applicant.employment_history.id': '職歴ID',
+  'applicant.employment_history.country_region': '勤務国・地域',
+  'applicant.employment_history.start_date': '入社年月',
+  'applicant.employment_history.end_date': '退社年月',
+  'applicant.employment_history.company_name_en': '会社名（英語）',
+  'applicant.employment_history.company_name_local': '会社名（現地語）',
+  'applicant.employment_history.duties': '職務内容',
 
   // 資格（配列項目）
-  'qualifications.type': '資格種別',
-  'qualifications.name': '資格名',
-  'qualifications.level': '取得級・レベル',
-  'qualifications.issue_date': '取得日',
+  'applicant.qualifications.type': '資格種別',
+  'applicant.qualifications.name': '資格名',
+  'applicant.qualifications.level': '取得級・レベル',
+  'applicant.qualifications.issue_date': '取得日',
+  'applicant.qualifications.it.has_qualification': '情報処理資格の有無',
+  'applicant.qualifications.it.qualification_name': '情報処理資格名',
 
   // 所属機関
   'employer.name': '所属機関名',
@@ -235,56 +197,18 @@ const labelOverrides: Record<string, string> = {
   'assessments.status': '判定結果',
   'assessments.summary': '概要',
 
-  // 雇用条件
-  'employment_conditions.company_name': '会社名',
-  'employment_conditions.monthly_salary': '月給',
-  'employment_conditions.job_title': '職種',
-  'employment_conditions.contract_type': '契約種別',
-  'employment_conditions.contract_start_date': '契約開始日',
-  'employment_conditions.contract_end_date': '契約終了日',
-  'employment_conditions.working_hours': '勤務時間',
-  'employment_conditions.holidays': '休日',
-  'employment_conditions.insurance': '保険',
-  'employment_conditions.bonus': '賞与',
-  'employment_conditions.allowances': '手当',
-  'employment_conditions.annual_salary': '年収',
-  'employment_conditions.contract_period': '契約期間',
-  'employment_conditions.work_location': '勤務地',
-  'employment_conditions.joining_date': '入社予定日',
-  'employment_conditions.duties': '職務内容',
-
-  // 雇用条件フォールバック (employment_terms)
-  'employment_terms.company_name': '会社名',
-  'employment_terms.monthly_salary': '月給',
-  'employment_terms.job_title': '職種',
-  'employment_terms.work_location': '勤務地',
-  'employment_terms.working_hours': '勤務時間',
-  'employment_terms.joining_date': '入社予定日',
-  'employment_terms.holidays': '休日',
-  'employment_terms.insurance': '保険',
-  'employment_terms.bonus': '賞与',
-  'employment_terms.contract_period': '契約期間',
-  'employment_terms.duties': '職務内容',
-
-  // 雇用条件フォールバック (employment_contract)
-  'employment_contract.position': '職種',
-  'employment_contract.salary_monthly': '月給',
-  'employment_contract.work_location': '勤務地',
-
-  // 活動内容
-  'activity_details.description': '活動内容',
-  'activity_details.schedule': 'スケジュール',
-
-  // 在日親族
-  'family_in_japan.name': '氏名',
-  'family_in_japan.relationship': '続柄',
-  'family_in_japan.nationality': '国籍',
-  'family_in_japan.residence_card_number': '在留カード番号',
-  'family_in_japan.cohabiting': '同居の有無',
-
-  // 過去の履歴
-  'past_history.has_history': '履歴の有無',
-  'past_history.count': '回数',
+  // 雇用・活動内容
+  'employment.contract_type': '契約の形態',
+  'employment.employment_period_type': '就労予定期間',
+  'employment.employment_period_years': '就労予定期間（年）',
+  'employment.employment_period_months': '就労予定期間（月）',
+  'employment.joining_date': '雇用開始年月日',
+  'employment.monthly_salary': '月額給与',
+  'employment.experience_months': '実務経験月数',
+  'employment.has_position': '役職の有無',
+  'employment.position_title': '役職名',
+  'employment.job_category_primary': '主たる職種',
+  'employment.activity_details': '活動内容詳細',
 }
 
 /** Strip numeric array indices from a path for label lookup.

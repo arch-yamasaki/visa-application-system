@@ -1,100 +1,24 @@
 #!/usr/bin/env python3
-"""Build Chrome-extension autofill rows from canonical case data."""
+"""Build Chrome-extension autofill rows using visa-app backend generator."""
 
 from __future__ import annotations
 
 import argparse
 import json
-import re
+import sys
 from pathlib import Path
-from typing import Any
+
+BACKEND_DIR = Path(__file__).resolve().parents[2] / "visa-app/backend"
+sys.path.insert(0, str(BACKEND_DIR))
+
+from application_data import build_rows as build_application_rows  # noqa: E402
 
 
-def get_path(data: dict[str, Any], path: str) -> Any:
-    current: Any = data
-    for part in path.split("."):
-        if isinstance(current, list):
-            if not part.isdigit():
-                return None
-            index = int(part)
-            if index >= len(current):
-                return None
-            current = current[index]
-        elif isinstance(current, dict):
-            if part not in current:
-                return None
-            current = current[part]
-        else:
-            return None
-    return current
-
-
-def date_digits(value: Any, digits: int) -> str:
-    raw = str(value or "")
-    found = re.findall(r"\d+", raw)
-    joined = "".join(found)
-    return joined[:digits]
-
-
-def transform_value(value: Any, transform: str) -> str:
-    if value is None:
-        return ""
-    raw_value = str(value).strip()
-    if raw_value.lower() in {"unknown", "not_applicable", "n/a", "na"}:
-        return ""
-    if transform == "date_yyyymmdd":
-        return date_digits(value, 8)
-    if transform == "date_yyyymm":
-        return date_digits(value, 6)
-    if transform == "boolean_yes_no":
-        truthy = {True, "true", "yes", "有", "あり", 1, "1"}
-        normalized = value.lower() if isinstance(value, str) else value
-        return "有 Yes" if normalized in truthy else "無 No"
-    if transform == "marital_yes_no":
-        return "有 Married" if value == "married" else "無 Single"
-    if transform == "sex_ja":
-        return {"male": "男 Male", "female": "女 Female"}.get(str(value), str(value))
-    return str(value)
-
-
-def visible(case_data: dict[str, Any], item: dict[str, Any]) -> bool:
-    for condition in item.get("visible_when", []):
-        actual = get_path(case_data, condition["path"])
-        operator = condition.get("operator", "==")
-        expected = condition.get("value")
-        if operator == "==" and actual != expected:
-            return False
-        if operator == "!=" and actual == expected:
-            return False
-    return True
-
-
-def build_rows(case_data: dict[str, Any], mapping_data: dict[str, Any]) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    for item in mapping_data.get("mappings", []):
-        if not visible(case_data, item):
-            continue
-        value = get_path(case_data, item["value_path"])
-        fill_value = transform_value(value, item.get("transform", ""))
-        if fill_value == "":
-            continue
-        rows.append(
-            {
-                "section": item.get("section", ""),
-                "no": item.get("form_item_no", ""),
-                "label": item.get("label", item["canonical_id"]),
-                "field_name": item.get("field_name", ""),
-                "field_id": item.get("field_id", ""),
-                "input_type": item.get("input_type", "text"),
-                "display_value": fill_value,
-                "fill_value": fill_value,
-                "source_page": "case_data",
-                "confidence": "demo" if case_data.get("case", {}).get("case_id", "").startswith("demo-") else "generated",
-                "canonical_id": item["canonical_id"],
-                "notes": "generated from canonical case_data",
-            }
-        )
-    return rows
+def build_rows(case_data: dict, mapping_data: dict, form_definitions: dict | None = None) -> list[dict]:
+    if form_definitions is None:
+        form_path = Path(__file__).resolve().parents[1] / "data/form_definitions/rasens_offer_fields.json"
+        form_definitions = json.loads(form_path.read_text())
+    return build_application_rows(case_data, mapping_data, form_definitions)
 
 
 def main() -> None:
@@ -106,7 +30,9 @@ def main() -> None:
 
     case_data = json.loads(args.case_data.read_text())
     mapping_data = json.loads(args.mapping.read_text())
-    rows = build_rows(case_data, mapping_data)
+    form_path = Path(__file__).resolve().parents[1] / "data/form_definitions/rasens_offer_fields.json"
+    form_definitions = json.loads(form_path.read_text())
+    rows = build_rows(case_data, mapping_data, form_definitions)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(rows, ensure_ascii=False, indent=2) + "\n")

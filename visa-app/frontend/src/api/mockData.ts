@@ -18,22 +18,14 @@ const demoCaseData = {
     workflow_state: 'needs_review',
     routed_to_human_reason: [],
   },
-  application: {
-    desired_status_label: '技術・人文知識・国際業務',
+  entry_plan: {
+    main_activity_category: '技術・人文知識・国際業務',
     purpose_of_entry: '技術・人文知識・国際業務',
     planned_entry_date: '2026-08-01',
     planned_port: '関西国際空港',
     planned_period_years: '5',
     planned_period_months: '0',
     visa_application_location: 'ハノイ',
-    activity_details:
-      '技術総合職として、製造設備の制御設計、品質管理、工程改善に関する資料作成及び海外拠点との技術連絡業務に従事します。',
-    activity_details_structured: {
-      department: '技術管理部',
-      role: '技術総合職',
-      duties: ['制御設計補助', '品質管理', '工程改善資料作成', '海外拠点との技術連絡'],
-      simple_labor_risk_terms: [],
-    },
   },
   applicant: {
     nationality_region: 'ベトナム Viet Nam',
@@ -52,68 +44,68 @@ const demoCaseData = {
       mobile: '09000000000',
       email: 'demo.applicant@example.com',
     },
-  },
-  passport: {
-    number: 'P0000000',
-    expiry_date: '2030-04-14',
-  },
-  residence_card: {
-    number: '',
-    status: '',
-    expiry_date: '',
-  },
-  family: {
-    has_accompanying_members: false,
-    has_japan_relatives_or_cohabitants: false,
-    japan_relatives_or_cohabitants: [],
-  },
-  immigration_history: {
-    has_entries: true,
-    entries_count: 1,
-    latest_entry: {
-      start_date: '2024-06-01',
-      end_date: '2024-06-10',
+    passport: {
+      number: 'P0000000',
+      expiry_date: '2030-04-14',
     },
-    prior_coe_applications: {
-      has_history: false,
-      count: 0,
-      denial_count: 0,
+    residence_card: {
+      number: '',
+      status: '',
+      expiry_date: '',
     },
-    criminal_record: false,
-    deportation_or_departure_order: false,
+    family: {
+      has_accompanying_members: false,
+      has_japan_relatives_or_cohabitants: false,
+      japan_relatives_or_cohabitants: [],
+    },
+    immigration_history: {
+      has_entries: true,
+      entries_count: 1,
+      latest_entry: {
+        start_date: '2024-06-01',
+        end_date: '2024-06-10',
+      },
+      prior_coe_applications: {
+        has_history: false,
+        count: 0,
+        denial_count: 0,
+      },
+      criminal_record: false,
+      deportation_or_departure_order: false,
+    },
+    education: [
+      {
+        id: 'edu_01',
+        level: 'university',
+        school_name: 'Demo University of Technology',
+        major_field: 'Mechanical Engineering',
+        graduation_date: '2023-03-31',
+        source_refs: ['demo_transcript.pdf#p1'],
+      },
+    ],
+    employment_history: [
+      {
+        id: 'emp_01',
+        country_region: 'ベトナム Viet Nam',
+        start_date: '2023-04',
+        end_date: '2026-03',
+        company_name_en: 'Demo Engineering Co., Ltd.',
+        company_name_local: 'Demo Engineering Co., Ltd.',
+        duties: ['製造設備の設計補助', '品質管理資料作成'],
+      },
+    ],
+    qualifications: [
+      {
+        type: 'language',
+        name: 'JLPT',
+        level: 'N2',
+        issue_date: '2025-01-31',
+      },
+    ],
   },
-  education: [
-    {
-      id: 'edu_01',
-      level: 'university',
-      school_name: 'Demo University of Technology',
-      major: 'Mechanical Engineering',
-      graduation_date: '2023-03-31',
-      source_refs: ['demo_transcript.pdf#p1'],
-    },
-  ],
   transcript_subjects: [
     { name: 'Control Engineering', matched_duty: '制御設計補助' },
     { name: 'Quality Management', matched_duty: '品質管理' },
-  ],
-  employment_history: [
-    {
-      id: 'emp_01',
-      country_region: 'ベトナム Viet Nam',
-      start_date: '2023-04',
-      end_date: '2026-03',
-      company_name_en: 'Demo Engineering Co., Ltd.',
-      company_name_local: 'Demo Engineering Co., Ltd.',
-      duties: ['製造設備の設計補助', '品質管理資料作成'],
-    },
-  ],
-  qualifications: [
-    {
-      type: 'language',
-      name: 'JLPT',
-      level: 'N2',
-      issue_date: '2025-01-31',
-    },
   ],
   employer: {
     name: 'デモテクノロジー株式会社',
@@ -130,6 +122,13 @@ const demoCaseData = {
     foreign_employee_count: 8,
     technical_intern_count: 0,
     category: 'category_3',
+  },
+  employment: {
+    contract_type: '雇用 Employment',
+    monthly_salary: 300000,
+    job_category_primary: '技術開発',
+    activity_details:
+      '技術総合職として、製造設備の制御設計、品質管理、工程改善に関する資料作成及び海外拠点との技術連絡業務に従事します。',
   },
   proxy: {
     name: 'デモ 太郎',
@@ -153,7 +152,6 @@ const demoCaseData = {
       summary: '専攻科目と活動内容の対応があり、単純労働リスク語は検出されていない。',
     },
   ],
-  field_metadata: {},
 }
 
 // --- Generate field_metadata with source refs ---
@@ -165,17 +163,17 @@ function generateFieldMetadata(): FieldMetadataMap {
     'applicant.name_roman': { confidence: 0.98, quote: 'NGUYEN VAN DEMO' },
     'applicant.sex': { confidence: 0.95, quote: 'male' },
     'applicant.birth_place': { confidence: 0.93, quote: 'HANOI' },
-    'passport.number': { confidence: 0.97, quote: 'P0000000' },
-    'passport.expiry_date': { confidence: 0.96, quote: '2030-04-14' },
+    'applicant.passport.number': { confidence: 0.97, quote: 'P0000000' },
+    'applicant.passport.expiry_date': { confidence: 0.96, quote: '2030-04-14' },
     'applicant.japan_contact.postal_code': { confidence: 0.91, quote: '5300001' },
     'applicant.japan_contact.address': { confidence: 0.90, quote: '大阪府大阪市北区梅田1-1-1' },
     'applicant.japan_contact.phone': { confidence: 0.88, quote: '0660000000' },
     'applicant.japan_contact.mobile': { confidence: 0.87, quote: '09000000000' },
     'applicant.japan_contact.email': { confidence: 0.92, quote: 'demo.applicant@example.com' },
-    'application.desired_status_label': { confidence: 0.95, quote: '技術・人文知識・国際業務' },
-    'application.planned_entry_date': { confidence: 0.94, quote: '2026-08-01' },
-    'application.planned_port': { confidence: 0.89, quote: '関西国際空港' },
-    'application.activity_details': { confidence: 0.86, quote: '技術総合職として…' },
+    'entry_plan.main_activity_category': { confidence: 0.95, quote: '技術・人文知識・国際業務' },
+    'entry_plan.planned_entry_date': { confidence: 0.94, quote: '2026-08-01' },
+    'entry_plan.planned_port': { confidence: 0.89, quote: '関西国際空港' },
+    'employment.activity_details': { confidence: 0.86, quote: '技術総合職として…' },
     'employer.name': { confidence: 0.97, quote: 'デモテクノロジー株式会社' },
     'employer.address': { confidence: 0.93, quote: '大阪府大阪市北区梅田1-1-1' },
     'employer.phone': { confidence: 0.91, quote: '0660000000' },
@@ -321,6 +319,13 @@ export const mockApi = {
     _documentId: string,
   ): Promise<{ signed_url: string }> {
     return Promise.resolve({ signed_url: SAMPLE_PDF_URL })
+  },
+
+  getDocumentSheets(
+    _caseId: string,
+    _documentId: string,
+  ): Promise<{ sheets: string[] }> {
+    return Promise.resolve({ sheets: [] })
   },
 
   createCase(_params: {
