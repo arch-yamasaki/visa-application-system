@@ -383,6 +383,7 @@ def _build_extraction_result(parsed: dict) -> ExtractionResult:
         display_case_data = _extract_display_values(raw_case_data)
         # source_refs の正規化
         _normalize_source_refs_in_metadata(field_metadata)
+        _log_source_coverage(field_metadata, display_case_data)
         return ExtractionResult(
             case_data=raw_case_data,
             display_case_data=display_case_data,
@@ -401,6 +402,7 @@ def _build_extraction_result(parsed: dict) -> ExtractionResult:
                     _normalize_source_refs_in_entry(entry)
             parsed["field_metadata"] = raw_fm
         field_metadata = _map_field_metadata(parsed.get("field_metadata", {}))
+        _log_source_coverage(field_metadata, raw_case_data)
         return ExtractionResult(
             case_data=raw_case_data,
             display_case_data=raw_case_data,  # 旧形式はそのまま
@@ -434,6 +436,44 @@ def _normalize_source_refs_in_entry(meta: dict) -> None:
                 ref["page"] = int(ref["page"])
             except (ValueError, TypeError):
                 ref["page"] = 1
+
+
+def _log_source_coverage(field_metadata: dict, display_values: dict) -> None:
+    """証跡充足率をログ出力し、値があるのに証跡がないフィールドをwarningで報告。"""
+    total = len(field_metadata)
+    if total == 0:
+        return
+
+    # display_values からフラットなパス→値を取得
+    flat_values: dict[str, str] = {}
+    def _flatten(obj, prefix=""):
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                _flatten(v, f"{prefix}.{k}" if prefix else k)
+        elif isinstance(obj, list):
+            for i, item in enumerate(obj):
+                _flatten(item, f"{prefix}.{i}")
+        else:
+            flat_values[prefix] = "" if obj is None else str(obj)
+    _flatten(display_values)
+
+    with_refs = 0
+    missing_source_fields: list[str] = []
+    for fp, meta in field_metadata.items():
+        refs = meta.get("source_refs", [])
+        if refs:
+            with_refs += 1
+        else:
+            val = flat_values.get(fp, "")
+            if val:
+                missing_source_fields.append(fp)
+
+    logger.info(
+        "証跡充足率: %d/%d (%.1f%%)",
+        with_refs, total, with_refs / total * 100,
+    )
+    for fp in missing_source_fields:
+        logger.warning("値あり・証跡なし: %s", fp)
 
 
 # ---------------------------------------------------------------------------
@@ -496,12 +536,19 @@ def extract_all_scopes(
             for scope in extraction_scopes
         }
         scope_results: dict[str, dict] = {}
+        failed_scopes: list[str] = []
         for scope, future in futures.items():
             try:
                 scope_results[scope] = future.result()
             except Exception as e:
                 logger.warning("Scope %s failed: %s", scope, e)
                 scope_results[scope] = {}
+                failed_scopes.append(scope)
+
+        if len(failed_scopes) == len(extraction_scopes):
+            raise RuntimeError(
+                f"All extraction scopes failed: {', '.join(failed_scopes)}"
+            )
 
     # Phase 2: Merge scope results into unified case_data
     merged_case_data: dict = {}

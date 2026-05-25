@@ -2,11 +2,13 @@
 
 import io
 import json
+import logging
 import mimetypes
 import os
 import subprocess
 import tempfile
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
@@ -17,7 +19,8 @@ load_dotenv()
 
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from google.cloud import firestore, storage
 from google.cloud import run_v2
 from pydantic import BaseModel
@@ -27,6 +30,9 @@ from extractors.gemini import extract_text_only, extract_pdf_direct, extract_wit
 from extractors.bbox_locator import locate_bboxes
 from extractors.vision import ocr_document
 from extractors.types import ExtractionResult
+from autofill_adapter import adapt
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Config
@@ -54,6 +60,29 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ---------------------------------------------------------------------------
+# /api prefix middleware – strips "/api" so the frontend can use "/api/cases"
+# in production (where Vite dev-proxy is absent) while the route handlers
+# keep their canonical paths ("/cases", "/sessions", etc.).
+# ---------------------------------------------------------------------------
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
+
+
+class StripApiPrefixMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: StarletteRequest, call_next):
+        if request.url.path.startswith("/api/"):
+            # Rewrite /api/cases -> /cases (same as Vite dev proxy)
+            new_path = request.url.path[4:]  # strip "/api"
+            request.scope["path"] = new_path
+        elif request.url.path == "/api":
+            request.scope["path"] = "/"
+        return await call_next(request)
+
+
+app.add_middleware(StripApiPrefixMiddleware)
 
 
 # ---------------------------------------------------------------------------
@@ -179,6 +208,7 @@ def create_session(body: PromptRequest):
     try:
         _launch_job(session_id, run_id, prompt_gcs_uri, firestore_doc_path)
     except Exception as exc:
+        logger.error("Cloud Run Job launch failed for session %s: %s", session_id, exc)
         # Update status but still return the session so the user can inspect
         run_ref.update({"status": "launch_failed", "error": str(exc)})
         session_ref.update({"status": "launch_failed", "updated_at": _now_iso()})
@@ -716,12 +746,13 @@ def _extract_with_gemini(case_doc: dict, pattern: str, scoped: bool = True) -> E
         "target_status": case_info.get("target_status", ""),
     }
 
-    # Download documents from GCS and classify by type
-    file_entries: list[tuple[str, str, bytes]] = []  # (document_id, file_name, bytes)
-    for doc in documents:
+    # Download documents from GCS in parallel and classify by type
+    def _download_one(doc):
         blob = gcs.bucket(GCS_BUCKET).blob(doc["gcs_path"])
-        content = blob.download_as_bytes()
-        file_entries.append((doc["document_id"], doc["file_name"], content))
+        return (doc["document_id"], doc["file_name"], blob.download_as_bytes())
+
+    with ThreadPoolExecutor(max_workers=min(len(documents), 8)) as pool:
+        file_entries: list[tuple[str, str, bytes]] = list(pool.map(_download_one, documents))
 
     # Split into PDF/image vs text-extractable formats
     pdf_contents: list[tuple[str, bytes]] = []
@@ -811,6 +842,62 @@ def _extract_with_gemini(case_doc: dict, pattern: str, scoped: bool = True) -> E
         return result
 
 
+@app.post("/cases/{case_id}/extract-stream")
+def start_extraction_stream(case_id: str, body: ExtractRequest = ExtractRequest()):
+    """SSE streaming extraction endpoint."""
+    ref = db.collection("cases").document(case_id)
+    doc = ref.get()
+    if not doc.exists:
+        raise HTTPException(status_code=404, detail="Case not found")
+    data = doc.to_dict()
+    if not data.get("document_manifest", {}).get("documents"):
+        raise HTTPException(status_code=400, detail="No documents uploaded")
+
+    def event_stream():
+        def send(event, **kwargs):
+            payload = json.dumps({"event": event, **kwargs}, ensure_ascii=False)
+            return f"data: {payload}\n\n"
+
+        try:
+            ref.update({"workflow_state": "extracting", "updated_at": _now_iso()})
+            yield send("progress", phase="downloading", message="ドキュメントを読み込み中...")
+
+            yield send("progress", phase="extracting", message="Gemini APIで抽出中...")
+            result = _extract_with_gemini(data, body.pattern, scoped=body.scoped)
+
+            if not result.display_case_data:
+                raise RuntimeError("抽出結果が空です")
+
+            yield send("progress", phase="saving", message="保存中...")
+
+            ref.update({
+                "case_data": result.display_case_data,
+                "review": result.review,
+                "field_metadata": result.field_metadata,
+                "workflow_state": "needs_review",
+                "updated_at": _now_iso(),
+            })
+
+            yield send("complete", workflow_state="needs_review")
+
+        except Exception as exc:
+            logger.error("Stream extraction failed for case %s: %s", case_id, exc)
+            try:
+                ref.update({"workflow_state": "extraction_failed", "updated_at": _now_iso()})
+            except Exception:
+                pass
+            error_msg = str(exc)
+            if "RESOURCE_EXHAUSTED" in error_msg or "429" in error_msg:
+                error_msg = "API利用上限に達しました。しばらく待ってから再度お試しください。"
+            yield send("error", error=error_msg)
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @app.post("/cases/{case_id}/extract")
 def start_extraction(case_id: str, body: ExtractRequest = ExtractRequest()):
     ref = db.collection("cases").document(case_id)
@@ -836,29 +923,54 @@ def start_extraction(case_id: str, body: ExtractRequest = ExtractRequest()):
 def _start_gemini_extraction(
     case_id: str, case_ref, case_doc: dict, pattern: str, scoped: bool = True
 ) -> dict:
-    """Gemini backend: synchronous extraction."""
+    """Gemini backend: synchronous extraction.
+
+    Uses try/finally to guarantee workflow_state is never left as 'extracting',
+    even if the Cloud Run instance is shutting down (SIGTERM) or an unexpected
+    error occurs after extraction but before the Firestore update.
+    """
     now = _now_iso()
     case_ref.update({"workflow_state": "extracting", "updated_at": now})
 
+    final_state = "extraction_failed"
+    error_msg: str | None = None
+    result: ExtractionResult | None = None
+
     try:
         result = _extract_with_gemini(case_doc, pattern, scoped=scoped)
-    except Exception as exc:
+
         case_ref.update(
-            {"workflow_state": "extraction_failed", "updated_at": _now_iso()}
+            {
+                "case_data": result.display_case_data,    # 表示用（従来形式）をFirestoreに保存
+                "review": result.review,
+                "field_metadata": result.field_metadata,  # 互換レイヤーで自動生成済み
+                "workflow_state": "needs_review",
+                "updated_at": _now_iso(),
+            }
         )
-        return {"status": "extraction_failed", "error": str(exc)}
+        final_state = "needs_review"
 
-    case_ref.update(
-        {
-            "case_data": result.display_case_data,    # 表示用（従来形式）をFirestoreに保存
-            "review": result.review,
-            "field_metadata": result.field_metadata,  # 互換レイヤーで自動生成済み
-            "workflow_state": "needs_review",
-            "updated_at": _now_iso(),
-        }
-    )
+    except Exception as exc:
+        logger.error("Gemini extraction failed for case %s: %s", case_id, exc)
+        error_msg = str(exc)
 
-    return {"status": "completed", "workflow_state": "needs_review"}
+    finally:
+        if final_state != "needs_review":
+            # Extraction did not complete successfully — ensure Firestore
+            # reflects the failure so the case is never stuck in 'extracting'.
+            try:
+                case_ref.update(
+                    {"workflow_state": "extraction_failed", "updated_at": _now_iso()}
+                )
+            except Exception as update_exc:
+                logger.error(
+                    "Failed to update workflow_state to extraction_failed for case %s: %s",
+                    case_id, update_exc,
+                )
+
+    if final_state == "needs_review":
+        return {"status": "completed", "workflow_state": "needs_review"}
+    return {"status": "extraction_failed", "error": error_msg or "unknown error"}
 
 
 def _start_codex_extraction(
@@ -927,6 +1039,7 @@ def _start_codex_extraction(
     try:
         _launch_job(session_id, run_id, prompt_gcs_uri, firestore_doc_path)
     except Exception as exc:
+        logger.error("Codex job launch failed for case %s, session %s: %s", case_id, session_id, exc)
         run_ref.update({"status": "launch_failed", "error": str(exc)})
         session_ref.update({"status": "launch_failed", "updated_at": _now_iso()})
         case_ref.update(
@@ -970,6 +1083,56 @@ def get_extraction_status(case_id: str):
             _harvest_extraction_results(case_id, ref, session_id, latest_run_id)
 
     return {"status": status, "session_id": session_id}
+
+
+def _unwrap_field_values(obj):
+    """FieldValue形式({value, source_refs})からvalueのみ取り出してフラット形式にする。"""
+    if isinstance(obj, dict):
+        if "value" in obj and ("source_refs" in obj or "source" in obj
+                               or ("document_id" in obj and "text_quote" in obj)):
+            return obj["value"]
+        return {k: _unwrap_field_values(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_unwrap_field_values(item) for item in obj]
+    return obj
+
+
+def _is_field_value_format(case_data: dict) -> bool:
+    """case_dataがFieldValue形式かどうかを判定する。"""
+    def check(obj):
+        if isinstance(obj, dict):
+            if "value" in obj and ("source_refs" in obj or "source" in obj
+                                   or ("document_id" in obj and "text_quote" in obj)):
+                return True
+            for v in obj.values():
+                result = check(v)
+                if result is not None:
+                    return result
+        return None
+    return check(case_data) is True
+
+
+@app.get("/cases/{case_id}/autofill-data")
+def get_autofill_data(case_id: str):
+    """case_data を autofill スキーマ形式に変換して返す。
+
+    Gemini抽出済みケースではcase_dataはフラット形式（display_case_data）で保存されている。
+    PATCHで直接投入された場合はFieldValue形式の場合があるため、自動判定して変換する。
+    """
+    doc = db.collection("cases").document(case_id).get()
+    if not doc.exists:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    data = doc.to_dict()
+    case_data = data.get("case_data")
+    if not case_data:
+        raise HTTPException(status_code=400, detail="case_data not found in case document")
+
+    # FieldValue形式の場合はフラットに変換してからadaptに渡す
+    if _is_field_value_format(case_data):
+        case_data = _unwrap_field_values(case_data)
+
+    return adapt(case_data, data)
 
 
 def _harvest_extraction_results(
@@ -1020,6 +1183,41 @@ def _harvest_extraction_results(
 # ---------------------------------------------------------------------------
 # Frontend
 # ---------------------------------------------------------------------------
+# Serve Vite build assets (JS, CSS, images, etc.)
+app.mount("/assets", StaticFiles(directory="static/assets"), name="static-assets")
+
+
 @app.get("/")
 def serve_frontend():
+    return FileResponse("static/index.html")
+
+
+@app.get("/{full_path:path}")
+def serve_spa(full_path: str):
+    """SPA catch-all: return index.html for any unmatched frontend route.
+
+    Requests starting with "api/" should never reach here (they are rewritten
+    by StripApiPrefixMiddleware).  If they do, return 404 instead of HTML to
+    avoid confusing API clients with an HTML response.
+
+    Static files (e.g. .wasm, .js placed at root by pdfjs-dist) that exist
+    in the static/ directory are served directly with the correct MIME type.
+    """
+    if full_path.startswith("api/") or full_path == "api":
+        raise HTTPException(status_code=404, detail="Not found")
+
+    # Serve root-level static files (e.g. jbig2.wasm, openjpeg.wasm) if they exist
+    static_path = Path("static") / full_path
+    if static_path.is_file() and not full_path.startswith("."):
+        mime_overrides = {
+            ".wasm": "application/wasm",
+            ".js": "application/javascript",
+            ".mjs": "application/javascript",
+            ".css": "text/css",
+            ".svg": "image/svg+xml",
+        }
+        ext = Path(full_path).suffix.lower()
+        media_type = mime_overrides.get(ext) or mimetypes.guess_type(str(static_path))[0]
+        return FileResponse(str(static_path), media_type=media_type)
+
     return FileResponse("static/index.html")

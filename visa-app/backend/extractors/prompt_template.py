@@ -63,6 +63,14 @@ source 文字列のフォーマット: `document_id|page|text_quote|confidence`
   - confidence (number): 0.0〜1.0 の範囲
     - 0.9以上=明瞭、0.7-0.9=やや不明瞭、0.5-0.7=複数解釈可能、0.5未満=推測
 - 値が見つからない場合は value を空文字、source を空文字とし review の missing_items に記録
+- **source が空文字列("")のまま value が非空であることは禁止。** 値を出力するなら source は必ず `document_id|page|text_quote|confidence` 形式で埋めること。
+
+### OK / NG 例
+
+OK: `{{"value": "YAMADA TARO", "source": "doc_abc123|1|YAMADA TARO|0.95"}}`
+OK: `{{"value": "", "source": ""}}` （値が見つからない場合）
+NG: `{{"value": "YAMADA TARO", "source": ""}}` （値があるのに証跡が空 — 禁止）
+NG: `{{"value": "無", "source": ""}}` （否定的な値でも証跡は必須）
 
 ### case_data 出力例
 
@@ -177,6 +185,11 @@ _SCOPED_COMMON_RULES = """\
 - text_quote: 原文から直接引用、50文字以内。パイプ文字(|)は含めない
 - confidence: 0.0〜1.0（0.9以上=明瞭、0.7-0.9=やや不明瞭、0.5-0.7=複数解釈可能、0.5未満=推測）
 - 値が見つからない場合は value を空文字、source を空文字とすること
+- **source が空文字列("")のまま value が非空であることは禁止。** 値を出力するなら source は必ず `document_id|page|text_quote|confidence` 形式で埋めること。
+
+OK: `{"value": "YAMADA TARO", "source": "doc_abc123|1|YAMADA TARO|0.95"}`
+OK: `{"value": "", "source": ""}` （値が見つからない場合）
+NG: `{"value": "YAMADA TARO", "source": ""}` （値があるのに証跡が空 — 禁止）
 
 ### 正規化ルール
 - 法人番号（`employer.corporate_number`）: 13桁の数字のみ。ハイフン・スペースは除去すること。

@@ -108,22 +108,32 @@ def locate_bboxes(
     if not page_groups:
         return field_metadata
 
-    # 1) 全ページの画像を一括レンダリング (CPU処理なので逐次で十分)
-    page_images: dict[tuple[str, int], bytes] = {}
-    for (doc_id, page_num) in page_groups:
+    # 1) 全ページの画像を並列レンダリング
+    render_dpi = int(os.environ.get("BBOX_RENDER_DPI", "200"))
+    render_workers = int(os.environ.get("BBOX_RENDER_WORKERS", "8"))
+
+    def _render_page(key: tuple[str, int]) -> tuple[tuple[str, int], bytes | None]:
+        doc_id, page_num = key
         pdf_bytes = pdf_bytes_map[doc_id]
         doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
-        page_idx = page_num - 1
-        if page_idx < 0 or page_idx >= len(doc):
+        try:
+            page_idx = page_num - 1
+            if page_idx < 0 or page_idx >= len(doc):
+                return key, None
+            page = doc[page_idx]
+            pix = page.get_pixmap(dpi=render_dpi)
+            return key, pix.tobytes("png")
+        finally:
             doc.close()
-            continue
-        page = doc[page_idx]
-        pix = page.get_pixmap(dpi=300)
-        page_images[(doc_id, page_num)] = pix.tobytes("png")
-        doc.close()
+
+    page_images: dict[tuple[str, int], bytes] = {}
+    with ThreadPoolExecutor(max_workers=render_workers) as executor:
+        for key, image_bytes in executor.map(_render_page, page_groups):
+            if image_bytes is not None:
+                page_images[key] = image_bytes
 
     # 2) Gemini bbox 取得を並列実行
-    max_workers = int(os.environ.get("BBOX_MAX_WORKERS", "4"))
+    max_workers = int(os.environ.get("BBOX_MAX_WORKERS", "8"))
 
     def _fetch_bboxes(key: tuple[str, int]):
         doc_id, page_num = key
