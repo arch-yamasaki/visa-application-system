@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { apiClient } from '../api/client'
 import DropZone from '../components/upload/DropZone'
 import FileList from '../components/upload/FileList'
 import ExtractionProgress from '../components/upload/ExtractionProgress'
+import type { PhaseInfo } from '../components/upload/ExtractionProgress'
 import type { DocumentEntry } from '../types/caseData'
 
 export default function UploadPage() {
@@ -13,9 +14,11 @@ export default function UploadPage() {
   const [uploading, setUploading] = useState(false)
   const [extracting, setExtracting] = useState(false)
   const [extractionStatus, setExtractionStatus] = useState<string | null>(null)
+  const [extractionError, setExtractionError] = useState<string | null>(null)
+  const [extractionPhases, setExtractionPhases] = useState<Record<string, PhaseInfo>>({})
   const [backend, setBackend] = useState<string>('gemini')
   const [pattern, setPattern] = useState<string>('auto')
-  const demoSuffix = sessionStorage.getItem('visa_demo_mode') === 'true' ? '?demo=true' : ''
+  const streamRef = useRef<{ abort: () => void } | null>(null)
 
   useEffect(() => {
     if (!caseId) return
@@ -38,21 +41,60 @@ export default function UploadPage() {
     [caseId],
   )
 
+  // SSE ストリームのクリーンアップ
+  useEffect(() => {
+    return () => {
+      streamRef.current?.abort()
+    }
+  }, [])
+
   const handleExtract = async () => {
     if (!caseId || documents.length === 0) return
     setExtracting(true)
     setExtractionStatus('starting')
+    setExtractionError(null)
+    setExtractionPhases({})
+
+    // Gemini → SSE ストリーム方式
+    if (backend === 'gemini') {
+      streamRef.current = apiClient.startExtractionStream(
+        caseId,
+        { backend, pattern },
+        {
+          onProgress: (data) => {
+            setExtractionPhases((prev) => ({
+              ...prev,
+              [data.phase]: { event: 'progress', message: data.message },
+            }))
+          },
+          onComplete: () => {
+            setExtracting(false)
+            setExtractionStatus('completed')
+            navigate(`/cases/${caseId}/review`)
+          },
+          onError: (error) => {
+            setExtracting(false)
+            setExtractionStatus('failed')
+            setExtractionError(error)
+          },
+        },
+      )
+      return
+    }
+
+    // Codex → 従来の同期リクエスト + ポーリング
     try {
       const result = await apiClient.startExtraction(caseId, { backend, pattern })
-      // Gemini returns synchronously with completed status
       if (result.status === 'completed' || result.status === 'needs_review') {
         setExtracting(false)
-        navigate(`/cases/${caseId}/review${demoSuffix}`)
+        setExtractionStatus('completed')
+        navigate(`/cases/${caseId}/review`)
         return
       }
       if (result.status === 'extraction_failed' || result.status === 'launch_failed') {
         setExtracting(false)
         setExtractionStatus('failed')
+        setExtractionError(result.error || null)
         return
       }
       // Codex async backend → poll for completion
@@ -62,7 +104,7 @@ export default function UploadPage() {
         if (status.status === 'completed' || status.status === 'needs_review') {
           clearInterval(poll)
           setExtracting(false)
-          navigate(`/cases/${caseId}/review${demoSuffix}`)
+          navigate(`/cases/${caseId}/review`)
         } else if (status.status === 'failed') {
           clearInterval(poll)
           setExtracting(false)
@@ -125,9 +167,9 @@ export default function UploadPage() {
         >
           {extracting ? '抽出中...' : '抽出開始'}
         </button>
-        {documents.length > 0 && !extracting && (
+        {(extractionStatus === 'completed' || extractionStatus === 'needs_review') && (
           <button
-            onClick={() => navigate(`/cases/${caseId}/review${demoSuffix}`)}
+            onClick={() => navigate(`/cases/${caseId}/review`)}
             className="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm"
           >
             レビューへ
@@ -135,7 +177,14 @@ export default function UploadPage() {
         )}
       </div>
 
-      {extracting && <ExtractionProgress status={extractionStatus} backend={backend} />}
+      {(extracting || extractionStatus === 'failed') && (
+        <ExtractionProgress
+          phases={extractionPhases}
+          status={extractionStatus}
+          backend={backend}
+          error={extractionError}
+        />
+      )}
     </div>
   )
 }

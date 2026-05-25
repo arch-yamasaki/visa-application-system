@@ -34,36 +34,59 @@ export function flattenCaseData(
   return result
 }
 
-/** Map top-level path segments to human-readable section names. */
+/**
+ * RASENS フォーム準拠のセクション定義。
+ * 表示順は SECTION_ORDER で制御する。
+ */
 const sectionMap: Record<string, string> = {
-  case: '案件情報',
-  applicant: '申請人',
-  application: '申請内容',
-  passport: '旅券',
-  residence_card: '在留カード',
-  immigration_history: '出入国歴',
-  family: '家族',
-  education: '学歴',
-  transcript_subjects: '成績科目',
-  employment_history: '職歴',
-  qualifications: '資格',
+  // 1. 申請概要
+  case: '申請概要',
+  application: '申請概要',
+  // 2. 身分事項
+  applicant: '身分事項',
+  passport: '身分事項',
+  residence_card: '身分事項',
+  immigration_history: '身分事項',
+  family: '身分事項',
+  family_in_japan: '身分事項',
+  past_history: '身分事項',
+  // 3. 学歴・資格
+  education: '学歴・資格',
+  major: '学歴・資格',
+  transcript_subjects: '学歴・資格',
+  employment_history: '学歴・資格',
+  qualifications: '学歴・資格',
+  it_qualification: '学歴・資格',
+  // 4. 所属機関
   employer: '所属機関',
-  proxy: '代理人',
-  intermediary: '取次者',
-  receiving_method: '受取方法',
-  supporting_documents: '添付書類',
-  assessments: '審査結果',
-  activity_details: '活動内容',
-  employment_conditions: '雇用条件',
-  employment_terms: '雇用条件',
-  employment_contract: '雇用条件',
-  past_history: '過去の履歴',
-  family_in_japan: '在日親族',
+  employment_conditions: '所属機関',
+  employment_terms: '所属機関',
+  employment_contract: '所属機関',
+  contract: '所属機関',
+  activity_details: '所属機関',
+  // 5. 代理人・取次者
+  proxy: '代理人・取次者',
+  intermediary: '代理人・取次者',
+  receiving_method: '代理人・取次者',
+  // 6. 審査
+  assessments: '審査',
+  supporting_documents: '審査',
+  review: '審査',
 }
+
+/** セクションの表示順。定義にないセクションは末尾の「その他」に配置。 */
+export const SECTION_ORDER = [
+  '申請概要',
+  '身分事項',
+  '学歴・資格',
+  '所属機関',
+  '代理人・取次者',
+  '審査',
+] as const
 
 export function getSectionForPath(path: string): string {
   const top = path.split('.')[0]
-  return sectionMap[top] ?? top
+  return sectionMap[top] ?? 'その他'
 }
 
 /** Convert a dot-path to a human-friendly label. */

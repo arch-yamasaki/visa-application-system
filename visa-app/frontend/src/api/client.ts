@@ -104,7 +104,7 @@ export const apiClient = {
   // Extraction
   startExtraction(caseId: string, options?: { backend?: string; pattern?: string }) {
     if (isDemoMode()) return mockApi.startExtraction(caseId)
-    return request<{ session_id: string; status: string }>(`/cases/${caseId}/extract`, {
+    return request<{ session_id: string; status: string; error?: string }>(`/cases/${caseId}/extract`, {
       method: 'POST',
       body: JSON.stringify({
         backend: options?.backend ?? 'gemini',
@@ -116,5 +116,81 @@ export const apiClient = {
   getExtractionStatus(caseId: string) {
     if (isDemoMode()) return mockApi.getExtractionStatus(caseId)
     return request<{ status: string; session_id?: string }>(`/cases/${caseId}/extraction-status`)
+  },
+
+  /** SSE で抽出進捗をストリーム受信する（Gemini用） */
+  startExtractionStream(
+    caseId: string,
+    options: { backend?: string; pattern?: string },
+    callbacks: {
+      onProgress: (data: { phase: string; message: string }) => void
+      onComplete: (data: { workflow_state: string }) => void
+      onError: (error: string) => void
+    },
+  ): { abort: () => void } {
+    const controller = new AbortController()
+
+    ;(async () => {
+      try {
+        const res = await fetch(`${BASE}/cases/${caseId}/extract-stream`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            backend: options.backend ?? 'gemini',
+            pattern: options.pattern ?? 'auto',
+          }),
+          signal: controller.signal,
+        })
+
+        if (!res.ok) {
+          const text = await res.text().catch(() => res.statusText)
+          callbacks.onError(`API error ${res.status}: ${text}`)
+          return
+        }
+
+        const reader = res.body?.getReader()
+        if (!reader) {
+          callbacks.onError('ReadableStream not supported')
+          return
+        }
+
+        const decoder = new TextDecoder()
+        let buffer = ''
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() ?? ''
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue
+            const json = line.slice(6).trim()
+            if (!json) continue
+
+            try {
+              const parsed = JSON.parse(json)
+              if (parsed.event === 'progress') {
+                callbacks.onProgress({ phase: parsed.phase, message: parsed.message })
+              } else if (parsed.event === 'complete') {
+                callbacks.onComplete({ workflow_state: parsed.workflow_state })
+              } else if (parsed.event === 'error') {
+                callbacks.onError(parsed.error)
+              }
+            } catch {
+              // ignore malformed JSON
+            }
+          }
+        }
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          callbacks.onError((err as Error).message ?? '接続エラー')
+        }
+      }
+    })()
+
+    return { abort: () => controller.abort() }
   },
 }

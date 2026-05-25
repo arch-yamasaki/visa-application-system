@@ -1,7 +1,7 @@
 import type { CaseData, FieldMetadataMap, Review } from '../../types/caseData'
 import FieldSection from './FieldSection'
 import FieldRow from './FieldRow'
-import { flattenCaseData, getFieldLabel, getSectionForPath } from '../../lib/fieldPaths'
+import { flattenCaseData, getFieldLabel, getSectionForPath, SECTION_ORDER } from '../../lib/fieldPaths'
 
 interface Props {
   caseData: CaseData
@@ -37,9 +37,16 @@ export default function FieldPanel({ caseData, fieldMetadata, review, onFieldUpd
     return null
   }
 
+  // Sort sections by SECTION_ORDER; unknown sections go to the end
+  const sortedSections = Array.from(sections.entries()).sort(([a], [b]) => {
+    const ai = (SECTION_ORDER as readonly string[]).indexOf(a)
+    const bi = (SECTION_ORDER as readonly string[]).indexOf(b)
+    return (ai === -1 ? SECTION_ORDER.length : ai) - (bi === -1 ? SECTION_ORDER.length : bi)
+  })
+
   return (
     <div data-field-panel>
-      {Array.from(sections.entries()).map(([section, sectionFields]) => {
+      {sortedSections.map(([section, sectionFields]) => {
         const reviewedCount = sectionFields.filter((f) => fieldMetadata[f.path]?.human_reviewed).length
         return (
           <FieldSection
