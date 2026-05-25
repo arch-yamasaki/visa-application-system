@@ -2,6 +2,7 @@
 
 import logging
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pymupdf
@@ -11,29 +12,30 @@ from .gemini import get_bboxes_for_page, _map_field_metadata
 logger = logging.getLogger(__name__)
 
 BBOX_TARGET_FIELDS = [
-    # 活動内容
-    "activity_details.description",
-    # 申請人
-    "applicant.date_of_birth",
+    "applicant.birth_date",
     "applicant.home_country_address",
     "applicant.marital_status",
     "applicant.name_roman",
-    "applicant.nationality",
+    "applicant.nationality_region",
     "applicant.occupation",
-    "applicant.place_of_birth",
-    # 申請情報
-    "application.has_accompanying",
-    "application.planned_entry_date",
-    "application.planned_period_months",
-    "application.planned_period_years",
-    "application.purpose_of_entry",
-    # 契約
-    "contract.contract_type",
-    # 学歴
-    "education.graduation_date",
-    "education.level",
-    "education.school_name",
-    # 所属機関
+    "applicant.birth_place",
+    "applicant.passport.expiry_date",
+    "applicant.passport.number",
+    "applicant.family.has_accompanying_members",
+    "applicant.immigration_history.entries_count",
+    "applicant.immigration_history.criminal_record",
+    "applicant.immigration_history.deportation_or_departure_order",
+    "applicant.immigration_history.has_entries",
+    "applicant.immigration_history.prior_coe_applications.has_history",
+    "applicant.immigration_history.prior_coe_applications.count",
+    "applicant.education.0.graduation_date",
+    "applicant.education.0.level",
+    "applicant.education.0.school_name",
+    "applicant.education.0.major_field",
+    "entry_plan.planned_entry_date",
+    "entry_plan.planned_period_months",
+    "entry_plan.planned_period_years",
+    "entry_plan.purpose_of_entry",
     "employer.address",
     "employer.annual_sales_jpy",
     "employer.capital_jpy",
@@ -45,28 +47,17 @@ BBOX_TARGET_FIELDS = [
     "employer.office_name",
     "employer.phone",
     "employer.postal_code",
-    # 雇用条件
-    "employment_conditions.employment_period_months",
-    "employment_conditions.employment_period_type",
-    "employment_conditions.employment_period_years",
-    "employment_conditions.experience_months",
-    "employment_conditions.has_position",
-    "employment_conditions.job_category_primary",
-    "employment_conditions.joining_date",
-    "employment_conditions.monthly_salary",
-    "employment_conditions.position_title",
-    # 出入国歴
-    "immigration_history.entries_count",
-    "immigration_history.has_criminal_record",
-    "immigration_history.has_deportation",
-    "immigration_history.has_entries",
-    "immigration_history.has_prior_coe",
-    "immigration_history.prior_coe_count",
-    # 専攻
-    "major.field",
-    # 旅券
-    "passport.expiry_date",
-    "passport.number",
+    "employment.contract_type",
+    "employment.employment_period_months",
+    "employment.employment_period_type",
+    "employment.employment_period_years",
+    "employment.experience_months",
+    "employment.has_position",
+    "employment.job_category_primary",
+    "employment.joining_date",
+    "employment.monthly_salary",
+    "employment.position_title",
+    "employment.activity_details",
 ]
 
 
@@ -106,34 +97,58 @@ def locate_bboxes(
             page_groups[key][field_path] = text_quote
 
     if not page_groups:
+        logger.info("bbox_locator_metric event=no_candidates fields=%d", len(field_metadata))
         return field_metadata
 
     # 1) 全ページの画像を並列レンダリング
     render_dpi = int(os.environ.get("BBOX_RENDER_DPI", "200"))
     render_workers = int(os.environ.get("BBOX_RENDER_WORKERS", "8"))
+    started_at = time.monotonic()
+    logger.info(
+        "bbox_locator_metric event=started page_groups=%d render_workers=%d bbox_workers=%s",
+        len(page_groups),
+        render_workers,
+        os.environ.get("BBOX_MAX_WORKERS", "8"),
+    )
 
     def _render_page(key: tuple[str, int]) -> tuple[tuple[str, int], bytes | None]:
         doc_id, page_num = key
         pdf_bytes = pdf_bytes_map[doc_id]
-        doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
         try:
-            page_idx = page_num - 1
-            if page_idx < 0 or page_idx >= len(doc):
-                return key, None
-            page = doc[page_idx]
-            pix = page.get_pixmap(dpi=render_dpi)
-            return key, pix.tobytes("png")
-        finally:
-            doc.close()
+            doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
+            try:
+                page_idx = page_num - 1
+                if page_idx < 0 or page_idx >= len(doc):
+                    return key, None
+                page = doc[page_idx]
+                pix = page.get_pixmap(dpi=render_dpi)
+                return key, pix.tobytes("png")
+            finally:
+                doc.close()
+        except Exception as exc:
+            logger.warning(
+                "bbox_locator_metric event=render_failed document_id=%s page=%d error_type=%s",
+                doc_id,
+                page_num,
+                type(exc).__name__,
+            )
+            return key, None
 
     page_images: dict[tuple[str, int], bytes] = {}
     with ThreadPoolExecutor(max_workers=render_workers) as executor:
         for key, image_bytes in executor.map(_render_page, page_groups):
             if image_bytes is not None:
                 page_images[key] = image_bytes
+    logger.info(
+        "bbox_locator_metric event=pages_rendered page_groups=%d rendered_pages=%d elapsed_ms=%d",
+        len(page_groups),
+        len(page_images),
+        round((time.monotonic() - started_at) * 1000),
+    )
 
     # 2) Gemini bbox 取得を並列実行
     max_workers = int(os.environ.get("BBOX_MAX_WORKERS", "8"))
+    applied = 0
 
     def _fetch_bboxes(key: tuple[str, int]):
         doc_id, page_num = key
@@ -170,5 +185,14 @@ def locate_bboxes(
                             "y_max": bbox_coords[2],
                             "x_max": bbox_coords[3],
                         }
+                        applied += 1
+
+    logger.info(
+        "bbox_locator_metric event=completed page_groups=%d rendered_pages=%d applied_refs=%d elapsed_ms=%d",
+        len(page_groups),
+        len(page_images),
+        applied,
+        round((time.monotonic() - started_at) * 1000),
+    )
 
     return field_metadata

@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 from google import genai
@@ -38,6 +39,8 @@ _SCOPE_KEY_MAP = {
 
 MODEL_NAME = os.environ.get("GEMINI_MODEL", "gemini-3-flash-preview")
 BBOX_MODEL_NAME = os.environ.get("GEMINI_BBOX_MODEL", "gemini-3-flash-preview")
+GEMINI_HTTP_TIMEOUT_MS = int(os.environ.get("GEMINI_HTTP_TIMEOUT_MS", "300000"))
+GEMINI_THINKING_LEVEL = os.environ.get("GEMINI_THINKING_LEVEL", "LOW").upper()
 
 _SENTINEL = object()  # Default marker for _call_gemini schema parameter
 
@@ -55,7 +58,24 @@ def _build_ocr_context(ocr_results: list[OcrResult]) -> str:
 
 
 def _get_client() -> genai.Client:
-    return genai.Client()
+    return genai.Client(
+        http_options=types.HttpOptions(timeout=GEMINI_HTTP_TIMEOUT_MS)
+    )
+
+
+def _usage_count(usage, name: str) -> int | None:
+    value = getattr(usage, name, None)
+    return value if isinstance(value, int) else None
+
+
+def _thinking_config() -> types.ThinkingConfig | None:
+    if not GEMINI_THINKING_LEVEL:
+        return None
+    level = getattr(types.ThinkingLevel, GEMINI_THINKING_LEVEL, None)
+    if level is None:
+        logger.warning("Unknown GEMINI_THINKING_LEVEL=%s; thinking_config disabled", GEMINI_THINKING_LEVEL)
+        return None
+    return types.ThinkingConfig(thinking_level=level)
 
 
 def get_bboxes_for_page(
@@ -89,18 +109,30 @@ def get_bboxes_for_page(
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
             temperature=0.0,
+            thinking_config=_thinking_config(),
         ),
     )
 
     try:
         return json.loads(response.text)
     except json.JSONDecodeError:
-        logger.warning("Gemini bbox response parse error: %s", response.text[:200])
+        logger.warning(
+            "Gemini bbox response parse error response_chars=%d",
+            len(response.text or ""),
+        )
         return {}
 
 
-def _call_gemini(client: genai.Client, contents: list, prompt: str,
-                  schema: dict | None = _SENTINEL) -> dict:
+def _call_gemini(
+    client: genai.Client,
+    contents: list,
+    prompt: str,
+    schema: dict | None = _SENTINEL,
+    *,
+    run_id: str | None = None,
+    case_id: str | None = None,
+    scope: str | None = None,
+) -> dict:
     """Call Gemini API for structured extraction.
 
     Args:
@@ -112,6 +144,9 @@ def _call_gemini(client: genai.Client, contents: list, prompt: str,
         temperature=0.0,
         max_output_tokens=65536,
     )
+    thinking_config = _thinking_config()
+    if thinking_config is not None:
+        config_kwargs["thinking_config"] = thinking_config
     if schema is _SENTINEL:
         # Legacy path: use EXTRACTION_SCHEMA if available
         if EXTRACTION_SCHEMA is not None:
@@ -119,15 +154,100 @@ def _call_gemini(client: genai.Client, contents: list, prompt: str,
     elif schema is not None:
         config_kwargs["response_schema"] = schema
 
-    response = client.models.generate_content(
-        model=MODEL_NAME,
-        contents=[*contents, prompt],
-        config=types.GenerateContentConfig(**config_kwargs),
+    started_at = time.monotonic()
+    logger.info(
+        "gemini_metric event=request_start %s",
+        json.dumps(
+            {
+                "run_id": run_id,
+                "case_id": case_id,
+                "scope": scope,
+                "model": MODEL_NAME,
+                "parts": len(contents),
+                "prompt_chars": len(prompt),
+                "schema": schema is not None,
+                "thinking_level": GEMINI_THINKING_LEVEL,
+                "timeout_ms": GEMINI_HTTP_TIMEOUT_MS,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        ),
     )
+    try:
+        response = client.models.generate_content(
+            model=MODEL_NAME,
+            contents=[*contents, prompt],
+            config=types.GenerateContentConfig(**config_kwargs),
+        )
+    except Exception as exc:
+        logger.warning(
+            "gemini_metric event=request_failed %s",
+            json.dumps(
+                {
+                    "run_id": run_id,
+                    "case_id": case_id,
+                    "scope": scope,
+                    "model": MODEL_NAME,
+                    "elapsed_ms": round((time.monotonic() - started_at) * 1000),
+                    "error_type": type(exc).__name__,
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
+        )
+        raise
+    elapsed_ms = round((time.monotonic() - started_at) * 1000)
+    logger.info(
+        "gemini_metric event=request_complete %s",
+        json.dumps(
+            {
+                "run_id": run_id,
+                "case_id": case_id,
+                "scope": scope,
+                "model": MODEL_NAME,
+                "elapsed_ms": elapsed_ms,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        ),
+    )
+    usage = getattr(response, "usage_metadata", None)
+    if usage:
+        logger.info(
+            "gemini_metric event=token_usage %s",
+            json.dumps(
+                {
+                    "run_id": run_id,
+                    "case_id": case_id,
+                    "scope": scope,
+                    "model": MODEL_NAME,
+                    "prompt_tokens": _usage_count(usage, "prompt_token_count"),
+                    "candidate_tokens": _usage_count(usage, "candidates_token_count"),
+                    "total_tokens": _usage_count(usage, "total_token_count"),
+                    "thought_tokens": _usage_count(usage, "thoughts_token_count"),
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
+        )
     # finish_reason を確認
     candidate = response.candidates[0] if response.candidates else None
     finish_reason = getattr(candidate, 'finish_reason', None) if candidate else None
     logger.debug("Gemini finish_reason: %s", finish_reason)
+    logger.info(
+        "gemini_metric event=finish_reason %s",
+        json.dumps(
+            {
+                "run_id": run_id,
+                "case_id": case_id,
+                "scope": scope,
+                "model": MODEL_NAME,
+                "finish_reason": str(finish_reason) if finish_reason else None,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        ),
+    )
     if finish_reason and str(finish_reason).upper() in ("MAX_TOKENS", "2"):
         logger.warning(
             "Gemini response was truncated (finish_reason=%s). "
@@ -137,6 +257,7 @@ def _call_gemini(client: genai.Client, contents: list, prompt: str,
     raw_text = response.text
     logger.debug("Gemini response length: %d chars", len(raw_text))
 
+    parse_started_at = time.monotonic()
     try:
         parsed = json.loads(raw_text)
     except json.JSONDecodeError:
@@ -146,13 +267,28 @@ def _call_gemini(client: genai.Client, contents: list, prompt: str,
             parsed = json.loads(repaired_text)
             logger.warning("Gemini response was truncated, repaired JSON (%d→%d chars)", len(raw_text), len(repaired_text))
         except json.JSONDecodeError as e:
-            logger.error("Gemini JSON parse error: %s\nResponse head: %s", e, raw_text[:200])
+            logger.error(
+                "Gemini JSON parse error: %s response_chars=%d",
+                e,
+                len(raw_text),
+            )
             raise ValueError(f"Gemini returned invalid JSON: {e}") from e
     if isinstance(parsed, list) and len(parsed) == 1:
         parsed = parsed[0]
-
-    # --- employment フィールドパス正規化 (employment_terms/contract → conditions) ---
-    parsed = _normalize_employment_keys(parsed)
+    logger.info(
+        "gemini_metric event=response_parsed %s",
+        json.dumps(
+            {
+                "run_id": run_id,
+                "case_id": case_id,
+                "scope": scope,
+                "response_chars": len(raw_text),
+                "elapsed_ms": round((time.monotonic() - parse_started_at) * 1000),
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        ),
+    )
 
     return parsed
 
@@ -229,50 +365,17 @@ def _is_new_format(case_data: dict) -> bool:
     return result is True
 
 
-# --- employment フィールドパス正規化 ---
-_EMPLOYMENT_ALIASES = ("employment_terms", "employment_contract")
-_EMPLOYMENT_CANONICAL = "employment_conditions"
-
-
-def _normalize_employment_keys(parsed: dict) -> dict:
-    """Rename employment_terms / employment_contract → employment_conditions
-    in both case_data and field_metadata to ensure consistent field paths.
-
-    新形式（FieldValue 構造）でも旧形式でも動作する。
-    """
-    # --- case_data ---
-    case_data = parsed.get("case_data")
-    if isinstance(case_data, dict):
-        for alias in _EMPLOYMENT_ALIASES:
-            if alias in case_data and _EMPLOYMENT_CANONICAL not in case_data:
-                case_data[_EMPLOYMENT_CANONICAL] = case_data.pop(alias)
-            elif alias in case_data:
-                # merge into canonical, alias values as fallback
-                canonical = case_data[_EMPLOYMENT_CANONICAL]
-                alias_data = case_data.pop(alias)
-                if isinstance(canonical, dict) and isinstance(alias_data, dict):
-                    for k, v in alias_data.items():
-                        if k not in canonical or not canonical[k]:
-                            canonical[k] = v
-
-    # --- field_metadata (旧形式の場合のみ) ---
-    fm = parsed.get("field_metadata")
-    if isinstance(fm, dict):
-        keys_to_rename = []
-        for key in list(fm.keys()):
-            for alias in _EMPLOYMENT_ALIASES:
-                if key.startswith(alias + "."):
-                    new_key = _EMPLOYMENT_CANONICAL + key[len(alias):]
-                    keys_to_rename.append((key, new_key))
-                elif key == alias:
-                    keys_to_rename.append((key, _EMPLOYMENT_CANONICAL))
-        for old_key, new_key in keys_to_rename:
-            if new_key not in fm:
-                fm[new_key] = fm.pop(old_key)
-            else:
-                fm.pop(old_key)
-
-    return parsed
+def _deep_merge_case_data(target: dict, source: dict) -> dict:
+    for key, value in source.items():
+        if (
+            key in target
+            and isinstance(target[key], dict)
+            and isinstance(value, dict)
+        ):
+            _deep_merge_case_data(target[key], value)
+        else:
+            target[key] = value
+    return target
 
 
 def _normalize_corporate_number(case_data: dict) -> None:
@@ -487,6 +590,8 @@ def extract_scoped(
     case_meta: dict,
     documents: list[dict],
     text_contents: list[tuple[str, str]] | None = None,
+    run_id: str | None = None,
+    case_id: str | None = None,
 ) -> dict:
     """Extract a single scope via Gemini (synchronous).
 
@@ -508,16 +613,55 @@ def extract_scoped(
     schema = SCOPE_SCHEMAS[schema_key]
     prompt = build_scoped_prompt(scope, case_meta, documents)
 
-    raw = _call_gemini(client, contents, prompt, schema=schema)
+    started_at = time.monotonic()
+    logger.info(
+        "gemini_metric event=scope_start %s",
+        json.dumps(
+            {
+                "run_id": run_id,
+                "case_id": case_id,
+                "scope": scope,
+                "parts": len(contents),
+                "documents": len(documents),
+                "prompt_chars": len(prompt),
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        ),
+    )
+    raw = _call_gemini(
+        client,
+        contents,
+        prompt,
+        schema=schema,
+        run_id=run_id,
+        case_id=case_id,
+        scope=scope,
+    )
+    logger.info(
+        "gemini_metric event=scope_complete %s",
+        json.dumps(
+            {
+                "run_id": run_id,
+                "case_id": case_id,
+                "scope": scope,
+                "elapsed_ms": round((time.monotonic() - started_at) * 1000),
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        ),
+    )
     return raw
 
 
 def extract_all_scopes(
     client: genai.Client,
-    contents: list,
+    contents: list | dict[str, list],
     case_meta: dict,
-    documents: list[dict],
+    documents: list[dict] | dict[str, list[dict]],
     text_contents: list[tuple[str, str]] | None = None,
+    run_id: str | None = None,
+    case_id: str | None = None,
 ) -> ExtractionResult:
     """Run all extraction scopes in parallel, then review, then build result.
 
@@ -526,29 +670,66 @@ def extract_all_scopes(
     """
     extraction_scopes = ["identity", "employer", "education"]
 
+    def contents_for(scope: str) -> list:
+        if isinstance(contents, dict):
+            return contents.get(scope) or contents.get("default") or []
+        return contents
+
+    def documents_for(scope: str) -> list[dict]:
+        if isinstance(documents, dict):
+            return documents.get(scope) or documents.get("default") or []
+        return documents
+
     # Phase 1: S1, S2, S3 in parallel via ThreadPoolExecutor
     with ThreadPoolExecutor(max_workers=3) as executor:
         futures = {
             scope: executor.submit(
-                extract_scoped, scope, client, contents,
-                case_meta, documents, text_contents,
+                extract_scoped, scope, client, contents_for(scope),
+                case_meta, documents_for(scope), text_contents, run_id, case_id,
             )
             for scope in extraction_scopes
         }
         scope_results: dict[str, dict] = {}
-        failed_scopes: list[str] = []
+        failed_scopes: dict[str, str] = {}
         for scope, future in futures.items():
             try:
                 scope_results[scope] = future.result()
             except Exception as e:
-                logger.warning("Scope %s failed: %s", scope, e)
+                logger.warning("Scope %s failed: %s", scope, e, exc_info=True)
                 scope_results[scope] = {}
-                failed_scopes.append(scope)
+                failed_scopes[scope] = f"{type(e).__name__}: {e}"
 
         if len(failed_scopes) == len(extraction_scopes):
+            logger.info(
+                "gemini_metric event=scopes_all_failed %s",
+                json.dumps(
+                    {
+                        "run_id": run_id,
+                        "case_id": case_id,
+                        "failed_scopes": list(failed_scopes),
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                ),
+            )
             raise RuntimeError(
                 f"All extraction scopes failed: {', '.join(failed_scopes)}"
             )
+        logger.info(
+            "gemini_metric event=scopes_complete %s",
+            json.dumps(
+                {
+                    "completed_scopes": [
+                        scope for scope in extraction_scopes if scope not in failed_scopes
+                    ],
+                    "failed_scopes": list(failed_scopes),
+                    "run_id": run_id,
+                    "case_id": case_id,
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
+        )
 
     # Phase 2: Merge scope results into unified case_data
     merged_case_data: dict = {}
@@ -556,7 +737,7 @@ def extract_all_scopes(
         # Each scope returns a flat dict of sections (e.g. {"applicant": {...}, "passport": {...}})
         # or may be wrapped in "case_data" key — handle both
         data = result.get("case_data", result) if isinstance(result, dict) else {}
-        merged_case_data.update(data)
+        _deep_merge_case_data(merged_case_data, data)
 
     # Phase 3: Review (S6) — sequential, with merged data as context
     review: dict = {}
@@ -564,12 +745,31 @@ def extract_all_scopes(
         review_schema_key = _SCOPE_KEY_MAP["review"]
         review_schema = SCOPE_SCHEMAS.get(review_schema_key)
         review_prompt = build_scoped_prompt(
-            "review", case_meta, documents, extra_context=merged_case_data,
+            "review", case_meta, documents_for("review"), extra_context=merged_case_data,
         )
-        review = _call_gemini(client, contents, review_prompt, schema=review_schema)
+        review = _call_gemini(
+            client,
+            contents_for("review"),
+            review_prompt,
+            schema=review_schema,
+            run_id=run_id,
+            case_id=case_id,
+            scope="review",
+        )
     except Exception as e:
         logger.warning("Review scope failed: %s", e)
         review = {}
+
+    if failed_scopes:
+        review.setdefault("validation_errors", [])
+        for scope, error in failed_scopes.items():
+            review["validation_errors"].append(
+                f"抽出scope `{scope}` が失敗しました。人間レビューで不足項目を確認してください。原因: {error}"
+            )
+        review.setdefault("findings", [])
+        review["findings"].append(
+            "一部の抽出scopeが失敗したため、抽出結果は部分的です。"
+        )
 
     # Phase 4: Build ExtractionResult via existing _build_extraction_result
     full_data = {"case_data": merged_case_data, "review": review}

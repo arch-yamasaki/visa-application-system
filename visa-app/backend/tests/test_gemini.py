@@ -5,9 +5,11 @@ from unittest.mock import MagicMock, patch
 
 from extractors.gemini import (
     _build_ocr_context,
+    _call_gemini,
     _extract_field_metadata,
     _extract_display_values,
     _map_field_metadata,
+    extract_all_scopes,
     extract_pdf_direct,
     extract_text_only,
     extract_with_images,
@@ -57,7 +59,7 @@ _GEMINI_RESPONSE_NEW = {
                     }
                 ],
             },
-            "nationality": {
+            "nationality_region": {
                 "value": "JP",
                 "source_refs": [
                     {
@@ -79,7 +81,7 @@ _GEMINI_RESPONSE_NEW = {
 # 旧形式（field_metadata 別出し）の Gemini レスポンス
 _GEMINI_RESPONSE_OLD = {
     "case_data": {
-        "applicant": {"name_roman": "TANAKA TARO", "nationality": "JP"},
+        "applicant": {"name_roman": "TANAKA TARO", "nationality_region": "JP"},
     },
     "review": {
         "missing_items": [],
@@ -192,6 +194,28 @@ class TestBuildOcrContext:
 # ---------- extract_text_only (Pattern A) --------------------------------
 
 
+class TestCallGemini:
+    def test_invalid_json_log_does_not_include_response_text(self, caplog):
+        response = MagicMock()
+        response.text = "\x00TANAKA TARO"
+        response.candidates = []
+        response.usage_metadata = None
+
+        client = MagicMock()
+        client.models.generate_content.return_value = response
+
+        try:
+            with caplog.at_level("ERROR", logger="extractors.gemini"):
+                _call_gemini(client, [], "prompt")
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("_call_gemini should fail on unrecoverable JSON")
+
+        assert "TANAKA TARO" not in caplog.text
+        assert "Response head" not in caplog.text
+
+
 class TestExtractTextOnly:
     @patch("extractors.gemini._get_client")
     def test_returns_extraction_result_new_format(self, mock_get_client):
@@ -265,7 +289,7 @@ class TestExtractPdfDirect:
         result = extract_pdf_direct(pdf_contents, _CASE_META, _DOCUMENTS)
 
         assert isinstance(result, ExtractionResult)
-        assert result.display_case_data["applicant"]["nationality"] == "JP"
+        assert result.display_case_data["applicant"]["nationality_region"] == "JP"
         mock_from_bytes.assert_called_once_with(
             data=b"fake_pdf_bytes", mime_type="application/pdf"
         )
@@ -327,6 +351,60 @@ class TestExtractWithImages:
         mock_from_bytes.assert_called_once_with(data=jpg_bytes, mime_type="image/jpeg")
 
 
+# ---------- extract_all_scopes ------------------------------------------
+
+
+class TestExtractAllScopes:
+    @patch("extractors.gemini._call_gemini")
+    @patch("extractors.gemini.extract_scoped")
+    def test_merges_scope_results_deeply(self, mock_extract_scoped, mock_call_gemini):
+        def scoped_result(scope, *_args, **_kwargs):
+            if scope == "identity":
+                return {"case_data": {"applicant": {"name_roman": "TANAKA TARO"}}}
+            if scope == "education":
+                return {"case_data": {"applicant": {"education": [{"school_name": "ABC University"}]}}}
+            return {"case_data": {"employer": {"name": "Example Inc."}}}
+
+        mock_extract_scoped.side_effect = scoped_result
+        mock_call_gemini.return_value = {"missing_items": []}
+
+        result = extract_all_scopes(MagicMock(), [], _CASE_META, _DOCUMENTS)
+
+        assert result.display_case_data["applicant"]["name_roman"] == "TANAKA TARO"
+        assert result.display_case_data["applicant"]["education"][0]["school_name"] == "ABC University"
+        assert result.display_case_data["employer"]["name"] == "Example Inc."
+
+    @patch("extractors.gemini._call_gemini")
+    @patch("extractors.gemini.extract_scoped")
+    def test_partial_scope_failure_returns_reviewable_result(self, mock_extract_scoped, mock_call_gemini):
+        def scoped_result(scope, *_args, **_kwargs):
+            if scope == "identity":
+                raise TimeoutError("read operation timed out")
+            if scope == "employer":
+                return {"case_data": {"employer": {"name": "Example Inc."}}}
+            return {"case_data": {"applicant": {"education": [{"school_name": "ABC University"}]}}}
+
+        mock_extract_scoped.side_effect = scoped_result
+        mock_call_gemini.return_value = {"missing_items": [], "validation_errors": [], "findings": []}
+
+        result = extract_all_scopes(MagicMock(), [], _CASE_META, _DOCUMENTS)
+
+        assert result.display_case_data["employer"]["name"] == "Example Inc."
+        assert result.display_case_data["applicant"]["education"][0]["school_name"] == "ABC University"
+        assert any("identity" in error for error in result.review["validation_errors"])
+
+    @patch("extractors.gemini.extract_scoped")
+    def test_raises_when_all_required_scopes_fail(self, mock_extract_scoped):
+        mock_extract_scoped.side_effect = TimeoutError("read operation timed out")
+
+        try:
+            extract_all_scopes(MagicMock(), [], _CASE_META, _DOCUMENTS)
+        except RuntimeError as exc:
+            assert "All extraction scopes failed" in str(exc)
+        else:
+            raise AssertionError("extract_all_scopes should fail when all scopes fail")
+
+
 # ---------- _extract_field_metadata ------------------------------------
 
 
@@ -340,7 +418,7 @@ class TestExtractFieldMetadata:
                         {"document_id": "doc_p", "page": 1, "text_quote": "YAMADA TARO", "confidence": 0.95}
                     ],
                 },
-                "nationality": {
+                "nationality_region": {
                     "value": "JP",
                     "source_refs": [
                         {"document_id": "doc_p", "page": 1, "text_quote": "JP", "confidence": 0.9}
@@ -351,21 +429,23 @@ class TestExtractFieldMetadata:
         result = _extract_field_metadata(case_data)
         assert "applicant.name_roman" in result
         assert result["applicant.name_roman"]["confidence"] == 0.95
-        assert "applicant.nationality" in result
+        assert "applicant.nationality_region" in result
 
     def test_handles_list_fields(self):
         case_data = {
-            "education": [
-                {
-                    "school_name": {
-                        "value": "東京大学",
-                        "source_refs": [{"confidence": 0.9}],
+            "applicant": {
+                "education": [
+                    {
+                        "school_name": {
+                            "value": "東京大学",
+                            "source_refs": [{"confidence": 0.9}],
+                        }
                     }
-                }
-            ]
+                ]
+            }
         }
         result = _extract_field_metadata(case_data)
-        assert "education.0.school_name" in result
+        assert "applicant.education.0.school_name" in result
 
     def test_empty_source_refs(self):
         case_data = {

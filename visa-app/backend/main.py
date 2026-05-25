@@ -7,6 +7,7 @@ import mimetypes
 import os
 import subprocess
 import tempfile
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
@@ -16,23 +17,48 @@ from typing import Optional
 from dotenv import load_dotenv
 
 load_dotenv()
+logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO").upper())
 
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from google.cloud import firestore, storage
+from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud import run_v2
 from pydantic import BaseModel
 
 from google.genai import types as genai_types
-from extractors.gemini import extract_text_only, extract_pdf_direct, extract_with_images, extract_all_scopes
+from extractors.gemini import (
+    _get_client,
+    extract_text_only,
+    extract_pdf_direct,
+    extract_with_images,
+    extract_all_scopes,
+)
 from extractors.bbox_locator import locate_bboxes
 from extractors.vision import ocr_document
 from extractors.types import ExtractionResult
-from autofill_adapter import adapt
+from application_data import (
+    build_application_data as build_application_data_response,
+    load_default_form_definitions,
+    load_default_mapping,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _log_extract_metric(event: str, **fields) -> None:
+    safe_fields = {
+        key: value
+        for key, value in fields.items()
+        if value is not None
+    }
+    logger.info(
+        "extract_metric event=%s %s",
+        event,
+        json.dumps(safe_fields, ensure_ascii=False, sort_keys=True),
+    )
 
 # ---------------------------------------------------------------------------
 # Config
@@ -380,7 +406,11 @@ def create_case(body: CreateCaseRequest):
             "workflow_state": "draft",
         },
         "applicant": {},
-        "application": {},
+        "entry_plan": {},
+        "employer": {},
+        "employment": {},
+        "proxy": {},
+        "receiving_method": {},
     }
 
     doc = {
@@ -408,10 +438,14 @@ def list_cases(
 ):
     query = db.collection("cases")
     if workflow_state:
-        query = query.where("workflow_state", "==", workflow_state)
-    query = query.order_by("created_at", direction=firestore.Query.DESCENDING).limit(
-        limit
-    )
+        query = query.where(filter=FieldFilter("workflow_state", "==", workflow_state))
+        cases = [doc.to_dict() for doc in query.stream()]
+        return sorted(
+            cases,
+            key=lambda case: case.get("created_at", ""),
+            reverse=True,
+        )[:limit]
+    query = query.order_by("created_at", direction=firestore.Query.DESCENDING).limit(limit)
     return [doc.to_dict() for doc in query.stream()]
 
 
@@ -729,7 +763,12 @@ def get_document_preview(
         )
 
 
-def _extract_with_gemini(case_doc: dict, pattern: str, scoped: bool = True) -> ExtractionResult:
+def _extract_with_gemini(
+    case_doc: dict,
+    pattern: str,
+    scoped: bool = True,
+    run_id: str | None = None,
+) -> ExtractionResult:
     """Run Gemini extraction synchronously.
 
     Args:
@@ -737,6 +776,7 @@ def _extract_with_gemini(case_doc: dict, pattern: str, scoped: bool = True) -> E
         pattern: Extraction pattern ("auto", "text_only", "pdf_direct", "text_and_image").
         scoped: If True, use scope-parallel extraction (new); if False, legacy single-call.
     """
+    run_id = run_id or uuid.uuid4().hex[:12]
     documents = case_doc["document_manifest"]["documents"]
     case_data = case_doc.get("case_data", {})
     case_info = case_data.get("case", case_data)
@@ -746,13 +786,59 @@ def _extract_with_gemini(case_doc: dict, pattern: str, scoped: bool = True) -> E
         "target_status": case_info.get("target_status", ""),
     }
 
+    logger.info(
+        "Gemini extraction started case_id=%s pattern=%s scoped=%s documents=%d",
+        case_doc.get("case_id", ""),
+        pattern,
+        scoped,
+        len(documents),
+    )
+    extraction_started_at = time.monotonic()
+    case_id = case_doc.get("case_id", "")
+    _log_extract_metric(
+        "extraction_start",
+        run_id=run_id,
+        case_id=case_id,
+        pattern=pattern,
+        scoped=scoped,
+        document_count=len(documents),
+    )
+
     # Download documents from GCS in parallel and classify by type
     def _download_one(doc):
+        started_at = time.monotonic()
         blob = gcs.bucket(GCS_BUCKET).blob(doc["gcs_path"])
-        return (doc["document_id"], doc["file_name"], blob.download_as_bytes())
+        content = blob.download_as_bytes()
+        file_name = doc["file_name"]
+        ext = file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
+        _log_extract_metric(
+            "document_downloaded",
+            run_id=run_id,
+            case_id=case_id,
+            document_id=doc["document_id"],
+            document_role=doc.get("document_role"),
+            ext=ext,
+            bytes=len(content),
+            elapsed_ms=round((time.monotonic() - started_at) * 1000),
+        )
+        return (doc["document_id"], file_name, content)
 
     with ThreadPoolExecutor(max_workers=min(len(documents), 8)) as pool:
         file_entries: list[tuple[str, str, bytes]] = list(pool.map(_download_one, documents))
+    _log_extract_metric(
+        "documents_download_complete",
+        run_id=run_id,
+        case_id=case_id,
+        files=len(file_entries),
+        total_bytes=sum(len(content) for _, _, content in file_entries),
+        elapsed_ms=round((time.monotonic() - extraction_started_at) * 1000),
+    )
+    logger.info(
+        "Gemini extraction downloaded documents case_id=%s files=%d total_bytes=%d",
+        case_doc.get("case_id", ""),
+        len(file_entries),
+        sum(len(content) for _, _, content in file_entries),
+    )
 
     # Split into PDF/image vs text-extractable formats
     pdf_contents: list[tuple[str, bytes]] = []
@@ -760,52 +846,195 @@ def _extract_with_gemini(case_doc: dict, pattern: str, scoped: bool = True) -> E
     image_entries: list[tuple[str, str, bytes]] = []  # for OCR path
 
     for did, fname, content in file_entries:
+        started_at = time.monotonic()
         ext = fname.rsplit(".", 1)[-1].lower() if "." in fname else ""
         if ext == "pdf":
             pdf_contents.append((did, content))
             image_entries.append((did, fname, content))
+            _log_extract_metric(
+                "document_classified",
+                run_id=run_id,
+                case_id=case_id,
+                document_id=did,
+                ext=ext,
+                route="pdf_direct",
+                bytes=len(content),
+                elapsed_ms=round((time.monotonic() - started_at) * 1000),
+            )
         elif ext in ("xlsx", "xls"):
             from extractors.xlsx import extract_xlsx
             ocr = extract_xlsx(content, did)
-            text_contents.append((did, "\n".join(p.text for p in ocr.pages)))
+            text = "\n".join(p.text for p in ocr.pages)
+            text_contents.append((did, text))
+            _log_extract_metric(
+                "document_text_extracted",
+                run_id=run_id,
+                case_id=case_id,
+                document_id=did,
+                ext=ext,
+                pages=len(ocr.pages),
+                text_chars=len(text),
+                elapsed_ms=round((time.monotonic() - started_at) * 1000),
+            )
         elif ext in ("docx", "doc"):
             from extractors.docx_text import extract_docx
             ocr = extract_docx(content, did)
-            text_contents.append((did, "\n".join(p.text for p in ocr.pages)))
+            text = "\n".join(p.text for p in ocr.pages)
+            text_contents.append((did, text))
+            _log_extract_metric(
+                "document_text_extracted",
+                run_id=run_id,
+                case_id=case_id,
+                document_id=did,
+                ext=ext,
+                pages=len(ocr.pages),
+                text_chars=len(text),
+                elapsed_ms=round((time.monotonic() - started_at) * 1000),
+            )
         elif ext in ("png", "jpg", "jpeg"):
             image_entries.append((did, fname, content))
+            _log_extract_metric(
+                "document_classified",
+                run_id=run_id,
+                case_id=case_id,
+                document_id=did,
+                ext=ext,
+                route="image_direct",
+                bytes=len(content),
+                elapsed_ms=round((time.monotonic() - started_at) * 1000),
+            )
+    logger.info(
+        "Gemini extraction classified documents case_id=%s pdfs=%d text_docs=%d images=%d",
+        case_doc.get("case_id", ""),
+        len(pdf_contents),
+        len(text_contents),
+        len(image_entries),
+    )
+
+    def _attach_bboxes_if_enabled(result: ExtractionResult) -> ExtractionResult:
+        if not pdf_contents:
+            return result
+        if os.environ.get("ENABLE_BBOX_LOCATOR", "true").lower() != "true":
+            logger.info(
+                "Bbox locator skipped case_id=%s reason=disabled",
+                case_doc.get("case_id", ""),
+            )
+            return result
+
+        logger.info(
+            "Bbox locator started case_id=%s pdfs=%d metadata_fields=%d",
+            case_doc.get("case_id", ""),
+            len(pdf_contents),
+            len(result.field_metadata),
+        )
+        bbox_started_at = time.monotonic()
+        pdf_bytes_map = {did: content for did, content in pdf_contents}
+        try:
+            result.field_metadata = locate_bboxes(result.field_metadata, pdf_bytes_map)
+        except Exception as exc:
+            logger.warning(
+                "Bbox locator failed case_id=%s error_type=%s",
+                case_doc.get("case_id", ""),
+                type(exc).__name__,
+                exc_info=True,
+            )
+            _log_extract_metric(
+                "bbox_failed",
+                run_id=run_id,
+                case_id=case_id,
+                pdfs=len(pdf_contents),
+                metadata_fields=len(result.field_metadata),
+                error_type=type(exc).__name__,
+                elapsed_ms=round((time.monotonic() - bbox_started_at) * 1000),
+            )
+            return result
+        bbox_refs = sum(
+            1
+            for meta in result.field_metadata.values()
+            for ref in meta.get("source_refs", [])
+            if ref.get("bbox")
+        )
+        _log_extract_metric(
+            "bbox_complete",
+            run_id=run_id,
+            case_id=case_id,
+            pdfs=len(pdf_contents),
+            metadata_fields=len(result.field_metadata),
+            bbox_refs=bbox_refs,
+            elapsed_ms=round((time.monotonic() - bbox_started_at) * 1000),
+        )
+        logger.info("Bbox locator completed case_id=%s", case_doc.get("case_id", ""))
+        return result
+
+    def _build_contents_for_scope(scope: str) -> list:
+        scope_parts: list = []
+        if text_contents:
+            for doc_id, text in text_contents:
+                scope_parts.append(f"--- document: {doc_id} ---\n{text}")
+        for doc_id, pdf_bytes in pdf_contents:
+            scope_parts.append(
+                genai_types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf")
+            )
+            scope_parts.append(f"(document_id: {doc_id})")
+        for did, fname, img_bytes in image_entries:
+            if fname.lower().endswith(".pdf"):
+                continue
+            mime = "image/png" if img_bytes[:4] == b"\x89PNG" else "image/jpeg"
+            scope_parts.append(
+                genai_types.Part.from_bytes(data=img_bytes, mime_type=mime)
+            )
+            scope_parts.append(f"(document_id: {did})")
+        return scope_parts
+
+    def _build_documents_for_scope(scope: str) -> list[dict]:
+        return list(documents)
 
     # --- Scoped parallel extraction (new path) ---
     if scoped:
-        from google import genai as _genai
-        client = _genai.Client()
-        # Build contents_parts in the same way as pdf_direct
-        contents_parts: list = []
-        if text_contents:
-            for doc_id, text in text_contents:
-                contents_parts.append(f"--- document: {doc_id} ---\n{text}")
-        for doc_id, pdf_bytes in pdf_contents:
-            contents_parts.append(
-                genai_types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf")
+        client = _get_client()
+        contents_by_scope = {
+            "identity": _build_contents_for_scope("identity"),
+            "employer": _build_contents_for_scope("employer"),
+            "education": _build_contents_for_scope("education"),
+            "review": _build_contents_for_scope("review"),
+        }
+        documents_by_scope = {
+            "identity": _build_documents_for_scope("identity"),
+            "employer": _build_documents_for_scope("employer"),
+            "education": _build_documents_for_scope("education"),
+            "review": _build_documents_for_scope("review"),
+        }
+        logger.info(
+            "Gemini scoped contents case_id=%s parts=%s documents=%s",
+            case_doc.get("case_id", ""),
+            {scope: len(parts) for scope, parts in contents_by_scope.items()},
+            {scope: len(docs) for scope, docs in documents_by_scope.items()},
+        )
+        for scope, parts in contents_by_scope.items():
+            _log_extract_metric(
+                "scope_input_built",
+                run_id=run_id,
+                case_id=case_id,
+                scope=scope,
+                parts=len(parts),
+                documents=len(documents_by_scope[scope]),
             )
-            contents_parts.append(f"(document_id: {doc_id})")
-        # Add standalone images (non-PDF)
-        for did, fname, img_bytes in image_entries:
-            if not fname.lower().endswith(".pdf"):
-                mime = "image/png" if img_bytes[:4] == b"\x89PNG" else "image/jpeg"
-                contents_parts.append(
-                    genai_types.Part.from_bytes(data=img_bytes, mime_type=mime)
-                )
-                contents_parts.append(f"(document_id: {did})")
 
         result = extract_all_scopes(
-            client, contents_parts, case_meta, documents,
+            client, contents_by_scope, case_meta, documents_by_scope,
             text_contents=text_contents or None,
+            run_id=run_id,
+            case_id=case_id,
         )
-        # Gemini bbox 付与（対象フィールドのみ、PDFのみ）
-        if pdf_contents:
-            pdf_bytes_map = {did: content for did, content in pdf_contents}
-            result.field_metadata = locate_bboxes(result.field_metadata, pdf_bytes_map)
+        result = _attach_bboxes_if_enabled(result)
+        _log_extract_metric(
+            "extraction_complete",
+            run_id=run_id,
+            case_id=case_id,
+            field_metadata_count=len(result.field_metadata),
+            review_keys=list(result.review.keys()) if isinstance(result.review, dict) else [],
+            elapsed_ms=round((time.monotonic() - extraction_started_at) * 1000),
+        )
         return result
 
     # --- Legacy single-call extraction ---
@@ -825,21 +1054,14 @@ def _extract_with_gemini(case_doc: dict, pattern: str, scoped: bool = True) -> E
         return extract_text_only(ocr_results, case_meta, documents, text_contents=text_contents or None)
     elif pattern == "pdf_direct":
         result = extract_pdf_direct(pdf_contents, case_meta, documents, text_contents=text_contents or None)
-        # Gemini bbox 付与（対象13フィールドのみ）
-        pdf_bytes_map = {did: content for did, content in pdf_contents}
-        result.field_metadata = locate_bboxes(result.field_metadata, pdf_bytes_map)
-        return result
+        return _attach_bboxes_if_enabled(result)
     else:  # text_and_image
         ocr_results = [
             ocr_document(content, fname, did)
             for did, fname, content in image_entries
         ]
         result = extract_with_images(ocr_results, pdf_contents, case_meta, documents, text_contents=text_contents or None)
-        # Gemini bbox 付与（対象13フィールドのみ、PDFのみ）
-        if pdf_contents:
-            pdf_bytes_map = {did: content for did, content in pdf_contents}
-            result.field_metadata = locate_bboxes(result.field_metadata, pdf_bytes_map)
-        return result
+        return _attach_bboxes_if_enabled(result)
 
 
 @app.post("/cases/{case_id}/extract-stream")
@@ -850,20 +1072,52 @@ def start_extraction_stream(case_id: str, body: ExtractRequest = ExtractRequest(
     if not doc.exists:
         raise HTTPException(status_code=404, detail="Case not found")
     data = doc.to_dict()
+    data.setdefault("case_id", case_id)
     if not data.get("document_manifest", {}).get("documents"):
         raise HTTPException(status_code=400, detail="No documents uploaded")
 
     def event_stream():
+        run_id = uuid.uuid4().hex[:12]
+        stream_started_at = time.monotonic()
+
         def send(event, **kwargs):
-            payload = json.dumps({"event": event, **kwargs}, ensure_ascii=False)
+            payload = json.dumps(
+                {
+                    "event": event,
+                    "run_id": run_id,
+                    "elapsed_ms": round((time.monotonic() - stream_started_at) * 1000),
+                    **kwargs,
+                },
+                ensure_ascii=False,
+            )
             return f"data: {payload}\n\n"
 
+        final_state = "extracting"
         try:
+            _log_extract_metric(
+                "stream_started",
+                run_id=run_id,
+                case_id=case_id,
+                backend=body.backend,
+                pattern=body.pattern,
+                scoped=body.scoped,
+            )
             ref.update({"workflow_state": "extracting", "updated_at": _now_iso()})
+            _log_extract_metric(
+                "firestore_state_updated",
+                run_id=run_id,
+                case_id=case_id,
+                workflow_state="extracting",
+            )
             yield send("progress", phase="downloading", message="ドキュメントを読み込み中...")
 
             yield send("progress", phase="extracting", message="Gemini APIで抽出中...")
-            result = _extract_with_gemini(data, body.pattern, scoped=body.scoped)
+            result = _extract_with_gemini(
+                data,
+                body.pattern,
+                scoped=body.scoped,
+                run_id=run_id,
+            )
 
             if not result.display_case_data:
                 raise RuntimeError("抽出結果が空です")
@@ -874,22 +1128,94 @@ def start_extraction_stream(case_id: str, body: ExtractRequest = ExtractRequest(
                 "case_data": result.display_case_data,
                 "review": result.review,
                 "field_metadata": result.field_metadata,
+                "extraction": {
+                    "backend": "gemini",
+                    "run_id": run_id,
+                    "pattern": body.pattern,
+                    "scoped": body.scoped,
+                    "completed_at": _now_iso(),
+                },
                 "workflow_state": "needs_review",
                 "updated_at": _now_iso(),
             })
 
+            final_state = "needs_review"
+            _log_extract_metric(
+                "firestore_state_updated",
+                run_id=run_id,
+                case_id=case_id,
+                workflow_state="needs_review",
+            )
+            _log_extract_metric(
+                "stream_completed",
+                run_id=run_id,
+                case_id=case_id,
+                elapsed_ms=round((time.monotonic() - stream_started_at) * 1000),
+            )
             yield send("complete", workflow_state="needs_review")
 
         except Exception as exc:
             logger.error("Stream extraction failed for case %s: %s", case_id, exc)
+            final_state = "extraction_failed"
             try:
-                ref.update({"workflow_state": "extraction_failed", "updated_at": _now_iso()})
+                ref.update({
+                    "extraction": {
+                        "backend": "gemini",
+                        "run_id": run_id,
+                        "pattern": body.pattern,
+                        "scoped": body.scoped,
+                        "failed_at": _now_iso(),
+                        "error_type": type(exc).__name__,
+                    },
+                    "workflow_state": "extraction_failed",
+                    "updated_at": _now_iso(),
+                })
+                _log_extract_metric(
+                    "firestore_state_updated",
+                    run_id=run_id,
+                    case_id=case_id,
+                    workflow_state="extraction_failed",
+                )
             except Exception:
                 pass
             error_msg = str(exc)
             if "RESOURCE_EXHAUSTED" in error_msg or "429" in error_msg:
                 error_msg = "API利用上限に達しました。しばらく待ってから再度お試しください。"
+            _log_extract_metric(
+                "stream_failed",
+                run_id=run_id,
+                case_id=case_id,
+                error_type=type(exc).__name__,
+                elapsed_ms=round((time.monotonic() - stream_started_at) * 1000),
+            )
             yield send("error", error=error_msg)
+        finally:
+            if final_state == "extracting":
+                logger.warning("Stream extraction interrupted for case %s", case_id)
+                try:
+                    ref.update({
+                        "extraction": {
+                            "backend": "gemini",
+                            "run_id": run_id,
+                            "pattern": body.pattern,
+                            "scoped": body.scoped,
+                            "interrupted_at": _now_iso(),
+                        },
+                        "workflow_state": "extraction_failed",
+                        "updated_at": _now_iso(),
+                    })
+                    _log_extract_metric(
+                        "stream_interrupted",
+                        run_id=run_id,
+                        case_id=case_id,
+                        elapsed_ms=round((time.monotonic() - stream_started_at) * 1000),
+                    )
+                except Exception as update_exc:
+                    logger.error(
+                        "Failed to mark interrupted extraction as failed for case %s: %s",
+                        case_id,
+                        update_exc,
+                    )
 
     return StreamingResponse(
         event_stream(),
@@ -1085,54 +1411,25 @@ def get_extraction_status(case_id: str):
     return {"status": status, "session_id": session_id}
 
 
-def _unwrap_field_values(obj):
-    """FieldValue形式({value, source_refs})からvalueのみ取り出してフラット形式にする。"""
-    if isinstance(obj, dict):
-        if "value" in obj and ("source_refs" in obj or "source" in obj
-                               or ("document_id" in obj and "text_quote" in obj)):
-            return obj["value"]
-        return {k: _unwrap_field_values(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [_unwrap_field_values(item) for item in obj]
-    return obj
-
-
-def _is_field_value_format(case_data: dict) -> bool:
-    """case_dataがFieldValue形式かどうかを判定する。"""
-    def check(obj):
-        if isinstance(obj, dict):
-            if "value" in obj and ("source_refs" in obj or "source" in obj
-                                   or ("document_id" in obj and "text_quote" in obj)):
-                return True
-            for v in obj.values():
-                result = check(v)
-                if result is not None:
-                    return result
-        return None
-    return check(case_data) is True
-
-
-@app.get("/cases/{case_id}/autofill-data")
-def get_autofill_data(case_id: str):
-    """case_data を autofill スキーマ形式に変換して返す。
-
-    Gemini抽出済みケースではcase_dataはフラット形式（display_case_data）で保存されている。
-    PATCHで直接投入された場合はFieldValue形式の場合があるため、自動判定して変換する。
-    """
+@app.get("/cases/{case_id}/application-data")
+def get_application_data(case_id: str):
+    """Return generated RASENS input rows for the Chrome extension."""
     doc = db.collection("cases").document(case_id).get()
     if not doc.exists:
         raise HTTPException(status_code=404, detail="Case not found")
 
     data = doc.to_dict()
-    case_data = data.get("case_data")
-    if not case_data:
+    if not data.get("case_data"):
         raise HTTPException(status_code=400, detail="case_data not found in case document")
 
-    # FieldValue形式の場合はフラットに変換してからadaptに渡す
-    if _is_field_value_format(case_data):
-        case_data = _unwrap_field_values(case_data)
-
-    return adapt(case_data, data)
+    try:
+        return build_application_data_response(
+            data,
+            load_default_mapping(),
+            load_default_form_definitions(),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 def _harvest_extraction_results(
