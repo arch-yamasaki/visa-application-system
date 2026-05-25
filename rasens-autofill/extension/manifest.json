@@ -6,7 +6,8 @@
   "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": [
     "https://www.rasens-immi.moj.go.jp/*",
-    "https://firestore.googleapis.com/*"
+    "http://localhost:8080/*",
+    "https://visa-app-913363513517.asia-northeast1.run.app/*"
   ],
   "action": {
     "default_popup": "popup.html",

@@ -73,38 +73,50 @@ chrome.storage.local.get(["visaRows", "visaDataSource"]).then(({ visaRows, visaD
   }
 });
 
-// --- Firestore integration ---
+// --- visa-app API integration ---
 
-document.querySelector("#setApiKey").addEventListener("click", (e) => {
+const stateLabel = {
+  draft: "下書き",
+  uploading: "アップロード中",
+  extracting: "抽出中...",
+  needs_review: "要レビュー",
+  ready_to_fill: "入力準備完了",
+  archived: "アーカイブ",
+  extraction_failed: "抽出失敗",
+  launch_failed: "起動失敗"
+};
+
+document.querySelector("#setApiUrl").addEventListener("click", (e) => {
   e.preventDefault();
-  const key = prompt("Firestore API Key を入力してください:");
-  if (key?.trim()) {
-    chrome.storage.local.set({ firestoreApiKey: key.trim() });
-    setStatus("API Key を保存しました");
+  const url = prompt("visa-app APIのURLを入力してください:", "http://localhost:8080");
+  if (url?.trim()) {
+    chrome.storage.local.set({ visaAppApiUrl: url.trim() });
+    setStatus("API URL を保存しました");
   }
 });
 
-document.querySelector("#loadFirestore").addEventListener("click", async () => {
+document.querySelector("#loadFromApi").addEventListener("click", async () => {
   const caseId = document.querySelector("#caseId").value.trim();
   if (!caseId) {
     setStatus("case_id を入力してください");
     return;
   }
 
-  try {
-    setStatus("Firestore から取得中...");
-    const caseData = await window.firestoreClient.getCase(caseId);
+  // Reset banners
+  document.querySelector("#workflowWarning").hidden = true;
+  document.querySelector("#workflowReady").hidden = true;
 
-    // Check workflow_state
-    const workflowState = caseData.workflow_state;
-    if (workflowState && workflowState !== "ready_to_fill") {
-      const proceed = confirm(
-        `workflow_state が「${workflowState}」です（ready_to_fill ではありません）。\n続行しますか？`
-      );
-      if (!proceed) {
-        setStatus("読込を中止しました");
-        return;
-      }
+  try {
+    setStatus("visa-app から取得中...");
+    const caseData = await window.apiClient.getCase(caseId);
+
+    // Show workflow_state banner
+    const workflowState = caseData.case?.workflow_state;
+    if (workflowState === "ready_to_fill") {
+      document.querySelector("#workflowReady").hidden = false;
+    } else if (workflowState) {
+      document.querySelector("#wfState").textContent = stateLabel[workflowState] || workflowState;
+      document.querySelector("#workflowWarning").hidden = false;
     }
 
     // Fetch bundled mapping
@@ -118,7 +130,7 @@ document.querySelector("#loadFirestore").addEventListener("click", async () => {
       return;
     }
 
-    await saveRows(rows, `Firestore: ${caseId}`);
+    await saveRows(rows, `visa-app: ${caseId}`);
   } catch (error) {
     setStatus(`読込エラー\n${error.message}`);
   }
