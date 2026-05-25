@@ -22,6 +22,8 @@
 | [review_field_catalog.md](review_field_catalog.md) | RASENSフォーム全体の順番を基準に、各項目を visa-app でどう扱うかを決める台帳 |
 | [application_data_api.md](application_data_api.md) | backend から Chrome拡張へ渡す `application_data` rows API の設計 |
 | [canonical_v2_migration_plan.md](canonical_v2_migration_plan.md) | 旧Gemini名互換変換をなくし、Chrome拡張をrows入力だけに薄くする移行計画 |
+| [extraction_flow.md](extraction_flow.md) | アップロード後に Gemini 抽出・保存・レビューへ進む現行処理フロー |
+| [real_data_extraction_runbook.md](real_data_extraction_runbook.md) | 実データ抽出の成功判定、scope分割、失敗時の切り分け |
 
 ## 基本方針
 
@@ -39,6 +41,7 @@
 12. 実装内部の配列pathは `applicant.education.0.school_name` の dot index 形式に統一する。
 13. レビュー画面は Phase 1 では canonical section順、Phase 2 では RASENS順の catalog駆動へ移行する。
 14. `case_data.golden` は canonical v2 正解、`application_data.golden` は backend generator の期待出力として分ける。
+15. bbox 取得はPDF由来の根拠に対して事前実行する。ただし bbox 失敗は値抽出の失敗扱いにしない。partial extraction は `ready_to_fill` に進めない。
 
 ## 正本の分担
 
@@ -49,7 +52,7 @@
 | 抽出根拠 | Firestore `field_metadata` | canonical path keyed |
 | レビュー結果 | Firestore `review` | 不足・矛盾・人手確認理由 |
 | フォーム物理項目 | `rasens-autofill/data/form_definitions/rasens_offer_fields.json` | RASENS画面の台帳 |
-| フォーム変換 | `rasens-autofill/data/mappings/rasens_offer_mapping.json` | canonical path -> RASENS field。274行台帳を元にcanonical v2で作り直す |
+| フォーム変換 | `rasens-autofill/data/mappings/rasens_offer_mapping_v2.json` | canonical path -> RASENS field。MVP自動投入対象から開始し、274行台帳へ広げる |
 | Chrome投入行 | `/cases/{case_id}/application-data` の `rows` | 派生物。保存正本にしない |
 | 評価正解 | `visa-eval/test_cases_from_raw/**/expected/*.golden.json` | restricted test data。`case_data` と `application_data` を別物として比較する |
 
@@ -109,7 +112,7 @@ receiving_method
 
 ## 現時点の注意
 
-- 既存実装には `applicant.date_of_birth`, `applicant.gender`, `applicant.nationality`, `passport.*`, `application.*`, `family.*`, `immigration_history.*`, `education.*`, `employment_history.*`, `contract.*`, `employment_conditions.*`, `activity_details.description` など、canonical v2では移動対象になるpathがあります。
-- `case_data.schema.json` は現状 loose なドラフトであり、canonical v2 の正本としては作り直し対象です。
-- `rasens_offer_mapping.json` は主要55項目だけの部分マッピングであり、現行フォーム台帳との不一致疑いがあります。canonical v2 実装時は延命せず作り直します。
+- 旧実装由来の `applicant.date_of_birth`, `applicant.gender`, `applicant.nationality`, `passport.*`, `application.*`, `family.*`, `immigration_history.*`, `education.*`, `employment_history.*`, `contract.*`, `employment_conditions.*`, `activity_details.description` は canonical v2 の正本では使いません。
+- `case_data.schema.json` は canonical v2 の基本構造契約です。ただし、実務上の条件付き必須やレビュー規則は別途 `review` / completeness rules で扱います。
+- 旧 `rasens_offer_mapping.json` は削除済みです。`rasens_offer_mapping_v2.json` を `rasens_offer_fields.json` と照合しながら拡張します。
 - `review_field_catalog.md` はMVP主要項目から設計を始めています。RASENS全274行の完全な扱い台帳へ広げる場合は、`rasens_offer_fields.json` を生成元にして更新します。

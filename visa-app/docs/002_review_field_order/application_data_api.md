@@ -2,9 +2,9 @@
 
 ## 目的
 
-Chrome拡張は RASENS DOM に値を入力するだけにし、`case_data` の解釈や `rasens_offer_mapping.json` の評価は backend 側に寄せます。
+Chrome拡張は RASENS DOM に値を入力するだけにし、`case_data` の解釈や `rasens_offer_mapping_v2.json` の評価は backend 側に寄せます。
 
-現行の `/cases/{case_id}/autofill-data` は `case_data` 風JSONを返し、Chrome拡張側が mapping を読んで `application_data` 行を生成しています。今後はこれをやめ、backend が投入行を返します。
+旧 `/cases/{case_id}/autofill-data` は削除済みです。現在は backend が `/cases/{case_id}/application-data` で投入行を返します。
 
 このAPIの責務分離は次の通りです。
 
@@ -149,7 +149,7 @@ Chrome拡張は次だけを担当します。
 Chrome拡張から削るもの:
 
 - `case_data` の解釈
-- `rasens_offer_mapping.json` の同梱
+- `rasens_offer_mapping_v2.json` の同梱
 - `build_application_data.js` 相当の mapping 解釈
 - `visible_when` / `transform` の評価
 - RASENSフォーム制約の判断
@@ -158,7 +158,7 @@ Chrome拡張から削るもの:
 
 ## mapping を作り直す理由
 
-現行 `rasens_offer_mapping.json` は旧canonical pathと古い物理項目参照が混ざっています。55件中22件で `field_id` 不在、`field_name` 不在、または `field_id` と `field_name` が別項目を指す疑いがあります。
+削除した旧 `rasens_offer_mapping.json` は旧canonical pathと古い物理項目参照が混ざっていました。55件中22件で `field_id` 不在、`field_name` 不在、または `field_id` と `field_name` が別項目を指す疑いがありました。
 
 これは名前の古さだけではなく、値を別の入力欄へ入れるリスクです。そのため、既存mappingを少しずつ修正して延命せず、`rasens_offer_fields.json` の274行フォーム台帳を正として、MVP投入対象の mapping を作り直します。
 
@@ -168,14 +168,14 @@ Chrome拡張から削るもの:
 
 `intermediary` は取次者です。太田さん側の申請アカウントを持つ申請会社情報を固定設定値として rows 生成時に注入し、Gemini抽出対象にはしません。
 
-## 旧APIの扱い
+## APIの扱い
 
 | API | 扱い |
 |---|---|
-| `/cases/{case_id}/autofill-data` | 移行期間だけ残す暫定API |
-| `/cases/{case_id}/application-data` | 新しい本命API |
+| `/cases/{case_id}/autofill-data` | 削除済み |
+| `/cases/{case_id}/application-data` | Chrome拡張向けの本命API |
 
-`/autofill-data` は、canonical保存とChrome拡張移行が完了したら削除します。
+旧APIを復活させると、旧Gemini名からautofill名への互換変換が再発するため、canonical v2 方針では使いません。
 
 ## エラーと警告
 
