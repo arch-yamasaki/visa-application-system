@@ -22,6 +22,7 @@ rasens-autofill/
     manifest.json      # Chrome拡張マニフェスト
     content.js         # フォーム自動入力ロジック
     popup.html/js/css  # 拡張ポップアップUI
+    api_client.js      # visa-app API通信クライアント
     application_data.json  # 同梱デモ投入データ
   docs/
   reference/
@@ -37,8 +38,28 @@ rasens-autofill/
 - `data/mappings/rasens_offer_mapping.json`: 正規 case_data からフォーム入力行への変換ルール
 - `data/generated/demo_application_data.json`: デモ案件から生成した Chrome 拡張投入用 JSON
 - `data/schemas/*.json`: case_data, document_manifest, review の JSON Schema 定義
-- `extension/`: Chrome拡張本体 (manifest.json, content.js, popup.html/js/css)
+- `extension/api_client.js`: visa-app API経由でautofillデータを取得するクライアント（Firestore直接参照から移行）
+- `extension/`: Chrome拡張本体 (manifest.json, content.js, popup.html/js/css, api_client.js)
 - `scripts/build_application_data.py`: case_data + mapping -> application_data を生成するスクリプト
+
+## データフロー
+
+Chrome拡張は visa-app API 経由でautofillデータを取得する。
+
+```
+visa-app (Gemini/Codex抽出) → /cases/{case_id}/autofill-data → Chrome拡張 (api_client.js) → content.js → RASENSフォーム
+```
+
+visa-app の `autofill_adapter.py` が抽出結果（case_data形式）をChrome拡張の `application_data` スキーマに変換する。
+
+## Chrome拡張の接続先設定
+
+Chrome拡張のポップアップUI内「接続先設定」からAPI URLを設定する。`chrome.storage.local` に `visaAppApiUrl` として保存される。
+
+- ローカル開発時: `http://localhost:8080`
+- Cloud Run: `https://visa-app-913363513517.asia-northeast1.run.app`
+
+未設定の場合、API呼び出し時にエラーが表示される。
 
 ## データ再生成
 

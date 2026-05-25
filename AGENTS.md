@@ -19,7 +19,7 @@
 | `visa-app/frontend/` | (visa-app) | React UI — ケース管理・レビュー画面 |
 | `visa-app/backend/` | (visa-app) | FastAPI — 抽出エンジン(Gemini/Codex)・API |
 | `visa-app/jobs/codex-runner/` | (visa-app) | Cloud Run Job — Codex非同期実行コンテナ |
-| `rasens-autofill/` | rasens-autofill | Chrome拡張によるフォーム自動入力、データ設計 |
+| `rasens-autofill/` | rasens-autofill | Chrome拡張によるフォーム自動入力（visa-app API経由でデータ取得） |
 | `visa-eval/` | visa-eval | 実資料読み取り評価、テスト設計 |
 | `docs/shared/` | (共通) | ヒアリング、MVP設計、AIエージェント基盤調査 |
 
@@ -32,6 +32,29 @@
 - `docs/shared/006_ai_agent_infrastructure/README.md`: 汎用AIエージェント基盤の調査
 
 各プロジェクトの詳細は各ディレクトリの `AGENTS.md` を参照。
+
+## GCP
+
+| 項目 | 値 |
+|---|---|
+| アカウント | `yohei7328@gmail.com` |
+| プロジェクトID | `visa-codex-mvp` |
+| リージョン | `asia-northeast1` |
+
+### Cloud Run サービス
+
+| サービス名 | 用途 |
+|---|---|
+| `visa-app` | visa-app バックエンド + フロントエンド (`https://visa-app-913363513517.asia-northeast1.run.app`) |
+| `codex-orchestrator` | Codex非同期実行のオーケストレーター |
+
+### その他リソース
+
+| リソース | 名前 |
+|---|---|
+| Cloud Run Job | `codex-runner-job` |
+| GCS Bucket | `visa-codex-mvp-data` |
+| Firestore | `(default)` — コレクション: `cases`, `sessions` |
 
 ## 開発時の注意
 
