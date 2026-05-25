@@ -343,10 +343,10 @@ export const mockApi = {
   },
 
   startExtraction(_caseId: string) {
-    return Promise.resolve({ session_id: 'demo-session', status: 'completed' })
+    return Promise.resolve({ session_id: 'demo-session', status: 'completed' as string, error: undefined as string | undefined })
   },
 
   getExtractionStatus(_caseId: string) {
-    return Promise.resolve({ status: 'completed', session_id: 'demo-session' })
+    return Promise.resolve({ status: 'completed', session_id: 'demo-session' as string | undefined })
   },
 }

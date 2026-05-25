@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { apiClient } from '../api/client'
 import FieldPanel from '../components/review/FieldPanel'
 import DocumentViewer from '../components/viewer/DocumentViewer'
@@ -32,6 +32,7 @@ function normalizeFieldMetadata(raw: unknown): FieldMetadataMap {
 
 export default function ReviewPage() {
   const { caseId } = useParams<{ caseId: string }>()
+  const navigate = useNavigate()
   const [caseDoc, setCaseDoc] = useState<CaseDocument | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -89,7 +90,7 @@ export default function ReviewPage() {
   }
 
   const handleConfirm = async () => {
-    if (!caseId || !caseDoc) return
+    if (!caseId || !caseDoc || !caseDoc.field_metadata || Object.keys(caseDoc.field_metadata).length === 0) return
     setSaving(true)
     try {
       await apiClient.updateCase(caseId, {
@@ -131,6 +132,24 @@ export default function ReviewPage() {
 
   if (!caseDoc) {
     return <div className="p-6 text-red-500">案件が見つかりません</div>
+  }
+
+  const hasExtractedData = caseDoc.case_data && Object.values(caseDoc.case_data).some(
+    (v) => typeof v === 'object' && v !== null && Object.keys(v).length > 0,
+  )
+  if (!hasExtractedData) {
+    return (
+      <div className="p-6 text-center">
+        <p className="text-orange-600 font-medium">抽出データがありません</p>
+        <p className="text-sm text-gray-500 mt-2">アップロード画面で書類を投入し、抽出を実行してください。</p>
+        <button
+          onClick={() => navigate(`/cases/${caseDoc.case_id}/upload`)}
+          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+        >
+          アップロード画面へ
+        </button>
+      </div>
+    )
   }
 
   return (
@@ -180,7 +199,7 @@ export default function ReviewPage() {
         </span>
         <button
           onClick={handleConfirm}
-          disabled={saving || caseDoc.workflow_state === 'ready_to_fill'}
+          disabled={saving || caseDoc.workflow_state === 'ready_to_fill' || Object.keys(caseDoc.field_metadata).length === 0}
           className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-sm font-medium transition-colors"
         >
           {saving ? '保存中...' : caseDoc.workflow_state === 'ready_to_fill' ? '確認済み' : '確認して完了'}

@@ -40,6 +40,7 @@ export default function FieldRow({ label, fieldPath, value, meta, flagType, onUp
   const displayValue = rawValue === '' ? '(未入力)' : getDisplayValue(rawValue) || rawValue
   const confidence = meta?.source_refs?.[0]?.confidence
   const hasSource = meta?.source_refs && meta.source_refs.length > 0
+  const hasValueNoSource = rawValue !== '' && !hasSource
   const isActive = activeFieldPath === fieldPath
   const isEdited = meta?.human_edited
 
@@ -144,6 +145,12 @@ export default function FieldRow({ label, fieldPath, value, meta, flagType, onUp
       {confidence !== undefined && <ConfidenceDots confidence={confidence} />}
 
       {badgeType && <FlagBadge type={badgeType} />}
+
+      {hasValueNoSource && (
+        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700">
+          要確認
+        </span>
+      )}
 
       {hasSource ? (
         <span className="text-[10px] text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">

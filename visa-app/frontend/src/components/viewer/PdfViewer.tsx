@@ -23,6 +23,7 @@ export default function PdfViewer({ url, page, highlightText, sourceRef }: Props
   const highlightRef = useRef<HTMLDivElement>(null)
   const [numPages, setNumPages] = useState(0)
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const scale = 1.5
   const setPage = useViewerStore((s) => s.setPage)
 
@@ -31,6 +32,7 @@ export default function PdfViewer({ url, page, highlightText, sourceRef }: Props
     let destroyed = false
     setPdfDoc(null)
     setNumPages(0)
+    setLoadError(null)
 
     const task = pdfjsLib.getDocument({ url, wasmUrl: WASM_URL })
     task.promise.then((pdf) => {
@@ -38,7 +40,12 @@ export default function PdfViewer({ url, page, highlightText, sourceRef }: Props
         setPdfDoc(pdf)
         setNumPages(pdf.numPages)
       }
-    }).catch(() => {})
+    }).catch((err) => {
+      if (!destroyed) {
+        console.error('PDF load failed:', err)
+        setLoadError('PDF読み込みに失敗しました')
+      }
+    })
 
     return () => {
       destroyed = true
@@ -98,12 +105,16 @@ export default function PdfViewer({ url, page, highlightText, sourceRef }: Props
 
   return (
     <div className="relative p-4">
-      {!pdfDoc && (
+      {loadError ? (
+        <div className="flex items-center justify-center h-64 text-red-500 text-sm">
+          {loadError}
+        </div>
+      ) : !pdfDoc ? (
         <div className="flex items-center justify-center h-64 text-gray-400 text-sm">
           <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mr-2" />
           PDFを読み込み中...
         </div>
-      )}
+      ) : null}
 
       {numPages > 1 && (
         <div className="flex items-center justify-center gap-3 mb-3">

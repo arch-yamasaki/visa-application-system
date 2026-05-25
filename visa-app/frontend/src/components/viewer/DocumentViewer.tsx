@@ -36,7 +36,7 @@ export default function DocumentViewer({ caseId }: Props) {
     apiClient
       .getDocumentUrl(caseId, currentDocumentId)
       .then((r) => {
-        const url = r.signed_url || apiClient.getDocumentContentUrl(caseId, currentDocumentId)
+        const url = r.signed_url?.trim() || apiClient.getDocumentContentUrl(caseId, currentDocumentId)
         setSignedUrl(currentDocumentId, url)
       })
       .catch(() => {
