@@ -20,6 +20,30 @@ cd backend && uvicorn main:app --reload --port 8080
 
 frontend の Vite proxy が `/api/*` を `localhost:8080` に転送する。
 
+### Python
+
+backend の Python コマンドは、system / Homebrew / pyenv の `python3` を直接使わず、project-local venv の Python を使う。
+
+初回だけ:
+
+```bash
+cd backend
+python3.12 -m venv .venv
+. .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m pip install pytest
+```
+
+以後:
+
+```bash
+cd backend
+.venv/bin/python -m pytest -q
+.venv/bin/python -m uvicorn main:app --reload --port 8080
+```
+
+`python3 -m pytest` や bare `pytest` は使わない。`python3` は環境によって Homebrew Python を拾い、プロジェクト側に入っている `pytest` などの依存を見失うことがある。
+
 ## 本番環境でのAPIアクセス
 
 本番（Cloud Run）ではフロントエンドとバックエンドが同一コンテナで動作する。フロントエンドは開発時と同様に `/api/*` プレフィックス付きでAPIを呼ぶ。`StripApiPrefixMiddleware`（backend/main.py）が `/api/` プレフィックスを除去し、FastAPIのルート（`/cases/...` 等）にリライトする。
