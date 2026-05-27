@@ -264,7 +264,7 @@ Tasks:
 - scopeごとに渡す文書と prompt 上の書類一覧を一致させる。
 - ファイル名推測から `document_role` / 自動分類結果ベースの文書ルーティングへ移行する。
 - ローカル実データQAの手順を [real_data_extraction_runbook.md](real_data_extraction_runbook.md) に集約する。
-- `/application-data` の `fillable` 条件に抽出完了・warningなしを反映する。
+- `/application-data` の `fillable` 条件は workflow 状態ベースにする。必須不足や一部未入力は投入を止めず、人間レビューで補完する。
 
 Done:
 

@@ -10,6 +10,7 @@ export interface CaseData {
   employment?: Employment
   proxy?: Proxy
   receiving_method?: ReceivingMethod
+  settings?: Settings
   supporting_documents?: SupportingDocument[]
   assessments?: Assessment[]
 }
@@ -46,8 +47,9 @@ export interface Applicant {
   immigration_history?: ImmigrationHistory
   family?: Family
   education?: Education[]
+  has_employment_history?: boolean
   employment_history?: EmploymentRecord[]
-  qualifications?: Qualification[]
+  qualifications?: Qualifications
 }
 
 export interface EntryPlan {
@@ -88,17 +90,31 @@ export interface ImmigrationHistory {
   }
   criminal_record?: boolean
   deportation_or_departure_order?: boolean
+  deportation_count?: number | string
+  deportation_latest?: string
 }
 
 export interface Family {
   has_accompanying_members?: boolean
   has_japan_relatives_or_cohabitants?: boolean
-  japan_relatives_or_cohabitants?: Record<string, unknown>[]
+  japan_relatives_or_cohabitants?: JapanRelativeOrCohabitant[]
+}
+
+export interface JapanRelativeOrCohabitant {
+  relationship?: string
+  name?: string
+  birth_date?: string
+  nationality_region?: string
+  will_cohabit?: boolean
+  workplace_or_school_name?: string
+  residence_card_or_certificate_number?: string
 }
 
 export interface Education {
+  country_type?: string
   level?: string
   level_detail?: string
+  level_other?: string
   school_name?: string
   major_field?: string
   major_field_other?: string
@@ -113,10 +129,12 @@ export interface TranscriptSubject {
 
 export interface EmploymentRecord {
   country_region?: string
+  start_month_unknown?: boolean
   start_date?: string
+  end_month_unknown?: boolean
   end_date?: string
   company_name_en?: string
-  company_name_ja?: string
+  company_name_local?: string
   duties?: string[]
   source_refs?: string[]
 }
@@ -124,21 +142,34 @@ export interface EmploymentRecord {
 export interface Qualification {
   type?: string
   name?: string
+  level?: string
   issuer?: string
-  date?: string
+  issue_date?: string
+}
+
+export interface Qualifications {
   it?: {
     has_qualification?: boolean
     qualification_name?: string
   }
+  items?: Qualification[]
 }
 
 export interface Employer {
   name?: string
+  has_corporate_number?: boolean
   corporate_number?: string
+  postal_code?: string
+  office_name?: string
+  employment_insurance_office_number?: string
+  industry_primary?: string
+  industry_other?: string
   industry?: string
   capital_jpy?: number
   annual_sales_jpy?: number
   employee_count?: number
+  foreign_employee_count?: number
+  technical_intern_count?: number
   branch_office?: string
   address?: string
   phone?: string
@@ -174,6 +205,18 @@ export interface ReceivingMethod {
   method?: string
   postal_code?: string
   address?: string
+}
+
+export interface Settings {
+  intermediary?: Intermediary
+}
+
+export interface Intermediary {
+  organization?: string
+  name?: string
+  postal_code?: string
+  address?: string
+  phone?: string
 }
 
 export interface SupportingDocument {
@@ -262,7 +305,9 @@ export interface CaseDocument {
   workflow_state: string
   created_at: string
   updated_at: string
+  settings?: Settings
   case_data: CaseData
+  canonical_case_data?: CaseData
   field_metadata: FieldMetadataMap
   review: Review
   document_manifest: DocumentManifest

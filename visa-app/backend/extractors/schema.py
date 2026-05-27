@@ -110,7 +110,24 @@ _S1_FAMILY = _object_of_fields([
     "has_japan_relatives_or_cohabitants",
 ])
 
+_S1_JAPAN_RELATIVE = _object_of_fields([
+    "relationship",
+    "name",
+    "birth_date",
+    "nationality_region",
+    "will_cohabit",
+    "workplace_or_school_name",
+    "residence_card_or_certificate_number",
+])
+
+_S1_FAMILY["properties"]["japan_relatives_or_cohabitants"] = {
+    "type": "ARRAY",
+    "items": _S1_JAPAN_RELATIVE,
+}
+_S1_FAMILY["required"].append("japan_relatives_or_cohabitants")
+
 _S1_ENTRY_PLAN = _object_of_fields([
+    "main_activity_category",
     "purpose_of_entry",
     "planned_entry_date",
     "planned_port",
@@ -209,6 +226,7 @@ SCOPE2_EMPLOYER_SCHEMA = {
 # ---------------------------------------------------------------------------
 
 _S3_EDUCATION = _object_of_fields([
+    "country_type",
     "level",
     "level_detail",
     "level_other",
@@ -223,6 +241,16 @@ _S3_IT_QUALIFICATION = _object_of_fields([
     "qualification_name",
 ])
 
+_S3_EMPLOYMENT_HISTORY = _object_of_fields([
+    "country_region",
+    "start_month_unknown",
+    "start_date",
+    "end_month_unknown",
+    "end_date",
+    "company_name_en",
+    "company_name_local",
+])
+
 _S3_QUALIFICATIONS = {
     "type": "OBJECT",
     "properties": {
@@ -234,13 +262,18 @@ _S3_QUALIFICATIONS = {
 _S3_APPLICANT = {
     "type": "OBJECT",
     "properties": {
+        "has_employment_history": _fv(),
+        "employment_history": {
+            "type": "ARRAY",
+            "items": _S3_EMPLOYMENT_HISTORY,
+        },
         "education": {
             "type": "ARRAY",
             "items": _S3_EDUCATION,
         },
         "qualifications": _S3_QUALIFICATIONS,
     },
-    "required": ["education", "qualifications"],
+    "required": ["has_employment_history", "employment_history", "education", "qualifications"],
 }
 
 SCOPE3_EDUCATION_SCHEMA = {
@@ -296,8 +329,13 @@ def _combined_applicant_schema() -> dict:
         "type": "ARRAY",
         "items": _S3_EDUCATION,
     }
+    applicant["properties"]["has_employment_history"] = _fv()
+    applicant["properties"]["employment_history"] = {
+        "type": "ARRAY",
+        "items": _S3_EMPLOYMENT_HISTORY,
+    }
     applicant["properties"]["qualifications"] = _S3_QUALIFICATIONS
-    applicant["required"].extend(["education", "qualifications"])
+    applicant["required"].extend(["has_employment_history", "employment_history", "education", "qualifications"])
     return applicant
 
 

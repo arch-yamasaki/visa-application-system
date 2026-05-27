@@ -55,6 +55,14 @@ Chrome拡張QAでは、申請の最終送信を絶対に押さない。
 - Chrome拡張popupの表示を `未抽出 / 抽出中 / 抽出済み / 抽出失敗` に寄せた。
 - `api_client.js` の case 一覧取得から `workflow_state=ready_to_fill` 固定を外した。
 - Cloud Run コンテナへ `backend/data/form_definitions/rasens_offer_fields.json` を同梱した。
+- Chrome拡張の既定API URLを Cloud Run にした。ローカル開発時だけ `http://localhost:8080` に上書きする。
+- `application-data` で法人番号の有無、所属機関の主たる業種、資本金、年間売上高、従業員数、外国人職員数、技能実習生数を生成対象に追加した。
+- `application-data` で上陸予定港、滞在予定期間、同伴者、過去入出国歴、過去COE申請歴、犯罪歴、契約形態をMVP既定値で補完する。
+- `application-data` で最終学歴 23.1/23.2/23.3、過去COE申請歴 18.2/18.3、退去強制・出国命令 20.1/20.2/20.3 を生成対象に追加した。
+- `application-data` で就労予定期間 5.1/5.2/5.3 を生成対象に追加し、空の場合は `定めあり Fixed` / `1` / `0` を初期値にする。
+- `application-data` で代理人欄を勤務先会社情報から初期化する。取次者欄は `settings.intermediary` または `INTERMEDIARY_*` 環境変数から注入する。
+- Chrome拡張のradio選択を各選択肢ラベル基準に変更し、`無 No` が同じ行の `有 Yes` に吸われる問題を修正した。
+- Chrome拡張のselect探索で、同じnameに複数候補がある場合は表示中の要素を優先するようにした。
 
 ## 役割分担
 

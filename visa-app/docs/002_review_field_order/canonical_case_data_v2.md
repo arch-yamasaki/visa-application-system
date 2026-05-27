@@ -148,7 +148,18 @@ application_data rows
         "major_field": ""
       }
     ],
-    "employment_history": [],
+    "has_employment_history": false,
+    "employment_history": [
+      {
+        "country_region": "",
+        "start_month_unknown": false,
+        "start_date": "",
+        "end_month_unknown": false,
+        "end_date": "",
+        "company_name_en": "",
+        "company_name_local": ""
+      }
+    ],
     "qualifications": {
       "it": {
         "has_qualification": false,
@@ -226,7 +237,7 @@ application_data rows
 | `entry_plan` | 主たる活動内容、入国目的、入国予定日、上陸予定港、滞在予定期間、査証申請予定地 | 今回の申請・入国計画であり、申請人本人の属性ではない |
 | `employer` | 所属機関そのもの | 会社属性。契約条件や職務内容とは分ける |
 | `employment` | 契約形態、就労期間、給与、役職、職種、活動内容詳細 | 今回その会社でどう働くか |
-| `proxy` | 代理人 | 受入企業側の担当者を案件ごとに確認する。会社情報から住所・電話を初期化できるが、氏名は会社名ではない |
+| `proxy` | 代理人 | MVPでは勤務先会社情報を代理人欄の初期値として扱う。将来、人名の代理人担当者を分ける場合は `proxy.*` を明示保存する |
 | `intermediary` | 取次者 | 太田さん側の申請アカウントを持つ申請会社情報。固定設定値であり、Gemini抽出対象ではない |
 | `receiving_method` | 受領方法 | 初期MVPでは非表示でもよい |
 
@@ -250,10 +261,27 @@ employment.activity_details        # 所属機関 No.11 の「活動内容詳細
 applicant.passport.number
 applicant.immigration_history.criminal_record
 applicant.family.has_accompanying_members
+applicant.family.has_japan_relatives_or_cohabitants
+applicant.family.japan_relatives_or_cohabitants[0].relationship
+applicant.family.japan_relatives_or_cohabitants[0].name
+applicant.family.japan_relatives_or_cohabitants[0].birth_date
+applicant.family.japan_relatives_or_cohabitants[0].nationality_region
+applicant.family.japan_relatives_or_cohabitants[0].will_cohabit
+applicant.family.japan_relatives_or_cohabitants[0].workplace_or_school_name
+applicant.family.japan_relatives_or_cohabitants[0].residence_card_or_certificate_number
 applicant.education[0].school_name
+applicant.has_employment_history
+applicant.employment_history[0].country_region
+applicant.employment_history[0].start_month_unknown
+applicant.employment_history[0].start_date
+applicant.employment_history[0].end_month_unknown
+applicant.employment_history[0].end_date
 applicant.employment_history[0].company_name_en
+applicant.employment_history[0].company_name_local
 applicant.qualifications.it.has_qualification
 ```
+
+在日親族・同居者と職歴は、RASENS上は複数枠があります。MVPでは最大3件までをUIとmappingで扱い、4件以上は要確認として人がRASENS側で追加入力します。情報がない場合は boolean を `false`、明細配列を空にし、空の3枠をFirestoreに常時保存しません。
 
 ### employer と employment は分ける
 
@@ -276,7 +304,7 @@ employment.activity_details
 
 ### proxy と intermediary
 
-`proxy` は在留資格認定証明書交付申請における代理人で、受入企業側の担当者を想定します。`proxy.postal_code`, `proxy.address`, `proxy.phone` は `employer.*` から初期化できますが、`proxy.name` は個人名なので `employer.name` からは作りません。必要に応じて `employer.representative_name` や会社担当者の手入力から候補を作ります。
+`proxy` は在留資格認定証明書交付申請における代理人欄です。MVPでは勤務先会社情報を代理人欄の初期値として扱い、`proxy.name`, `proxy.postal_code`, `proxy.address`, `proxy.phone` を `employer.*` から生成します。人名の代理人担当者を分ける運用に変える場合は、企業マスターまたはケース入力で `proxy.*` を明示保存します。
 
 `intermediary` は取次者です。案件書類から抽出するものではなく、太田さん側の申請アカウントを持つ申請会社情報を固定設定値として使います。通常は `case_data` に保存せず、`application_data.rows` 生成時に設定から注入します。投入時点の再現性が必要な場合だけ、設定値のsnapshotを `case_data.intermediary.*` にコピーします。
 

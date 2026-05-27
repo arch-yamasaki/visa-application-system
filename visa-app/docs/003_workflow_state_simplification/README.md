@@ -54,7 +54,7 @@ MVPでは「AI抽出結果は必ず人が見る」前提なので、`needs_revie
 
 ### Chrome拡張の投入可否は `/application-data` で判定する
 
-Chrome拡張は `workflow_state` 名を直接判断しない。backend の `/application-data` が返す `fillable` と `warnings` を見て、入力ボタンを制御する。
+Chrome拡張は `workflow_state` 名を直接判断しない。入力ボタンの制御は backend の `/application-data` が返す `fillable` だけで行い、`warnings` は表示・確認用にする。
 
 MVPでは、抽出済みデータは必ず人間がレビュー画面で確認・編集できる前提なので、`extracted` 相当を投入可能にする。
 

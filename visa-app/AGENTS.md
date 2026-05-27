@@ -60,6 +60,11 @@ gcloud run deploy visa-app \
 | シークレット名 | 用途 | レプリケーション |
 |---|---|---|
 | `GOOGLE_API_KEY` | Gemini API 認証キー | `asia-northeast1`（user-managed） |
+| `INTERMEDIARY_NAME` | 取次者 氏名 | `asia-northeast1`（user-managed） |
+| `INTERMEDIARY_POSTAL_CODE` | 取次者 郵便番号 | `asia-northeast1`（user-managed） |
+| `INTERMEDIARY_ADDRESS` | 取次者 住所 | `asia-northeast1`（user-managed） |
+| `INTERMEDIARY_ORGANIZATION` | 取次者 所属機関 | `asia-northeast1`（user-managed） |
+| `INTERMEDIARY_PHONE` | 取次者 電話番号 | `asia-northeast1`（user-managed） |
 
 Cloud Run サービスアカウント（`913363513517-compute@developer.gserviceaccount.com`）に `roles/secretmanager.secretAccessor` を付与済み。
 
@@ -75,6 +80,20 @@ gcloud run services update visa-app \
   --region asia-northeast1 \
   --project visa-codex-mvp \
   --update-secrets="GOOGLE_API_KEY=GOOGLE_API_KEY:latest"
+```
+
+取次者情報は案件書類やGemini抽出ではなく、Cloud Run の固定設定から注入する。実値はrepoに書かず、Secret Manager または Cloud Run 環境変数で管理する。
+
+```bash
+# 例: Secret Manager に取次者情報を登録
+echo -n "<intermediary-name>" | gcloud secrets versions add INTERMEDIARY_NAME \
+  --data-file=- --project=visa-codex-mvp
+
+# Cloud Run に反映
+gcloud run services update visa-app \
+  --region asia-northeast1 \
+  --project visa-codex-mvp \
+  --update-secrets="INTERMEDIARY_NAME=INTERMEDIARY_NAME:latest,INTERMEDIARY_POSTAL_CODE=INTERMEDIARY_POSTAL_CODE:latest,INTERMEDIARY_ADDRESS=INTERMEDIARY_ADDRESS:latest,INTERMEDIARY_ORGANIZATION=INTERMEDIARY_ORGANIZATION:latest,INTERMEDIARY_PHONE=INTERMEDIARY_PHONE:latest"
 ```
 
 ## GCPリソース

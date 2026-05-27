@@ -34,14 +34,40 @@ export function flattenCaseData(
   return result
 }
 
+export const REVIEW_FIELD_PATHS = [
+  'applicant.family.has_japan_relatives_or_cohabitants',
+  'applicant.education.0.country_type',
+  'applicant.education.0.level',
+  'applicant.education.0.level_detail',
+  'applicant.education.0.level_other',
+  'applicant.education.0.school_name',
+  'applicant.education.0.graduation_date',
+  'applicant.education.0.major_field',
+  'applicant.education.0.major_field_other',
+  'applicant.has_employment_history',
+  'proxy.name',
+  'proxy.relationship',
+  'proxy.postal_code',
+  'proxy.address',
+  'proxy.phone',
+  'proxy.mobile',
+  'settings.intermediary.organization',
+  'settings.intermediary.name',
+  'settings.intermediary.postal_code',
+  'settings.intermediary.address',
+  'settings.intermediary.phone',
+] as const
+
 const sectionRules: [RegExp, string][] = [
   [/^case\./, '申請概要'],
+  [/^applicant\.has_employment_history$/, '申請人に関する情報等'],
   [/^applicant\.(education|employment_history|qualifications)\b/, '申請人に関する情報等'],
   [/^applicant\./, '身分事項'],
   [/^entry_plan\./, '入国計画'],
   [/^employer\./, '所属機関'],
   [/^employment\./, '雇用・活動内容'],
   [/^(proxy|receiving_method)\./, '代理人・受領方法'],
+  [/^settings\.intermediary\./, '取次者'],
   [/^(supporting_documents|assessments)\./, '審査'],
 ]
 
@@ -54,6 +80,7 @@ export const SECTION_ORDER = [
   '所属機関',
   '雇用・活動内容',
   '代理人・受領方法',
+  '取次者',
   '審査',
 ] as const
 
@@ -108,8 +135,15 @@ const labelOverrides: Record<string, string> = {
 
   // 家族
   'applicant.family.has_accompanying_members': '同伴者の有無',
-  'applicant.family.has_japan_relatives_or_cohabitants': '在日親族の有無',
+  'applicant.family.has_japan_relatives_or_cohabitants': '在日親族及び同居者 有無',
   'applicant.family.japan_relatives_or_cohabitants': '在日親族・同居者',
+  'applicant.family.japan_relatives_or_cohabitants.relationship': '続柄',
+  'applicant.family.japan_relatives_or_cohabitants.name': '氏名',
+  'applicant.family.japan_relatives_or_cohabitants.birth_date': '生年月日',
+  'applicant.family.japan_relatives_or_cohabitants.nationality_region': '国籍・地域',
+  'applicant.family.japan_relatives_or_cohabitants.will_cohabit': '同居予定の有無',
+  'applicant.family.japan_relatives_or_cohabitants.workplace_or_school_name': '勤務先・通学先',
+  'applicant.family.japan_relatives_or_cohabitants.residence_card_or_certificate_number': '在留カード番号等',
 
   // 出入国歴
   'applicant.immigration_history.has_entries': '過去の出入国歴の有無',
@@ -121,11 +155,15 @@ const labelOverrides: Record<string, string> = {
   'applicant.immigration_history.prior_coe_applications.denial_count': '不交付回数',
   'applicant.immigration_history.criminal_record': '犯罪歴の有無',
   'applicant.immigration_history.deportation_or_departure_order': '退去強制・出国命令歴',
+  'applicant.immigration_history.deportation_count': '退去強制・出国命令歴 回数',
+  'applicant.immigration_history.deportation_latest': '直近の退去強制・出国命令年月日',
 
   // 学歴（配列項目）
   'applicant.education.id': '学歴ID',
+  'applicant.education.country_type': '最終学歴 本邦・外国区分',
   'applicant.education.level': '学歴区分',
   'applicant.education.level_detail': '学歴詳細',
+  'applicant.education.level_other': '学歴 その他',
   'applicant.education.school_name': '学校名',
   'applicant.education.major_field': '専攻・専門分野',
   'applicant.education.major_field_other': '専攻・専門分野 その他',
@@ -137,9 +175,12 @@ const labelOverrides: Record<string, string> = {
   'transcript_subjects.matched_duty': '対応職務',
 
   // 職歴（配列項目）
+  'applicant.has_employment_history': '職歴の有無',
   'applicant.employment_history.id': '職歴ID',
   'applicant.employment_history.country_region': '勤務国・地域',
+  'applicant.employment_history.start_month_unknown': '入社月不詳',
   'applicant.employment_history.start_date': '入社年月',
+  'applicant.employment_history.end_month_unknown': '退社月不詳',
   'applicant.employment_history.end_date': '退社年月',
   'applicant.employment_history.company_name_en': '会社名（英語）',
   'applicant.employment_history.company_name_local': '会社名（現地語）',
@@ -155,10 +196,12 @@ const labelOverrides: Record<string, string> = {
 
   // 所属機関
   'employer.name': '所属機関名',
+  'employer.has_corporate_number': '法人番号の有無',
   'employer.corporate_number': '法人番号',
   'employer.office_name': '事業所名',
   'employer.employment_insurance_office_number': '雇用保険適用事業所番号',
   'employer.industry_primary': '主たる業種',
+  'employer.industry_other': '業種 その他',
   'employer.postal_code': '郵便番号',
   'employer.address': '所在地',
   'employer.phone': '電話番号',
@@ -178,12 +221,19 @@ const labelOverrides: Record<string, string> = {
   'employer.capital': '資本金',
 
   // 代理人（配列項目含む）
-  'proxy.name': '氏名',
+  'proxy.name': '代理人 氏名',
   'proxy.relationship': '申請人との関係',
-  'proxy.postal_code': '郵便番号',
-  'proxy.address': '住所',
-  'proxy.phone': '電話番号',
-  'proxy.mobile': '携帯番号',
+  'proxy.postal_code': '代理人 郵便番号',
+  'proxy.address': '代理人 住所',
+  'proxy.phone': '代理人 電話番号',
+  'proxy.mobile': '代理人 携帯番号',
+
+  // 取次者
+  'settings.intermediary.organization': '取次者 所属機関',
+  'settings.intermediary.name': '取次者 氏名',
+  'settings.intermediary.postal_code': '取次者 郵便番号',
+  'settings.intermediary.address': '取次者 住所',
+  'settings.intermediary.phone': '取次者 電話番号',
 
   // 添付書類（配列項目）
   'supporting_documents.document_type': '書類種別',
@@ -289,6 +339,7 @@ const valueLabels: Record<string, string> = {
   // 配偶者
   married: '有',
   unmarried: '無',
+  single: '無',
 
   // 有無
   yes: 'あり',
@@ -296,13 +347,39 @@ const valueLabels: Record<string, string> = {
   none: 'なし',
   true: 'あり',
   false: 'なし',
+  '有 Yes': 'あり',
+  '無 No': 'なし',
+  SINGLE: '無',
+  MARRIED: '有',
+  YES: 'あり',
+  NO: 'なし',
+  有: 'あり',
+  無: 'なし',
+  NEPAL: 'ネパール',
 
   // 学歴区分
   university: '大学',
+  University: '大学',
+  Bachelor: '大学',
+  '大学院（博士） Doctor': '大学院（博士）',
+  '大学院（修士） Master': '大学院（修士）',
+  '大学 Bachelor': '大学',
+  '本邦 Japan': '本邦',
+  '外国 Foreign country': '外国',
+  '短期大学 Junior college': '短期大学',
+  '専門学校 College of technology': '専門学校',
+  '高等学校 Senior high school': '高等学校',
+  '中学校 Junior high school': '中学校',
+  'その他 Others': 'その他',
   graduate_school: '大学院',
   junior_college: '短期大学',
   vocational_school: '専門学校',
   high_school: '高等学校',
+  '雇用 Employment': '雇用',
+  '委任 Entrustment': '委任',
+  '請負 Service contract': '請負',
+  '定めあり Fixed': '定めあり',
+  '定めなし Non-Fixed': '定めなし',
 
   // 書類受領状況
   received: '受領済',
@@ -313,7 +390,165 @@ const valueLabels: Record<string, string> = {
 export function getDisplayValue(value: unknown): string {
   if (value === null || value === undefined || value === '') return ''
   const str = String(value)
-  return valueLabels[str] ?? str
+  return valueLabels[str] ?? valueLabels[str.toLowerCase()] ?? str
+}
+
+export type FieldInputType = 'text' | 'select' | 'number' | 'date' | 'month'
+
+export interface FieldInput {
+  type: FieldInputType
+  options?: { value: string; label: string }[]
+}
+
+const applicationTypeOptions = [
+  { value: 'certificate_of_eligibility', label: '在留資格認定証明書交付申請' },
+  { value: 'change_of_status', label: '在留資格変更許可申請' },
+  { value: 'extension_of_stay', label: '在留期間更新許可申請' },
+]
+
+const targetStatusOptions = [
+  { value: 'engineer_humanities_international', label: '技術・人文知識・国際業務' },
+  { value: 'highly_skilled_professional', label: '高度専門職' },
+  { value: 'intra_company_transferee', label: '企業内転勤' },
+  { value: 'skilled_labor', label: '技能' },
+  { value: 'specified_skilled_worker', label: '特定技能' },
+  { value: 'student', label: '留学' },
+  { value: 'dependent', label: '家族滞在' },
+  { value: 'spouse_of_japanese', label: '日本人の配偶者等' },
+  { value: 'business_manager', label: '経営・管理' },
+]
+
+const booleanOptions = [
+  { value: 'true', label: 'あり' },
+  { value: 'false', label: 'なし' },
+]
+
+const sexOptions = [
+  { value: 'male', label: '男' },
+  { value: 'female', label: '女' },
+]
+
+const maritalStatusOptions = [
+  { value: 'single', label: '無' },
+  { value: 'unmarried', label: '無' },
+  { value: 'married', label: '有' },
+]
+
+const educationCountryOptions = [
+  { value: '外国 Foreign country', label: '外国' },
+  { value: '本邦 Japan', label: '本邦' },
+]
+
+const educationLevelOptions = [
+  { value: '大学院（博士） Doctor', label: '大学院（博士）' },
+  { value: '大学院（修士） Master', label: '大学院（修士）' },
+  { value: '大学 Bachelor', label: '大学' },
+  { value: '短期大学 Junior college', label: '短期大学' },
+  { value: '専門学校 College of technology', label: '専門学校' },
+  { value: '高等学校 Senior high school', label: '高等学校' },
+  { value: '中学校 Junior high school', label: '中学校' },
+  { value: 'その他 Others', label: 'その他' },
+]
+
+const contractTypeOptions = [
+  { value: '雇用 Employment', label: '雇用' },
+  { value: '委任 Entrustment', label: '委任' },
+  { value: '請負 Service contract', label: '請負' },
+  { value: 'その他 Others', label: 'その他' },
+]
+
+const employmentPeriodOptions = [
+  { value: '定めあり Fixed', label: '定めあり' },
+  { value: '定めなし Non-Fixed', label: '定めなし' },
+]
+
+const documentStatusOptions = [
+  { value: 'received', label: '受領済' },
+  { value: 'pending', label: '未受領' },
+  { value: 'not_required', label: '不要' },
+]
+
+const plannedPortOptions = [
+  { value: '成田空港(NRT) Narita International Airport', label: '成田空港(NRT)' },
+  { value: '羽田空港(HND) Haneda Airport', label: '羽田空港(HND)' },
+  { value: '中部国際空港(NGO) Chubu Centrair International Airport', label: '中部国際空港(NGO)' },
+  { value: '関西国際空港(KIX) Kansai International Airport', label: '関西国際空港(KIX)' },
+  { value: '新千歳空港(CTS) New Chitose Airport', label: '新千歳空港(CTS)' },
+  { value: '広島空港(HIJ) Hiroshima Airport', label: '広島空港(HIJ)' },
+  { value: '福岡空港(FUK) Fukuoka Airport', label: '福岡空港(FUK)' },
+  { value: 'その他 Others', label: 'その他' },
+]
+
+const numberPaths = new Set([
+  'entry_plan.planned_period_years',
+  'entry_plan.planned_period_months',
+  'applicant.immigration_history.entries_count',
+  'applicant.immigration_history.prior_coe_applications.count',
+  'applicant.immigration_history.prior_coe_applications.denial_count',
+  'applicant.immigration_history.deportation_count',
+  'employer.capital_jpy',
+  'employer.annual_sales_jpy',
+  'employer.employee_count',
+  'employer.foreign_employee_count',
+  'employer.technical_intern_count',
+  'employment.employment_period_years',
+  'employment.employment_period_months',
+  'employment.monthly_salary',
+  'employment.experience_months',
+])
+
+const datePaths = new Set([
+  'entry_plan.planned_entry_date',
+  'applicant.birth_date',
+  'applicant.passport.expiry_date',
+  'applicant.residence_card.expiry_date',
+  'applicant.immigration_history.latest_entry.start_date',
+  'applicant.immigration_history.latest_entry.end_date',
+  'applicant.immigration_history.deportation_latest',
+  'applicant.family.japan_relatives_or_cohabitants.birth_date',
+  'applicant.qualifications.issue_date',
+  'employment.joining_date',
+])
+
+const monthPaths = new Set([
+  'applicant.education.graduation_date',
+  'applicant.employment_history.start_date',
+  'applicant.employment_history.end_date',
+])
+
+const booleanPaths = new Set([
+  'applicant.family.has_accompanying_members',
+  'applicant.family.has_japan_relatives_or_cohabitants',
+  'applicant.family.japan_relatives_or_cohabitants.will_cohabit',
+  'applicant.has_employment_history',
+  'applicant.immigration_history.has_entries',
+  'applicant.immigration_history.prior_coe_applications.has_history',
+  'applicant.immigration_history.criminal_record',
+  'applicant.immigration_history.deportation_or_departure_order',
+  'applicant.qualifications.it.has_qualification',
+  'applicant.employment_history.start_month_unknown',
+  'applicant.employment_history.end_month_unknown',
+  'employer.has_corporate_number',
+  'employment.has_position',
+])
+
+export function getFieldInput(path: string): FieldInput {
+  const stripped = stripIndices(path)
+  if (stripped === 'case.application_type') return { type: 'select', options: applicationTypeOptions }
+  if (stripped === 'case.target_status') return { type: 'select', options: targetStatusOptions }
+  if (booleanPaths.has(stripped)) return { type: 'select', options: booleanOptions }
+  if (stripped === 'applicant.sex') return { type: 'select', options: sexOptions }
+  if (stripped === 'applicant.marital_status') return { type: 'select', options: maritalStatusOptions }
+  if (stripped === 'applicant.education.country_type') return { type: 'select', options: educationCountryOptions }
+  if (stripped === 'applicant.education.level') return { type: 'select', options: educationLevelOptions }
+  if (stripped === 'employment.contract_type') return { type: 'select', options: contractTypeOptions }
+  if (stripped === 'employment.employment_period_type') return { type: 'select', options: employmentPeriodOptions }
+  if (stripped === 'entry_plan.planned_port') return { type: 'select', options: plannedPortOptions }
+  if (stripped === 'supporting_documents.status') return { type: 'select', options: documentStatusOptions }
+  if (numberPaths.has(stripped)) return { type: 'number' }
+  if (datePaths.has(stripped)) return { type: 'date' }
+  if (monthPaths.has(stripped)) return { type: 'month' }
+  return { type: 'text' }
 }
 
 /** Get a nested value from an object using dot-path. */

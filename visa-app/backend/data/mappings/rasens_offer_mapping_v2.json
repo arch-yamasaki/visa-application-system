@@ -371,6 +371,46 @@
       "required": true
     },
     {
+      "canonical_id": "applicant.immigration_history.prior_coe_applications.count",
+      "value_path": "applicant.immigration_history.prior_coe_applications.count",
+      "form_order": 31,
+      "display_no": "18.2",
+      "section": "身分事項",
+      "label": "過去の在留資格認定証明書交付申請歴 回数",
+      "field_name": "item[34].selectData",
+      "field_id": "select_256130",
+      "input_type": "select",
+      "visible_when": [
+        {
+          "path": "applicant.immigration_history.prior_coe_applications.has_history",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false,
+      "transform": "zero_to_empty"
+    },
+    {
+      "canonical_id": "applicant.immigration_history.prior_coe_applications.denial_count",
+      "value_path": "applicant.immigration_history.prior_coe_applications.denial_count",
+      "form_order": 32,
+      "display_no": "18.3",
+      "section": "身分事項",
+      "label": "過去の在留資格認定証明書交付申請歴 不交付回数",
+      "field_name": "item[35].selectData",
+      "field_id": "select_256131",
+      "input_type": "select",
+      "visible_when": [
+        {
+          "path": "applicant.immigration_history.prior_coe_applications.has_history",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false,
+      "transform": "zero_to_empty"
+    },
+    {
       "canonical_id": "applicant.immigration_history.criminal_record",
       "value_path": "applicant.immigration_history.criminal_record",
       "form_order": 33,
@@ -384,6 +424,522 @@
       "required": true
     },
     {
+      "canonical_id": "applicant.immigration_history.deportation_or_departure_order",
+      "value_path": "applicant.immigration_history.deportation_or_departure_order",
+      "form_order": 34,
+      "display_no": "20.1",
+      "section": "身分事項",
+      "label": "退去強制又は出国命令による出国の有無",
+      "field_name": "item[37].selectData",
+      "field_id": "",
+      "input_type": "radio",
+      "transform": "boolean_yes_no",
+      "required": true
+    },
+    {
+      "canonical_id": "applicant.immigration_history.deportation_count",
+      "value_path": "applicant.immigration_history.deportation_count",
+      "form_order": 35,
+      "display_no": "20.2",
+      "section": "身分事項",
+      "label": "退去強制又は出国命令による出国 回数",
+      "field_name": "item[38].selectData",
+      "field_id": "select_256134",
+      "input_type": "select",
+      "transform": "zero_to_empty",
+      "visible_when": [
+        {
+          "path": "applicant.immigration_history.deportation_or_departure_order",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "canonical_id": "applicant.immigration_history.deportation_latest",
+      "value_path": "applicant.immigration_history.deportation_latest",
+      "form_order": 36,
+      "display_no": "20.3",
+      "section": "身分事項",
+      "label": "退去強制又は出国命令による出国 直近の送還歴",
+      "field_name": "item[39].textData",
+      "field_id": "switch_256135",
+      "input_type": "text",
+      "transform": "date_yyyymmdd",
+      "visible_when": [
+        {
+          "path": "applicant.immigration_history.deportation_or_departure_order",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "canonical_id": "applicant.family.has_japan_relatives_or_cohabitants",
+      "value_path": "applicant.family.has_japan_relatives_or_cohabitants",
+      "form_order": 37,
+      "display_no": "21.1",
+      "section": "身分事項",
+      "label": "在日親族及び同居者 有無",
+      "field_name": "item[40].selectData",
+      "field_id": "",
+      "input_type": "radio",
+      "transform": "boolean_yes_no",
+      "required": true
+    },
+    {
+      "canonical_id": "applicant.family.japan_relatives_or_cohabitants.0.relationship",
+      "value_path": "applicant.family.japan_relatives_or_cohabitants.0.relationship",
+      "form_order": 38,
+      "display_no": "21.2",
+      "section": "身分事項",
+      "label": "在日親族及び同居者 続柄01",
+      "field_name": "item[42].selectData",
+      "field_id": "select_256138",
+      "input_type": "select",
+      "visible_when": [
+        {
+          "path": "applicant.family.has_japan_relatives_or_cohabitants",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": true
+    },
+    {
+      "canonical_id": "applicant.family.japan_relatives_or_cohabitants.0.name",
+      "value_path": "applicant.family.japan_relatives_or_cohabitants.0.name",
+      "form_order": 39,
+      "display_no": "21.3",
+      "section": "身分事項",
+      "label": "在日親族及び同居者 氏名01",
+      "field_name": "item[43].textData",
+      "field_id": "switch_256139",
+      "input_type": "text",
+      "visible_when": [
+        {
+          "path": "applicant.family.has_japan_relatives_or_cohabitants",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": true
+    },
+    {
+      "canonical_id": "applicant.family.japan_relatives_or_cohabitants.0.birth_date",
+      "value_path": "applicant.family.japan_relatives_or_cohabitants.0.birth_date",
+      "form_order": 40,
+      "display_no": "21.4",
+      "section": "身分事項",
+      "label": "在日親族及び同居者 生年月日01",
+      "field_name": "",
+      "field_id": "textData1_256140",
+      "input_type": "text",
+      "visible_when": [
+        {
+          "path": "applicant.family.has_japan_relatives_or_cohabitants",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": true,
+      "transform": "date_yyyymmdd"
+    },
+    {
+      "canonical_id": "applicant.family.japan_relatives_or_cohabitants.0.nationality_region",
+      "value_path": "applicant.family.japan_relatives_or_cohabitants.0.nationality_region",
+      "form_order": 41,
+      "display_no": "21.5",
+      "section": "身分事項",
+      "label": "在日親族及び同居者 国籍・地域01",
+      "field_name": "item[45].selectData",
+      "field_id": "select_256141",
+      "input_type": "select",
+      "visible_when": [
+        {
+          "path": "applicant.family.has_japan_relatives_or_cohabitants",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": true
+    },
+    {
+      "canonical_id": "applicant.family.japan_relatives_or_cohabitants.0.will_cohabit",
+      "value_path": "applicant.family.japan_relatives_or_cohabitants.0.will_cohabit",
+      "form_order": 42,
+      "display_no": "21.6",
+      "section": "身分事項",
+      "label": "在日親族及び同居者 同居予定の有無01",
+      "field_name": "item[46].selectData",
+      "field_id": "",
+      "input_type": "radio",
+      "visible_when": [
+        {
+          "path": "applicant.family.has_japan_relatives_or_cohabitants",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": true,
+      "transform": "boolean_yes_no"
+    },
+    {
+      "canonical_id": "applicant.family.japan_relatives_or_cohabitants.0.workplace_or_school_name",
+      "value_path": "applicant.family.japan_relatives_or_cohabitants.0.workplace_or_school_name",
+      "form_order": 43,
+      "display_no": "21.7",
+      "section": "身分事項",
+      "label": "在日親族及び同居者 勤務先・通学先01",
+      "field_name": "item[47].textData",
+      "field_id": "switch_256143",
+      "input_type": "text",
+      "visible_when": [
+        {
+          "path": "applicant.family.has_japan_relatives_or_cohabitants",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": true
+    },
+    {
+      "canonical_id": "applicant.family.japan_relatives_or_cohabitants.0.residence_card_or_certificate_number",
+      "value_path": "applicant.family.japan_relatives_or_cohabitants.0.residence_card_or_certificate_number",
+      "form_order": 44,
+      "display_no": "21.8",
+      "section": "身分事項",
+      "label": "在日親族及び同居者 在留カード番号等01",
+      "field_name": "item[48].textData",
+      "field_id": "switch_256144",
+      "input_type": "text",
+      "visible_when": [
+        {
+          "path": "applicant.family.has_japan_relatives_or_cohabitants",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": true
+    },
+    {
+      "canonical_id": "applicant.family.japan_relatives_or_cohabitants.1.relationship",
+      "value_path": "applicant.family.japan_relatives_or_cohabitants.1.relationship",
+      "form_order": 45,
+      "display_no": "21.2",
+      "section": "身分事項",
+      "label": "在日親族及び同居者 続柄02",
+      "field_name": "item[49].selectData",
+      "field_id": "select_256145",
+      "input_type": "select",
+      "visible_when": [
+        {
+          "path": "applicant.family.has_japan_relatives_or_cohabitants",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "canonical_id": "applicant.family.japan_relatives_or_cohabitants.1.name",
+      "value_path": "applicant.family.japan_relatives_or_cohabitants.1.name",
+      "form_order": 46,
+      "display_no": "21.3",
+      "section": "身分事項",
+      "label": "在日親族及び同居者 氏名02",
+      "field_name": "item[50].textData",
+      "field_id": "switch_256146",
+      "input_type": "text",
+      "visible_when": [
+        {
+          "path": "applicant.family.has_japan_relatives_or_cohabitants",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "canonical_id": "applicant.family.japan_relatives_or_cohabitants.1.birth_date",
+      "value_path": "applicant.family.japan_relatives_or_cohabitants.1.birth_date",
+      "form_order": 47,
+      "display_no": "21.4",
+      "section": "身分事項",
+      "label": "在日親族及び同居者 生年月日02",
+      "field_name": "",
+      "field_id": "textData1_256147",
+      "input_type": "text",
+      "visible_when": [
+        {
+          "path": "applicant.family.has_japan_relatives_or_cohabitants",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false,
+      "transform": "date_yyyymmdd"
+    },
+    {
+      "canonical_id": "applicant.family.japan_relatives_or_cohabitants.1.nationality_region",
+      "value_path": "applicant.family.japan_relatives_or_cohabitants.1.nationality_region",
+      "form_order": 48,
+      "display_no": "21.5",
+      "section": "身分事項",
+      "label": "在日親族及び同居者 国籍・地域02",
+      "field_name": "item[52].selectData",
+      "field_id": "select_256148",
+      "input_type": "select",
+      "visible_when": [
+        {
+          "path": "applicant.family.has_japan_relatives_or_cohabitants",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "canonical_id": "applicant.family.japan_relatives_or_cohabitants.1.will_cohabit",
+      "value_path": "applicant.family.japan_relatives_or_cohabitants.1.will_cohabit",
+      "form_order": 49,
+      "display_no": "21.6",
+      "section": "身分事項",
+      "label": "在日親族及び同居者 同居予定の有無02",
+      "field_name": "item[53].selectData",
+      "field_id": "",
+      "input_type": "radio",
+      "visible_when": [
+        {
+          "path": "applicant.family.has_japan_relatives_or_cohabitants",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false,
+      "transform": "boolean_yes_no"
+    },
+    {
+      "canonical_id": "applicant.family.japan_relatives_or_cohabitants.1.workplace_or_school_name",
+      "value_path": "applicant.family.japan_relatives_or_cohabitants.1.workplace_or_school_name",
+      "form_order": 50,
+      "display_no": "21.7",
+      "section": "身分事項",
+      "label": "在日親族及び同居者 勤務先・通学先02",
+      "field_name": "item[54].textData",
+      "field_id": "switch_256150",
+      "input_type": "text",
+      "visible_when": [
+        {
+          "path": "applicant.family.has_japan_relatives_or_cohabitants",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "canonical_id": "applicant.family.japan_relatives_or_cohabitants.1.residence_card_or_certificate_number",
+      "value_path": "applicant.family.japan_relatives_or_cohabitants.1.residence_card_or_certificate_number",
+      "form_order": 51,
+      "display_no": "21.8",
+      "section": "身分事項",
+      "label": "在日親族及び同居者 在留カード番号等02",
+      "field_name": "item[55].textData",
+      "field_id": "switch_256151",
+      "input_type": "text",
+      "visible_when": [
+        {
+          "path": "applicant.family.has_japan_relatives_or_cohabitants",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "canonical_id": "applicant.family.japan_relatives_or_cohabitants.2.relationship",
+      "value_path": "applicant.family.japan_relatives_or_cohabitants.2.relationship",
+      "form_order": 52,
+      "display_no": "21.2",
+      "section": "身分事項",
+      "label": "在日親族及び同居者 続柄03",
+      "field_name": "item[56].selectData",
+      "field_id": "select_256152",
+      "input_type": "select",
+      "visible_when": [
+        {
+          "path": "applicant.family.has_japan_relatives_or_cohabitants",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "canonical_id": "applicant.family.japan_relatives_or_cohabitants.2.name",
+      "value_path": "applicant.family.japan_relatives_or_cohabitants.2.name",
+      "form_order": 53,
+      "display_no": "21.3",
+      "section": "身分事項",
+      "label": "在日親族及び同居者 氏名03",
+      "field_name": "item[57].textData",
+      "field_id": "switch_256153",
+      "input_type": "text",
+      "visible_when": [
+        {
+          "path": "applicant.family.has_japan_relatives_or_cohabitants",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "canonical_id": "applicant.family.japan_relatives_or_cohabitants.2.birth_date",
+      "value_path": "applicant.family.japan_relatives_or_cohabitants.2.birth_date",
+      "form_order": 54,
+      "display_no": "21.4",
+      "section": "身分事項",
+      "label": "在日親族及び同居者 生年月日03",
+      "field_name": "",
+      "field_id": "textData1_256154",
+      "input_type": "text",
+      "visible_when": [
+        {
+          "path": "applicant.family.has_japan_relatives_or_cohabitants",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false,
+      "transform": "date_yyyymmdd"
+    },
+    {
+      "canonical_id": "applicant.family.japan_relatives_or_cohabitants.2.nationality_region",
+      "value_path": "applicant.family.japan_relatives_or_cohabitants.2.nationality_region",
+      "form_order": 55,
+      "display_no": "21.5",
+      "section": "身分事項",
+      "label": "在日親族及び同居者 国籍・地域03",
+      "field_name": "item[59].selectData",
+      "field_id": "select_256155",
+      "input_type": "select",
+      "visible_when": [
+        {
+          "path": "applicant.family.has_japan_relatives_or_cohabitants",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "canonical_id": "applicant.family.japan_relatives_or_cohabitants.2.will_cohabit",
+      "value_path": "applicant.family.japan_relatives_or_cohabitants.2.will_cohabit",
+      "form_order": 56,
+      "display_no": "21.6",
+      "section": "身分事項",
+      "label": "在日親族及び同居者 同居予定の有無03",
+      "field_name": "item[60].selectData",
+      "field_id": "",
+      "input_type": "radio",
+      "visible_when": [
+        {
+          "path": "applicant.family.has_japan_relatives_or_cohabitants",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false,
+      "transform": "boolean_yes_no"
+    },
+    {
+      "canonical_id": "applicant.family.japan_relatives_or_cohabitants.2.workplace_or_school_name",
+      "value_path": "applicant.family.japan_relatives_or_cohabitants.2.workplace_or_school_name",
+      "form_order": 57,
+      "display_no": "21.7",
+      "section": "身分事項",
+      "label": "在日親族及び同居者 勤務先・通学先03",
+      "field_name": "item[61].textData",
+      "field_id": "switch_256157",
+      "input_type": "text",
+      "visible_when": [
+        {
+          "path": "applicant.family.has_japan_relatives_or_cohabitants",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "canonical_id": "applicant.family.japan_relatives_or_cohabitants.2.residence_card_or_certificate_number",
+      "value_path": "applicant.family.japan_relatives_or_cohabitants.2.residence_card_or_certificate_number",
+      "form_order": 58,
+      "display_no": "21.8",
+      "section": "身分事項",
+      "label": "在日親族及び同居者 在留カード番号等03",
+      "field_name": "item[62].textData",
+      "field_id": "switch_256158",
+      "input_type": "text",
+      "visible_when": [
+        {
+          "path": "applicant.family.has_japan_relatives_or_cohabitants",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "canonical_id": "applicant.education.0.country_type",
+      "value_path": "applicant.education.0.country_type",
+      "form_order": 80,
+      "display_no": "23.1",
+      "section": "申請人に関する情報等",
+      "label": "最終学歴 本邦・外国区分",
+      "field_name": "item[90].selectData",
+      "field_id": "",
+      "input_type": "radio",
+      "transform": "education_country",
+      "required": true
+    },
+    {
+      "canonical_id": "applicant.education.0.level",
+      "value_path": "applicant.education.0.level",
+      "form_order": 81,
+      "display_no": "23.2",
+      "section": "申請人に関する情報等",
+      "label": "最終学歴 区分",
+      "field_name": "item[91].selectData",
+      "field_id": "select_256187",
+      "input_type": "select",
+      "transform": "education_level",
+      "required": true
+    },
+    {
+      "canonical_id": "applicant.education.0.level_other",
+      "value_path": "applicant.education.0.level_other",
+      "form_order": 82,
+      "display_no": "23.3",
+      "section": "申請人に関する情報等",
+      "label": "最終学歴 その他",
+      "field_name": "item[92].textData",
+      "field_id": "switch_256188",
+      "input_type": "text",
+      "visible_when": [
+        {
+          "path": "applicant.education.0.level",
+          "operator": "==",
+          "value": "その他 Others"
+        }
+      ],
+      "required": false
+    },
+    {
       "canonical_id": "applicant.education.0.school_name",
       "value_path": "applicant.education.0.school_name",
       "form_order": 94,
@@ -394,6 +950,56 @@
       "field_id": "switch_256189",
       "input_type": "text",
       "required": true
+    },
+    {
+      "canonical_id": "applicant.employment_history.0.start_date.year_month",
+      "value_path": "applicant.employment_history.0.start_date",
+      "form_order": 94,
+      "display_no": "26.2",
+      "section": "申請人に関する情報等",
+      "label": "職歴 入社年月01",
+      "field_name": "item[105].textData",
+      "field_id": "yearMonthAD_256201",
+      "input_type": "text",
+      "transform": "date_yyyymm",
+      "visible_when": [
+        {
+          "path": "applicant.has_employment_history",
+          "operator": "==",
+          "value": true
+        },
+        {
+          "path": "applicant.employment_history.0.start_month_unknown",
+          "operator": "!=",
+          "value": true
+        }
+      ],
+      "required": true
+    },
+    {
+      "canonical_id": "applicant.employment_history.0.start_date.year",
+      "value_path": "applicant.employment_history.0.start_date",
+      "form_order": 94.1,
+      "display_no": "26.2",
+      "section": "申請人に関する情報等",
+      "label": "職歴 入社年月01（年のみ）",
+      "field_name": "item[106].textData",
+      "field_id": "switch_256202",
+      "input_type": "text",
+      "transform": "date_yyyy",
+      "visible_when": [
+        {
+          "path": "applicant.has_employment_history",
+          "operator": "==",
+          "value": true
+        },
+        {
+          "path": "applicant.employment_history.0.start_month_unknown",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false
     },
     {
       "canonical_id": "applicant.education.0.graduation_date",
@@ -418,7 +1024,562 @@
       "field_name": "item[95].selectData",
       "field_id": "select_256191",
       "input_type": "select",
+      "required": true,
+      "transform": "major_field_university"
+    },
+    {
+      "canonical_id": "applicant.employment_history.0.end_date.year_month",
+      "value_path": "applicant.employment_history.0.end_date",
+      "form_order": 97,
+      "display_no": "26.4",
+      "section": "申請人に関する情報等",
+      "label": "職歴 退社年月01",
+      "field_name": "item[108].textData",
+      "field_id": "yearMonthAD_256204",
+      "input_type": "text",
+      "transform": "date_yyyymm",
+      "visible_when": [
+        {
+          "path": "applicant.has_employment_history",
+          "operator": "==",
+          "value": true
+        },
+        {
+          "path": "applicant.employment_history.0.end_month_unknown",
+          "operator": "!=",
+          "value": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "canonical_id": "applicant.employment_history.0.end_date.year",
+      "value_path": "applicant.employment_history.0.end_date",
+      "form_order": 97.1,
+      "display_no": "26.4",
+      "section": "申請人に関する情報等",
+      "label": "職歴 退社年月01（年のみ）",
+      "field_name": "item[109].textData",
+      "field_id": "switch_256205",
+      "input_type": "text",
+      "transform": "date_yyyy",
+      "visible_when": [
+        {
+          "path": "applicant.has_employment_history",
+          "operator": "==",
+          "value": true
+        },
+        {
+          "path": "applicant.employment_history.0.end_month_unknown",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "canonical_id": "applicant.has_employment_history",
+      "value_path": "applicant.has_employment_history",
+      "form_order": 98,
+      "display_no": "",
+      "section": "申請人に関する情報等",
+      "label": "職歴の有無",
+      "field_name": "item[101].selectData",
+      "field_id": "",
+      "input_type": "radio",
+      "transform": "boolean_yes_no",
       "required": true
+    },
+    {
+      "canonical_id": "applicant.employment_history.0.country_region",
+      "value_path": "applicant.employment_history.0.country_region",
+      "form_order": 99,
+      "display_no": "",
+      "section": "申請人に関する情報等",
+      "label": "職歴 国・地域名01",
+      "field_name": "item[103].selectData",
+      "field_id": "select_256199",
+      "input_type": "select",
+      "visible_when": [
+        {
+          "path": "applicant.has_employment_history",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": true
+    },
+    {
+      "canonical_id": "applicant.employment_history.0.start_month_unknown",
+      "value_path": "applicant.employment_history.0.start_month_unknown",
+      "form_order": 100,
+      "display_no": "26.1",
+      "section": "申請人に関する情報等",
+      "label": "職歴 入社月不詳01",
+      "field_name": "item[104].selectData",
+      "field_id": "",
+      "input_type": "radio",
+      "visible_when": [
+        {
+          "path": "applicant.has_employment_history",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": true,
+      "transform": "month_unknown"
+    },
+    {
+      "canonical_id": "applicant.employment_history.0.end_month_unknown",
+      "value_path": "applicant.employment_history.0.end_month_unknown",
+      "form_order": 102,
+      "display_no": "26.3",
+      "section": "申請人に関する情報等",
+      "label": "職歴 退社月不詳01",
+      "field_name": "item[107].selectData",
+      "field_id": "",
+      "input_type": "radio",
+      "visible_when": [
+        {
+          "path": "applicant.has_employment_history",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false,
+      "transform": "month_unknown"
+    },
+    {
+      "canonical_id": "applicant.employment_history.0.company_name_en",
+      "value_path": "applicant.employment_history.0.company_name_en",
+      "form_order": 104,
+      "display_no": "26.5",
+      "section": "申請人に関する情報等",
+      "label": "職歴 勤務先名称(英字表記)01",
+      "field_name": "item[110].textData",
+      "field_id": "switch_256206",
+      "input_type": "text",
+      "visible_when": [
+        {
+          "path": "applicant.has_employment_history",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "canonical_id": "applicant.employment_history.0.company_name_local",
+      "value_path": "applicant.employment_history.0.company_name_local",
+      "form_order": 105,
+      "display_no": "26.6",
+      "section": "申請人に関する情報等",
+      "label": "職歴 勤務先名称(漢字表記)01",
+      "field_name": "item[111].textData",
+      "field_id": "switch_256207",
+      "input_type": "text",
+      "visible_when": [
+        {
+          "path": "applicant.has_employment_history",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "canonical_id": "applicant.employment_history.1.country_region",
+      "value_path": "applicant.employment_history.1.country_region",
+      "form_order": 106,
+      "display_no": "",
+      "section": "申請人に関する情報等",
+      "label": "職歴 国・地域名02",
+      "field_name": "item[112].selectData",
+      "field_id": "select_256208",
+      "input_type": "select",
+      "visible_when": [
+        {
+          "path": "applicant.has_employment_history",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "canonical_id": "applicant.employment_history.1.start_month_unknown",
+      "value_path": "applicant.employment_history.1.start_month_unknown",
+      "form_order": 107,
+      "display_no": "26.1",
+      "section": "申請人に関する情報等",
+      "label": "職歴 入社月不詳02",
+      "field_name": "item[113].selectData",
+      "field_id": "",
+      "input_type": "radio",
+      "visible_when": [
+        {
+          "path": "applicant.has_employment_history",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false,
+      "transform": "month_unknown"
+    },
+    {
+      "canonical_id": "applicant.employment_history.1.start_date.year_month",
+      "value_path": "applicant.employment_history.1.start_date",
+      "form_order": 108,
+      "display_no": "26.2",
+      "section": "申請人に関する情報等",
+      "label": "職歴 入社年月02",
+      "field_name": "item[114].textData",
+      "field_id": "yearMonthAD_256210",
+      "input_type": "text",
+      "transform": "date_yyyymm",
+      "visible_when": [
+        {
+          "path": "applicant.has_employment_history",
+          "operator": "==",
+          "value": true
+        },
+        {
+          "path": "applicant.employment_history.1.start_month_unknown",
+          "operator": "!=",
+          "value": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "canonical_id": "applicant.employment_history.1.start_date.year",
+      "value_path": "applicant.employment_history.1.start_date",
+      "form_order": 108.1,
+      "display_no": "26.2",
+      "section": "申請人に関する情報等",
+      "label": "職歴 入社年月02（年のみ）",
+      "field_name": "item[115].textData",
+      "field_id": "switch_256211",
+      "input_type": "text",
+      "transform": "date_yyyy",
+      "visible_when": [
+        {
+          "path": "applicant.has_employment_history",
+          "operator": "==",
+          "value": true
+        },
+        {
+          "path": "applicant.employment_history.1.start_month_unknown",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "canonical_id": "applicant.employment_history.1.end_month_unknown",
+      "value_path": "applicant.employment_history.1.end_month_unknown",
+      "form_order": 109,
+      "display_no": "26.3",
+      "section": "申請人に関する情報等",
+      "label": "職歴 退社月不詳02",
+      "field_name": "item[116].selectData",
+      "field_id": "",
+      "input_type": "radio",
+      "visible_when": [
+        {
+          "path": "applicant.has_employment_history",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false,
+      "transform": "month_unknown"
+    },
+    {
+      "canonical_id": "applicant.employment_history.1.company_name_en",
+      "value_path": "applicant.employment_history.1.company_name_en",
+      "form_order": 111,
+      "display_no": "26.5",
+      "section": "申請人に関する情報等",
+      "label": "職歴 勤務先名称(英字表記)02",
+      "field_name": "item[119].textData",
+      "field_id": "switch_256215",
+      "input_type": "text",
+      "visible_when": [
+        {
+          "path": "applicant.has_employment_history",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "canonical_id": "applicant.employment_history.1.end_date.year_month",
+      "value_path": "applicant.employment_history.1.end_date",
+      "form_order": 111,
+      "display_no": "26.4",
+      "section": "申請人に関する情報等",
+      "label": "職歴 退社年月02",
+      "field_name": "item[117].textData",
+      "field_id": "yearMonthAD_256213",
+      "input_type": "text",
+      "transform": "date_yyyymm",
+      "visible_when": [
+        {
+          "path": "applicant.has_employment_history",
+          "operator": "==",
+          "value": true
+        },
+        {
+          "path": "applicant.employment_history.1.end_month_unknown",
+          "operator": "!=",
+          "value": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "canonical_id": "applicant.employment_history.1.end_date.year",
+      "value_path": "applicant.employment_history.1.end_date",
+      "form_order": 111.1,
+      "display_no": "26.4",
+      "section": "申請人に関する情報等",
+      "label": "職歴 退社年月02（年のみ）",
+      "field_name": "item[118].textData",
+      "field_id": "switch_256214",
+      "input_type": "text",
+      "transform": "date_yyyy",
+      "visible_when": [
+        {
+          "path": "applicant.has_employment_history",
+          "operator": "==",
+          "value": true
+        },
+        {
+          "path": "applicant.employment_history.1.end_month_unknown",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "canonical_id": "applicant.employment_history.1.company_name_local",
+      "value_path": "applicant.employment_history.1.company_name_local",
+      "form_order": 112,
+      "display_no": "26.6",
+      "section": "申請人に関する情報等",
+      "label": "職歴 勤務先名称(漢字表記)02",
+      "field_name": "item[120].textData",
+      "field_id": "switch_256216",
+      "input_type": "text",
+      "visible_when": [
+        {
+          "path": "applicant.has_employment_history",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "canonical_id": "applicant.employment_history.2.country_region",
+      "value_path": "applicant.employment_history.2.country_region",
+      "form_order": 113,
+      "display_no": "",
+      "section": "申請人に関する情報等",
+      "label": "職歴 国・地域名03",
+      "field_name": "item[121].selectData",
+      "field_id": "select_256217",
+      "input_type": "select",
+      "visible_when": [
+        {
+          "path": "applicant.has_employment_history",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "canonical_id": "applicant.employment_history.2.start_month_unknown",
+      "value_path": "applicant.employment_history.2.start_month_unknown",
+      "form_order": 114,
+      "display_no": "26.1",
+      "section": "申請人に関する情報等",
+      "label": "職歴 入社月不詳03",
+      "field_name": "item[122].selectData",
+      "field_id": "",
+      "input_type": "radio",
+      "visible_when": [
+        {
+          "path": "applicant.has_employment_history",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false,
+      "transform": "month_unknown"
+    },
+    {
+      "canonical_id": "applicant.employment_history.2.start_date.year_month",
+      "value_path": "applicant.employment_history.2.start_date",
+      "form_order": 115,
+      "display_no": "26.2",
+      "section": "申請人に関する情報等",
+      "label": "職歴 入社年月03",
+      "field_name": "item[123].textData",
+      "field_id": "yearMonthAD_256219",
+      "input_type": "text",
+      "transform": "date_yyyymm",
+      "visible_when": [
+        {
+          "path": "applicant.has_employment_history",
+          "operator": "==",
+          "value": true
+        },
+        {
+          "path": "applicant.employment_history.2.start_month_unknown",
+          "operator": "!=",
+          "value": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "canonical_id": "applicant.employment_history.2.start_date.year",
+      "value_path": "applicant.employment_history.2.start_date",
+      "form_order": 115.1,
+      "display_no": "26.2",
+      "section": "申請人に関する情報等",
+      "label": "職歴 入社年月03（年のみ）",
+      "field_name": "item[124].textData",
+      "field_id": "switch_256220",
+      "input_type": "text",
+      "transform": "date_yyyy",
+      "visible_when": [
+        {
+          "path": "applicant.has_employment_history",
+          "operator": "==",
+          "value": true
+        },
+        {
+          "path": "applicant.employment_history.2.start_month_unknown",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "canonical_id": "applicant.employment_history.2.end_month_unknown",
+      "value_path": "applicant.employment_history.2.end_month_unknown",
+      "form_order": 116,
+      "display_no": "26.3",
+      "section": "申請人に関する情報等",
+      "label": "職歴 退社月不詳03",
+      "field_name": "item[125].selectData",
+      "field_id": "",
+      "input_type": "radio",
+      "visible_when": [
+        {
+          "path": "applicant.has_employment_history",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false,
+      "transform": "month_unknown"
+    },
+    {
+      "canonical_id": "applicant.employment_history.2.company_name_en",
+      "value_path": "applicant.employment_history.2.company_name_en",
+      "form_order": 118,
+      "display_no": "26.5",
+      "section": "申請人に関する情報等",
+      "label": "職歴 勤務先名称(英字表記)03",
+      "field_name": "item[128].textData",
+      "field_id": "switch_256224",
+      "input_type": "text",
+      "visible_when": [
+        {
+          "path": "applicant.has_employment_history",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "canonical_id": "applicant.employment_history.2.end_date.year_month",
+      "value_path": "applicant.employment_history.2.end_date",
+      "form_order": 118,
+      "display_no": "26.4",
+      "section": "申請人に関する情報等",
+      "label": "職歴 退社年月03",
+      "field_name": "item[126].textData",
+      "field_id": "yearMonthAD_256222",
+      "input_type": "text",
+      "transform": "date_yyyymm",
+      "visible_when": [
+        {
+          "path": "applicant.has_employment_history",
+          "operator": "==",
+          "value": true
+        },
+        {
+          "path": "applicant.employment_history.2.end_month_unknown",
+          "operator": "!=",
+          "value": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "canonical_id": "applicant.employment_history.2.end_date.year",
+      "value_path": "applicant.employment_history.2.end_date",
+      "form_order": 118.1,
+      "display_no": "26.4",
+      "section": "申請人に関する情報等",
+      "label": "職歴 退社年月03（年のみ）",
+      "field_name": "item[127].textData",
+      "field_id": "switch_256223",
+      "input_type": "text",
+      "transform": "date_yyyy",
+      "visible_when": [
+        {
+          "path": "applicant.has_employment_history",
+          "operator": "==",
+          "value": true
+        },
+        {
+          "path": "applicant.employment_history.2.end_month_unknown",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false
+    },
+    {
+      "canonical_id": "applicant.employment_history.2.company_name_local",
+      "value_path": "applicant.employment_history.2.company_name_local",
+      "form_order": 119,
+      "display_no": "26.6",
+      "section": "申請人に関する情報等",
+      "label": "職歴 勤務先名称(漢字表記)03",
+      "field_name": "item[129].textData",
+      "field_id": "switch_256225",
+      "input_type": "text",
+      "visible_when": [
+        {
+          "path": "applicant.has_employment_history",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": false
     },
     {
       "canonical_id": "proxy.name",
@@ -430,7 +1591,6 @@
       "field_name": "item[159].textData",
       "field_id": "switch_256255",
       "input_type": "text",
-      "manual_required": true,
       "required": true
     },
     {
@@ -468,6 +1628,30 @@
       "field_id": "address_256258",
       "input_type": "text",
       "required": true
+    },
+    {
+      "canonical_id": "proxy.phone",
+      "value_path": "proxy.phone",
+      "form_order": 163,
+      "display_no": "27.5",
+      "section": "申請人、法定代理人、法第７条の２第２項に規定する代理人",
+      "label": "代理人 電話番号",
+      "field_name": "item[163].textData",
+      "field_id": "switch_256259",
+      "input_type": "text",
+      "required": false
+    },
+    {
+      "canonical_id": "proxy.mobile",
+      "value_path": "proxy.mobile",
+      "form_order": 164,
+      "display_no": "27.6",
+      "section": "申請人、法定代理人、法第７条の２第２項に規定する代理人",
+      "label": "代理人 携帯電話番号",
+      "field_name": "item[164].textData",
+      "field_id": "switch_256260",
+      "input_type": "text",
+      "required": false
     },
     {
       "canonical_id": "intermediary.name",
@@ -544,6 +1728,7 @@
       "field_name": "item[174].selectData",
       "field_id": "radioList_256270_1",
       "input_type": "radio",
+      "transform": "contract_type",
       "required": true
     },
     {
@@ -559,6 +1744,19 @@
       "required": true
     },
     {
+      "canonical_id": "employer.has_corporate_number",
+      "value_path": "employer.has_corporate_number",
+      "form_order": 176,
+      "display_no": "3.2",
+      "section": "所属機関に関する情報等",
+      "label": "所属機関等契約先 法人番号の有無",
+      "field_name": "item[176].selectData",
+      "field_id": "",
+      "input_type": "radio",
+      "transform": "boolean_yes_no",
+      "required": true
+    },
+    {
       "canonical_id": "employer.corporate_number",
       "value_path": "employer.corporate_number",
       "form_order": 177,
@@ -568,6 +1766,88 @@
       "field_name": "item[177].textData",
       "field_id": "switch_256273",
       "input_type": "text",
+      "transform": "digits",
+      "visible_when": [
+        {
+          "path": "employer.has_corporate_number",
+          "operator": "==",
+          "value": true
+        }
+      ],
+      "required": true
+    },
+    {
+      "canonical_id": "employer.office_name",
+      "value_path": "employer.office_name",
+      "form_order": 178,
+      "display_no": "3.3",
+      "section": "所属機関に関する情報等",
+      "label": "所属機関等契約先 支店・事業所名",
+      "field_name": "item[178].textData",
+      "field_id": "switch_256274",
+      "input_type": "text",
+      "required": false
+    },
+    {
+      "canonical_id": "employer.employment_insurance_office_number",
+      "value_path": "employer.employment_insurance_office_number",
+      "form_order": 179,
+      "display_no": "3.4",
+      "section": "所属機関に関する情報等",
+      "label": "所属機関等契約先 雇用保険適用事業所番号",
+      "field_name": "item[179].textData",
+      "field_id": "switch_256275",
+      "input_type": "text",
+      "required": false
+    },
+    {
+      "canonical_id": "employment.employment_period_type",
+      "value_path": "employment.employment_period_type",
+      "form_order": 179,
+      "display_no": "5.1",
+      "section": "所属機関に関する情報等",
+      "label": "就労予定期間",
+      "field_name": "item[197].selectData",
+      "field_id": "",
+      "input_type": "radio",
+      "transform": "employment_period_type",
+      "required": true
+    },
+    {
+      "canonical_id": "employer.industry_primary",
+      "value_path": "employer.industry_primary",
+      "form_order": 180,
+      "display_no": "3.5",
+      "section": "所属機関に関する情報等",
+      "label": "所属機関等契約先 業種 主たる業種",
+      "field_name": "item[180].selectData",
+      "field_id": "select_256276",
+      "input_type": "select",
+      "transform": "industry_primary",
+      "required": true
+    },
+    {
+      "canonical_id": "employment.employment_period_years",
+      "value_path": "employment.employment_period_years",
+      "form_order": 180,
+      "display_no": "5.2",
+      "section": "所属機関に関する情報等",
+      "label": "就労予定期間 年数",
+      "field_name": "item[198].selectData",
+      "field_id": "select_256294",
+      "input_type": "select",
+      "required": true
+    },
+    {
+      "canonical_id": "employment.employment_period_months",
+      "value_path": "employment.employment_period_months",
+      "form_order": 181,
+      "display_no": "5.3",
+      "section": "所属機関に関する情報等",
+      "label": "就労予定期間 月数",
+      "field_name": "item[199].selectData",
+      "field_id": "select_256295",
+      "input_type": "select",
       "required": true
     },
     {
@@ -607,6 +1887,71 @@
       "required": true
     },
     {
+      "canonical_id": "employer.capital_jpy",
+      "value_path": "employer.capital_jpy",
+      "form_order": 190,
+      "display_no": "3.12",
+      "section": "所属機関に関する情報等",
+      "label": "所属機関等契約先 資本金",
+      "field_name": "item[190].textData",
+      "field_id": "switch_256286",
+      "input_type": "text",
+      "transform": "digits",
+      "required": true
+    },
+    {
+      "canonical_id": "employer.annual_sales_jpy",
+      "value_path": "employer.annual_sales_jpy",
+      "form_order": 191,
+      "display_no": "3.13",
+      "section": "所属機関に関する情報等",
+      "label": "所属機関等契約先 年間売上高",
+      "field_name": "item[191].textData",
+      "field_id": "switch_256287",
+      "input_type": "text",
+      "transform": "digits",
+      "required": true
+    },
+    {
+      "canonical_id": "employer.employee_count",
+      "value_path": "employer.employee_count",
+      "form_order": 192,
+      "display_no": "3.14",
+      "section": "所属機関に関する情報等",
+      "label": "所属機関等契約先 従業員数",
+      "field_name": "item[192].textData",
+      "field_id": "switch_256288",
+      "input_type": "text",
+      "transform": "digits",
+      "required": true
+    },
+    {
+      "canonical_id": "employer.foreign_employee_count",
+      "value_path": "employer.foreign_employee_count",
+      "form_order": 193,
+      "display_no": "3.15",
+      "section": "所属機関に関する情報等",
+      "label": "所属機関等契約先 外国人職員数",
+      "field_name": "item[193].textData",
+      "field_id": "switch_256289",
+      "input_type": "text",
+      "transform": "digits",
+      "required": false
+    },
+    {
+      "canonical_id": "employer.technical_intern_count",
+      "value_path": "employer.technical_intern_count",
+      "form_order": 194,
+      "display_no": "3.16",
+      "section": "所属機関に関する情報等",
+      "label": "所属機関等契約先 技能実習生数",
+      "field_name": "item[194].textData",
+      "field_id": "switch_256290",
+      "input_type": "text",
+      "transform": "digits",
+      "required": false
+    },
+    {
       "canonical_id": "employment.monthly_salary",
       "value_path": "employment.monthly_salary",
       "form_order": 201,
@@ -616,6 +1961,7 @@
       "field_name": "item[201].textData",
       "field_id": "switch_256297",
       "input_type": "text",
+      "transform": "digits",
       "required": true
     },
     {

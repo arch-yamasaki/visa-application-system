@@ -51,7 +51,7 @@ GET /cases/{case_id}/application-data
 | `fillable` | Chrome拡張で投入してよい状態か |
 | `mapping_version` | 使用した mapping の版 |
 | `form_definition` | 使用したフォーム台帳 |
-| `warnings` | workflowや未確認値に関する警告 |
+| `warnings` | workflowなど、Chrome拡張の投入可否に関する警告 |
 | `summary` | 生成結果の概要 |
 | `rows` | Chrome拡張が入力する行 |
 
@@ -127,9 +127,46 @@ backend は次を行います。
 
 `transform` と `visible_when` は backend にだけ置きます。Chrome拡張、評価CLI、デモ生成で同じ処理を再実装しません。評価CLIが必要な場合も、backend generator の共通ロジックを呼ぶ形にします。
 
-`required` の意味は分けます。`rows[].required` は `form_definitions` 由来のRASENS入力制約を表し、業務上の不足や人手確認は `review.missing_items`, `review.validation_errors`, `manual_required`, `warnings` で表します。固定設定値で埋まる取次者は、Gemini抽出requiredにはしません。
+MVPでは、RASENS入力で必ず選択が必要な一部項目を backend 側で派生・既定値補完します。これはGemini抽出の代替ではなく、抽出結果が空のときにフォーム投入を進めるための初期値です。レビュー画面で人が確認・修正する前提です。
 
-`intermediary` は取次者で、太田さん側の申請アカウントを持つ申請会社情報を設定から注入します。案件書類やGemini抽出から作る値ではありません。`proxy` は代理人で、受入企業側の担当者を案件データとして扱います。`proxy.address` や `proxy.phone` は `employer.*` から初期化できますが、`proxy.name` は会社名ではなく個人名として確認します。
+| canonical path | 補完ルール |
+|---|---|
+| `entry_plan.planned_port` | 勤務先所在地から空港を推測。東京圏は羽田、北関東等は成田、中部は中部国際、関西は関西国際、北海道は新千歳、中国地方は広島、九州は福岡 |
+| `entry_plan.planned_period_years` | 空なら `5` |
+| `entry_plan.planned_period_months` | 空なら `0` |
+| `applicant.family.has_accompanying_members` | 空なら `false` |
+| `applicant.immigration_history.has_entries` | 空なら `false` |
+| `applicant.immigration_history.prior_coe_applications.has_history` | 空なら `false` |
+| `applicant.immigration_history.criminal_record` | 空なら `false` |
+| `applicant.immigration_history.deportation_or_departure_order` | 空なら `false` |
+| `employer.has_corporate_number` | `employer.corporate_number` があれば `true`、なければ `false` |
+| `employment.contract_type` | 空なら `雇用 Employment` |
+| `employment.employment_period_type` | 空なら `定めあり Fixed` |
+| `employment.employment_period_years` | 空なら `1` |
+| `employment.employment_period_months` | 空なら `0` |
+| `applicant.education.0.country_type` | 空なら学校名・学歴から本邦/外国を推測。海外大学は `外国 Foreign country` |
+| `applicant.education.0.level` | `Bachelor`, `University`, `学士` 等を `大学 Bachelor` へ寄せる |
+| `applicant.education.0.major_field` | `Architectural Engineering` 等を RASENS 選択肢の `工学 Engineer` へ寄せる |
+| `proxy.*` | 空なら勤務先会社情報から `name`, `postal_code`, `address`, `phone` を初期化し、本人との関係は `所属機関等契約先` |
+
+`required` の意味は分けます。`rows[].required` は `form_definitions` 由来のRASENS入力制約を表し、業務上の不足や人手確認は `review.missing_items`, `review.validation_errors`, `manual_required` で表します。固定設定値で埋まる取次者は、Gemini抽出requiredにはしません。
+
+Chrome拡張への投入は、部分入力を基本許可します。RASENS上の必須項目が未入力でも、取得できた行は投入し、空欄はレビュー画面とRASENS画面で人が確認・補完します。`fillable=false` は `draft`、`extracting`、`failed` など、まだ投入対象にすべきでない workflow 状態を止めるために使い、必須不足の validation gate には使いません。
+
+`intermediary` は取次者で、太田さん側の申請アカウントを持つ申請会社情報を設定から注入します。案件書類やGemini抽出から作る値ではありません。Firestore `settings.intermediary` があればそれを使い、なければ Cloud Run 環境変数 `INTERMEDIARY_NAME`, `INTERMEDIARY_POSTAL_CODE`, `INTERMEDIARY_ADDRESS`, `INTERMEDIARY_ORGANIZATION`, `INTERMEDIARY_PHONE` から注入します。
+
+本番では実値をrepoに書かず、Secret Manager または Cloud Run 環境変数で設定します。Firestore `settings.intermediary` があるケースでは Firestore の値を優先し、ないケースでは Cloud Run の固定設定を使います。
+
+```bash
+gcloud run services update visa-app \
+  --region asia-northeast1 \
+  --project visa-codex-mvp \
+  --update-secrets="INTERMEDIARY_NAME=INTERMEDIARY_NAME:latest,INTERMEDIARY_POSTAL_CODE=INTERMEDIARY_POSTAL_CODE:latest,INTERMEDIARY_ADDRESS=INTERMEDIARY_ADDRESS:latest,INTERMEDIARY_ORGANIZATION=INTERMEDIARY_ORGANIZATION:latest,INTERMEDIARY_PHONE=INTERMEDIARY_PHONE:latest"
+```
+
+有無系は、レビューUIやFirestore上で `true`, `"true"`, `"有"` のように表記が揺れても、`application-data` 生成時に同じ意味として扱います。これにより、`visible_when` を持つ条件付き項目が文字列/booleanの違いだけで消えないようにします。
+
+`proxy` は代理人欄です。MVPでは勤務先会社を代理人欄の初期値として扱い、`proxy.name`, `proxy.postal_code`, `proxy.address`, `proxy.phone` は `employer.*` から初期化します。人名として扱う運用に変える場合は、企業マスターまたはケース入力で `proxy.*` を明示的に保存します。
 
 変換例:
 
@@ -138,6 +175,11 @@ backend は次を行います。
 | `date_yyyymmdd` | `2026-06-01` | `20260601` |
 | `date_yyyymm` | `2026-06` | `202606` |
 | `boolean_yes_no` | `true` | `有 Yes` |
+| `contract_type` | `fixed term contract employee` | `雇用 Employment` |
+| `employment_period_type` | `fixed` | `定めあり Fixed` |
+| `education_country` | `TRIBHUVAN UNIVERSITY` | `外国 Foreign country` |
+| `education_level` | `Bachelor` | `大学 Bachelor` |
+| `major_field_university` | `Architectural Engineering` | `工学 Engineer` |
 | `sex_ja` | `male` | `男 Male` |
 | `marital_yes_no` | `single` | `無 Single` |
 
@@ -170,7 +212,7 @@ Chrome拡張から削るもの:
 
 274行台帳では、自動投入しない行にも扱いを付けます。たとえば `manual`, `settings`, `derived`, `unsupported`, `future` を明示し、「未対応なのか、不要なのか、固定設定で入れるのか」が分かる状態にします。自動投入はMVP対象に絞ります。
 
-`proxy` は代理人として案件データから生成します。住所・電話は `employer.*` から初期化候補を作れますが、氏名は会社名ではなく受入企業側の担当者として人確認します。
+`proxy` は代理人として案件データから生成します。MVPでは勤務先会社情報を代理人欄の初期値として扱います。将来、人名の代理人担当者を分ける場合は `proxy.*` を明示保存します。
 
 `intermediary` は取次者です。太田さん側の申請アカウントを持つ申請会社情報を固定設定値として rows 生成時に注入し、Gemini抽出対象にはしません。
 
@@ -201,8 +243,13 @@ backend側で次をテストします。
 - canonical `case_data` から期待rowsが生成される。
 - `entry_plan.*`, `applicant.passport.*`, `applicant.immigration_history.*`, `applicant.family.*`, `applicant.education[]`, `applicant.employment_history[]`, `employment.*` の新canonical pathからrowsが生成される。
 - `visible_when` が false の項目は出ない。
+- 親族明細は `applicant.family.has_japan_relatives_or_cohabitants == true` の場合だけ出る。
+- 職歴明細は `applicant.has_employment_history == true` の場合だけ出る。
+- 在日親族・同居者と職歴はMVPでは最大3件分の固定index mappingを持つ。
 - 日付・boolean・性別・婚姻状態の transform が正しい。
+- 職歴の月不詳は `month_unknown` transform で RASENS の「不明な点は無い / 月不詳」ラジオ値に変換する。
+- 職歴年月は月不詳が `false` の場合は年月入力、`true` の場合は年のみ入力へ分岐する。
 - `field_id` / `field_name` が `rasens_offer_fields.json` と矛盾しない。
 - 空値、`unknown`, `not_applicable` は投入されない。
 
-特に `employer.postal_code` など所属機関まわりの mapping は、フォーム台帳上の `field_id` / `field_name` と一致しているか再確認が必要です。現行mappingには旧フォーム参照が混じっている疑いがあります。
+親族生年月日はRASENS上で複数controlを持つ項目です。現行MVPでは通常の年月日テキスト入力を優先し、生年月日の精度radioは実画面QAで追加確認します。

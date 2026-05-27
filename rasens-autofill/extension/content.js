@@ -45,6 +45,13 @@ function textForControl(element) {
   return `${label?.innerText || ""} ${row?.innerText || ""} ${element.value || ""}`;
 }
 
+function choiceTextForControl(element) {
+  const id = element.id;
+  const label = id ? document.querySelector(`label[for="${cssEscape(id)}"]`) : null;
+  const wrappedLabel = element.closest("label");
+  return `${label?.innerText || ""} ${wrappedLabel?.innerText || ""} ${element.value || ""}`;
+}
+
 function findByLabel(row, selector = "input[name], input[id], select[name], select[id], textarea[name], textarea[id]") {
   const wanted = normalize(row.label);
   if (!wanted) return null;
@@ -84,7 +91,7 @@ function chooseRadioOrCheckbox(elements, rawValue) {
   const candidates = elements.filter((element) => element.type === "radio" || element.type === "checkbox");
   const target = candidates.find((element) => {
     if (["true", "1", "checked", "確認済み"].includes(wanted) && element.type === "checkbox") return true;
-    const text = normalize(textForControl(element));
+    const text = normalize(choiceTextForControl(element));
     return normalize(element.value) === wanted || text.includes(wanted) || wanted.includes(text);
   });
 
@@ -112,8 +119,9 @@ function targetForRow(row) {
 
   if (expectedType === "select") {
     return (
-      (idElement?.tagName === "SELECT" ? idElement : null) ||
       named.find((element) => element.tagName === "SELECT" && visible(element)) ||
+      (idElement?.tagName === "SELECT" && visible(idElement) ? idElement : null) ||
+      (idElement?.tagName === "SELECT" ? idElement : null) ||
       named.find((element) => element.tagName === "SELECT") ||
       findByLabel(row, "select[name], select[id]")
     );
@@ -132,8 +140,9 @@ function fillRow(row) {
 
   if (expectedType === "select") {
     const select =
-      (idElement?.tagName === "SELECT" ? idElement : null) ||
       named.find((element) => element.tagName === "SELECT" && visible(element)) ||
+      (idElement?.tagName === "SELECT" && visible(idElement) ? idElement : null) ||
+      (idElement?.tagName === "SELECT" ? idElement : null) ||
       named.find((element) => element.tagName === "SELECT") ||
       findByLabel(row, "select[name], select[id]");
 

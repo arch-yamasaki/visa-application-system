@@ -55,7 +55,7 @@ export const apiClient = {
 
   updateCase(
     caseId: string,
-    updates: { case_data?: unknown; field_metadata?: unknown; workflow_state?: string },
+    updates: { case_data?: unknown; settings?: unknown; field_metadata?: unknown; workflow_state?: string },
   ) {
     if (isDemoMode()) return mockApi.updateCase(caseId, updates)
     return request<CaseDocument>(`/cases/${caseId}`, {

@@ -3,7 +3,7 @@
  * Fetches generated application-data rows from visa-app backend.
  */
 
-const DEFAULT_API_URL = "http://localhost:8080";
+const DEFAULT_API_URL = "https://visa-app-913363513517.asia-northeast1.run.app";
 
 /**
  * Retrieve visa-app API URL from chrome.storage.local.
@@ -34,6 +34,10 @@ async function getApplicationData(caseId) {
   if (!response.ok) {
     throw new Error(`API エラー (${response.status}): ${response.statusText}`);
   }
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.includes("application/json")) {
+    throw new Error("APIからJSONが返りませんでした。visa-appを最新のバックエンドでデプロイしてください。");
+  }
 
   return await response.json();
 }
@@ -56,4 +60,4 @@ async function listCases() {
 }
 
 // Export for use by popup.js
-window.apiClient = { getApplicationData, listCases };
+window.apiClient = { getApplicationData, listCases, defaultApiUrl: DEFAULT_API_URL };

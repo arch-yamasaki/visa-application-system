@@ -155,6 +155,10 @@ class TestBuildPrompt:
         prompt = build_extraction_prompt(_CASE_META, _DOCUMENTS)
         assert "engineer_humanities_international" in prompt
 
+    def test_contains_current_date_context(self):
+        prompt = build_extraction_prompt(_CASE_META, _DOCUMENTS)
+        assert "今日の日付" in prompt
+
     def test_no_documents_shows_placeholder(self):
         prompt = build_extraction_prompt(_CASE_META, [])
         assert "(なし)" in prompt

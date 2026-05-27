@@ -173,16 +173,22 @@ canonical v2 では、mapping、`transform`、`visible_when` の評価は backen
 | 32 | 19 | 犯罪歴 | 表示 | `applicant.immigration_history.criminal_record` | Gemini抽出+人確認 | あり | 必ず人確認 |
 | 33 | 20.1 | 退去強制・出国命令歴 有無 | 表示 | `applicant.immigration_history.deportation_or_departure_order` | Gemini抽出+人確認 | 予定 | 必ず人確認 |
 | 34 | 20.2 | 退去強制・出国命令歴 回数 | 表示 | `applicant.immigration_history.deportation_count` | Gemini抽出+人確認 | 予定 | 有の場合のみ |
-| 35 | 20.3 | 直近の送還年月日 | 表示 | `applicant.immigration_history.deportation_latest_date` | Gemini抽出+人確認 | 予定 | 有の場合のみ |
-| 36 | 21.1 | 在日親族及び同居者 有無 | 表示 | `applicant.family.has_japan_relatives_or_cohabitants` | Gemini抽出+人確認 | 予定 | 詳細行の表示条件 |
-| 37 | 21.2-21.8 | 在日親族及び同居者 明細 | 表示候補 | `applicant.family.japan_relatives_or_cohabitants[]` | Gemini抽出+人確認 | 予定 | 繰り返し項目。配列で保持 |
+| 35 | 20.3 | 直近の送還年月日 | 表示 | `applicant.immigration_history.deportation_latest` | Gemini抽出+人確認 | 予定 | 有の場合のみ |
+| 36 | 21.1 | 在日親族及び同居者 有無 | 表示 | `applicant.family.has_japan_relatives_or_cohabitants` | Gemini抽出+人確認 | あり | 詳細行の表示条件 |
+| 37 | 21.2 | 在日親族及び同居者 続柄 | 折りたたみ内 | `applicant.family.japan_relatives_or_cohabitants[0..2].relationship` | Gemini抽出+人確認 | あり | 最大3件。RASENS番号は各枠で重複するため参考番号 |
+| 38 | 21.3 | 在日親族及び同居者 氏名 | 折りたたみ内 | `applicant.family.japan_relatives_or_cohabitants[0..2].name` | Gemini抽出+人確認 | あり | 空欄行はrowsに出さない |
+| 39 | 21.4 | 在日親族及び同居者 生年月日 | 折りたたみ内 | `applicant.family.japan_relatives_or_cohabitants[0..2].birth_date` | Gemini抽出+人確認 | あり | 生年月日の精度radioは後続QAで確認 |
+| 40 | 21.5 | 在日親族及び同居者 国籍・地域 | 折りたたみ内 | `applicant.family.japan_relatives_or_cohabitants[0..2].nationality_region` | Gemini抽出+人確認 | あり | RASENS選択肢に合わせる |
+| 41 | 21.6 | 在日親族及び同居者 同居予定の有無 | 折りたたみ内 | `applicant.family.japan_relatives_or_cohabitants[0..2].will_cohabit` | Gemini抽出+人確認 | あり | boolean |
+| 42 | 21.7 | 在日親族及び同居者 勤務先・通学先 | 折りたたみ内 | `applicant.family.japan_relatives_or_cohabitants[0..2].workplace_or_school_name` | Gemini抽出+人確認 | あり |  |
+| 43 | 21.8 | 在日親族及び同居者 在留カード番号等 | 折りたたみ内 | `applicant.family.japan_relatives_or_cohabitants[0..2].residence_card_or_certificate_number` | Gemini抽出+人確認 | あり |  |
 
 ### 3. 申請人に関する情報等
 
 | フォーム順 | 画面番号（参考） | RASENS表示名 | visa-app表示 | canonical path | 入力方針 | application mapping | 備考 |
 |---:|---|---|---|---|---|---|---|
-| 80 | 23.1 | 最終学歴 区分 | 表示 | `applicant.education[0].level` | Gemini抽出 | 予定 | `applicant.education[0]` を最終学歴として使う |
-| 81 | 23.2 | 最終学歴 区分詳細 | 表示 | `applicant.education[0].level_detail` | Gemini抽出 | 予定 | 学校種別の選択肢 |
+| 80 | 23.1 | 最終学歴 本邦・外国区分 | 表示 | `applicant.education[0].country_type` | Gemini抽出 | あり | `applicant.education[0]` を最終学歴として使う |
+| 81 | 23.2 | 最終学歴 区分 | 表示 | `applicant.education[0].level` | Gemini抽出 | あり | 学校種別の選択肢 |
 | 82 | 23.3 | 最終学歴 その他 | 表示候補 | `applicant.education[0].level_other` | 人入力 | 条件付き | その他選択時のみ |
 | 83 | 23.4 | 学校名 | 表示 | `applicant.education[0].school_name` | Gemini抽出 | あり | 卒業証明書等 |
 | 84 | 23.5 | 卒業年月日 | 表示 | `applicant.education[0].graduation_date` | Gemini抽出 | あり | 日付正規化 |
@@ -190,7 +196,14 @@ canonical v2 では、mapping、`transform`、`visible_when` の評価は backen
 | 86 | 24.2 | 専攻・専門分野 その他 | 表示候補 | `applicant.education[0].major_field_other` | 人入力 | 条件付き | その他選択時のみ |
 | 89 | 25.1 | 情報処理資格 有無 | 表示 | `applicant.qualifications.it.has_qualification` | Gemini抽出+人確認 | 予定 | RASENSの情報処理資格欄に対応 |
 | 90 | 25.2 | 情報処理資格 名称 | 表示候補 | `applicant.qualifications.it.qualification_name` | Gemini抽出+人確認 | 条件付き | 有の場合のみ。その他資格は `applicant.qualifications.items[]` に保持 |
-| 91 | 26.1-26.6 | 職歴 | 表示 | `applicant.employment_history[]` | Gemini抽出+人確認 | 予定 | 繰り返し項目。配列で保持 |
+| 91 | なし | 職歴の有無 | 表示 | `applicant.has_employment_history` | Gemini抽出+人確認 | あり | 詳細行の表示条件 |
+| 92 | 国・地域名 | 職歴 国・地域名 | 折りたたみ内 | `applicant.employment_history[0..2].country_region` | Gemini抽出+人確認 | あり | 最大3件 |
+| 93 | 26.1 | 職歴 入社月不詳 | 折りたたみ内 | `applicant.employment_history[0..2].start_month_unknown` | Gemini抽出+人確認 | あり | 年月が分かる場合はfalse |
+| 94 | 26.2 | 職歴 入社年月 | 折りたたみ内 | `applicant.employment_history[0..2].start_date` | Gemini抽出+人確認 | あり | `YYYY-MM`または`YYYYMM`相当 |
+| 95 | 26.3 | 職歴 退社月不詳 | 折りたたみ内 | `applicant.employment_history[0..2].end_month_unknown` | Gemini抽出+人確認 | あり | 在職中/未記載時は人確認 |
+| 96 | 26.4 | 職歴 退社年月 | 折りたたみ内 | `applicant.employment_history[0..2].end_date` | Gemini抽出+人確認 | あり |  |
+| 97 | 26.5 | 職歴 勤務先名称(英字表記) | 折りたたみ内 | `applicant.employment_history[0..2].company_name_en` | Gemini抽出+人確認 | あり |  |
+| 98 | 26.6 | 職歴 勤務先名称(漢字表記) | 折りたたみ内 | `applicant.employment_history[0..2].company_name_local` | Gemini抽出+人確認 | あり | 現地語表記。日本語限定ではない |
 
 ### 4. 代理人
 

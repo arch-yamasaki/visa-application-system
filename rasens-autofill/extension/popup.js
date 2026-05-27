@@ -10,6 +10,14 @@ function setFillButtonsEnabled(enabled) {
   document.querySelector("#fillProgressive").disabled = !enabled;
 }
 
+async function clearRows(message) {
+  await chrome.storage.local.remove(["visaRows", "visaDataSource", "visaFillable"]);
+  setFillButtonsEnabled(false);
+  if (message) {
+    setStatus(message);
+  }
+}
+
 async function saveRows(rows, source, canFill = true) {
   const inputRows = rows.filter((row) => (row.fill_value || "").trim());
   await chrome.storage.local.set({
@@ -135,7 +143,7 @@ function toWorkflowDisplayState(workflowState) {
 
 document.querySelector("#setApiUrl").addEventListener("click", (e) => {
   e.preventDefault();
-  const url = prompt("visa-app APIのURLを入力してください:", "http://localhost:8080");
+  const url = prompt("visa-app APIのURLを入力してください:", window.apiClient.defaultApiUrl);
   if (url?.trim()) {
     chrome.storage.local.set({ visaAppApiUrl: url.trim() });
     setStatus("API URL を保存しました");
@@ -168,7 +176,7 @@ document.querySelector("#loadFromApi").addEventListener("click", async () => {
 
     const rows = applicationData.rows || [];
     if (!rows.length) {
-      setStatus("入力対象の値がありません。visa-app のレビュー内容を確認してください。");
+      await clearRows("入力対象の値がありません。visa-app のレビュー内容を確認してください。");
       return;
     }
 
@@ -178,6 +186,6 @@ document.querySelector("#loadFromApi").addEventListener("click", async () => {
       setStatus(`visa-app: ${caseId}\n${rows.length}件の入力値を保存しました\n${warningText}`);
     }
   } catch (error) {
-    setStatus(`読込エラー\n${error.message}`);
+    await clearRows(`読込エラー\n${error.message}`);
   }
 });

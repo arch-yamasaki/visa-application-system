@@ -4,7 +4,7 @@ import { apiClient } from '../api/client'
 import FieldPanel from '../components/review/FieldPanel'
 import DocumentViewer from '../components/viewer/DocumentViewer'
 import ReviewBanner from '../components/review/ReviewBanner'
-import type { CaseDocument, FieldMetadataMap } from '../types/caseData'
+import type { CaseData, CaseDocument, FieldMetadataMap, Settings } from '../types/caseData'
 import { useViewerStore } from '../store/viewerStore'
 
 /** APIが返すリスト形式の field_metadata を Record<string, FieldMeta> に変換 */
@@ -59,6 +59,11 @@ function setValueAtPath<T>(root: T, path: string, value: unknown): T {
   return clone as T
 }
 
+function splitCaseDataSettings(caseData: CaseData): { caseData: CaseData; settings?: Settings } {
+  const { settings, ...rest } = caseData
+  return { caseData: rest as CaseData, settings }
+}
+
 export default function ReviewPage() {
   const { caseId } = useParams<{ caseId: string }>()
   const navigate = useNavigate()
@@ -74,6 +79,7 @@ export default function ReviewPage() {
     if (!caseId) return
     apiClient.getCase(caseId).then((doc) => {
       doc.field_metadata = normalizeFieldMetadata(doc.field_metadata)
+      doc.canonical_case_data ??= structuredClone(doc.case_data)
       setCaseDoc(doc)
       if (doc.document_manifest?.documents) {
         setDocuments(doc.document_manifest.documents)
@@ -87,6 +93,11 @@ export default function ReviewPage() {
       if (!prev) return prev
       const updated = { ...prev }
       updated.case_data = setValueAtPath(updated.case_data, fieldPath, value)
+      updated.canonical_case_data = setValueAtPath(
+        updated.canonical_case_data ?? updated.case_data,
+        fieldPath,
+        value,
+      )
 
       const fm = { ...updated.field_metadata }
       fm[fieldPath] = {
@@ -102,8 +113,10 @@ export default function ReviewPage() {
     if (!caseId || !caseDoc) return
     setSaving(true)
     try {
+      const updates = splitCaseDataSettings(caseDoc.canonical_case_data ?? caseDoc.case_data)
       await apiClient.updateCase(caseId, {
-        case_data: caseDoc.case_data,
+        case_data: updates.caseData,
+        settings: updates.settings,
         field_metadata: caseDoc.field_metadata,
       })
     } finally {

@@ -94,14 +94,20 @@ const demoCaseData = {
         duties: ['製造設備の設計補助', '品質管理資料作成'],
       },
     ],
-    qualifications: [
-      {
-        type: 'language',
-        name: 'JLPT',
-        level: 'N2',
-        issue_date: '2025-01-31',
+    qualifications: {
+      it: {
+        has_qualification: false,
+        qualification_name: '',
       },
-    ],
+      items: [
+        {
+          type: 'language',
+          name: 'JLPT',
+          level: 'N2',
+          issue_date: '2025-01-31',
+        },
+      ],
+    },
   },
   transcript_subjects: [
     { name: 'Control Engineering', matched_duty: '制御設計補助' },

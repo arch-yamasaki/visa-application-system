@@ -1,6 +1,7 @@
 """Codex orchestrator – FastAPI service on Cloud Run."""
 
 import io
+import copy
 import json
 import logging
 import mimetypes
@@ -40,6 +41,7 @@ from extractors.bbox_locator import locate_bboxes
 from extractors.vision import ocr_document
 from extractors.types import ExtractionResult
 from application_data import (
+    build_display_case_data,
     build_application_data as build_application_data_response,
     load_default_form_definitions,
     load_default_mapping,
@@ -129,6 +131,7 @@ class CreateCaseRequest(BaseModel):
 
 class UpdateCaseRequest(BaseModel):
     case_data: dict | None = None
+    settings: dict | None = None
     field_metadata: dict | None = None
     workflow_state: str | None = None
 
@@ -137,6 +140,17 @@ class ExtractRequest(BaseModel):
     backend: str = "gemini"  # "gemini" | "codex"
     pattern: str = "auto"  # "auto" | "text_only" | "pdf_direct" | "text_and_image"
     scoped: bool = True  # True: スコープ別並列抽出（新方式）、False: 1回呼び出し（後方互換）
+
+
+def _case_summary(data: dict) -> dict:
+    case_data = data.get("case_data") or {}
+    applicant = case_data.get("applicant") if isinstance(case_data, dict) else {}
+    return {
+        "case_id": data.get("case_id") or case_data.get("case", {}).get("case_id"),
+        "workflow_state": data.get("workflow_state") or case_data.get("case", {}).get("workflow_state", "draft"),
+        "created_at": data.get("created_at") or data.get("updated_at") or "",
+        "applicant_name_preview": data.get("applicant_name_preview") or (applicant or {}).get("name_roman"),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -439,14 +453,18 @@ def list_cases(
     query = db.collection("cases")
     if workflow_state:
         query = query.where(filter=FieldFilter("workflow_state", "==", workflow_state))
-        cases = [doc.to_dict() for doc in query.stream()]
+        cases = [_case_summary(doc.to_dict()) for doc in query.stream()]
         return sorted(
             cases,
             key=lambda case: case.get("created_at", ""),
             reverse=True,
         )[:limit]
-    query = query.order_by("created_at", direction=firestore.Query.DESCENDING).limit(limit)
-    return [doc.to_dict() for doc in query.stream()]
+    cases = [_case_summary(doc.to_dict()) for doc in query.stream()]
+    return sorted(
+        cases,
+        key=lambda case: case.get("created_at", ""),
+        reverse=True,
+    )[:limit]
 
 
 @app.get("/cases/{case_id}")
@@ -454,7 +472,14 @@ def get_case(case_id: str):
     doc = db.collection("cases").document(case_id).get()
     if not doc.exists:
         raise HTTPException(status_code=404, detail="Case not found")
-    return doc.to_dict()
+    data = doc.to_dict()
+    if data.get("case_data"):
+        data["canonical_case_data"] = copy.deepcopy(data["case_data"])
+        data["case_data"] = build_display_case_data(
+            data["case_data"],
+            data.get("settings"),
+        )
+    return data
 
 
 @app.patch("/cases/{case_id}")
@@ -468,6 +493,8 @@ def update_case(case_id: str, body: UpdateCaseRequest):
 
     if body.case_data is not None:
         updates["case_data"] = body.case_data
+    if body.settings is not None:
+        updates["settings"] = body.settings
     if body.field_metadata is not None:
         updates["field_metadata"] = body.field_metadata
     if body.workflow_state is not None:

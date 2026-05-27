@@ -580,6 +580,66 @@
     "notes": ""
   },
   {
+    "section": "身分事項",
+    "form_order": 34,
+    "display_no": "20.1",
+    "label": "退去強制又は出国命令による出国の有無",
+    "canonical_path": "applicant.immigration_history.deportation_or_departure_order",
+    "source_paths": [
+      "applicant.immigration_history.deportation_or_departure_order"
+    ],
+    "field_name": "item[37].selectData",
+    "field_id": "",
+    "input_type": "radio",
+    "display_value": "False",
+    "fill_value": "無 No",
+    "source_page": "case_data",
+    "confidence": "generated",
+    "required": true,
+    "manual_required": false,
+    "notes": ""
+  },
+  {
+    "section": "申請人に関する情報等",
+    "form_order": 80,
+    "display_no": "23.1",
+    "label": "最終学歴 本邦・外国区分",
+    "canonical_path": "applicant.education.0.country_type",
+    "source_paths": [
+      "applicant.education.0.country_type"
+    ],
+    "field_name": "item[90].selectData",
+    "field_id": "",
+    "input_type": "radio",
+    "display_value": "外国 Foreign country",
+    "fill_value": "外国 Foreign country",
+    "source_page": "case_data",
+    "confidence": "generated",
+    "required": true,
+    "manual_required": false,
+    "notes": ""
+  },
+  {
+    "section": "申請人に関する情報等",
+    "form_order": 81,
+    "display_no": "23.2",
+    "label": "最終学歴 区分",
+    "canonical_path": "applicant.education.0.level",
+    "source_paths": [
+      "applicant.education.0.level"
+    ],
+    "field_name": "item[91].selectData",
+    "field_id": "select_256187",
+    "input_type": "select",
+    "display_value": "大学 Bachelor",
+    "fill_value": "大学 Bachelor",
+    "source_page": "case_data",
+    "confidence": "generated",
+    "required": true,
+    "manual_required": false,
+    "notes": ""
+  },
+  {
     "section": "申請人に関する情報等",
     "form_order": 83,
     "display_no": "23.4",
@@ -620,6 +680,26 @@
     "notes": ""
   },
   {
+    "section": "申請人に関する情報等",
+    "form_order": 85,
+    "display_no": "24.1",
+    "label": "専攻・専門分野",
+    "canonical_path": "applicant.education.0.major_field",
+    "source_paths": [
+      "applicant.education.0.major_field"
+    ],
+    "field_name": "item[95].selectData",
+    "field_id": "select_256191",
+    "input_type": "select",
+    "display_value": "工学 Engineer",
+    "fill_value": "工学 Engineer",
+    "source_page": "case_data",
+    "confidence": "generated",
+    "required": true,
+    "manual_required": false,
+    "notes": ""
+  },
+  {
     "section": "申請人、法定代理人、法第７条の２第２項に規定する代理人",
     "form_order": 146,
     "display_no": "27.1",
@@ -636,7 +716,7 @@
     "source_page": "case_data",
     "confidence": "generated",
     "required": true,
-    "manual_required": true,
+    "manual_required": false,
     "notes": ""
   },
   {
@@ -696,6 +776,46 @@
     "source_page": "case_data",
     "confidence": "generated",
     "required": true,
+    "manual_required": false,
+    "notes": ""
+  },
+  {
+    "section": "申請人、法定代理人、法第７条の２第２項に規定する代理人",
+    "form_order": 150,
+    "display_no": "27.5",
+    "label": "代理人 電話番号",
+    "canonical_path": "proxy.phone",
+    "source_paths": [
+      "proxy.phone"
+    ],
+    "field_name": "item[163].textData",
+    "field_id": "switch_256259",
+    "input_type": "text",
+    "display_value": "0660000000",
+    "fill_value": "0660000000",
+    "source_page": "case_data",
+    "confidence": "generated",
+    "required": false,
+    "manual_required": false,
+    "notes": ""
+  },
+  {
+    "section": "申請人、法定代理人、法第７条の２第２項に規定する代理人",
+    "form_order": 151,
+    "display_no": "27.6",
+    "label": "代理人 携帯電話番号",
+    "canonical_path": "proxy.mobile",
+    "source_paths": [
+      "proxy.mobile"
+    ],
+    "field_name": "item[164].textData",
+    "field_id": "switch_256260",
+    "input_type": "text",
+    "display_value": "09000000000",
+    "fill_value": "09000000000",
+    "source_page": "case_data",
+    "confidence": "generated",
+    "required": false,
     "manual_required": false,
     "notes": ""
   },
@@ -812,7 +932,7 @@
     "field_id": "radioList_256270_1",
     "input_type": "radio",
     "display_value": "雇用",
-    "fill_value": "雇用",
+    "fill_value": "雇用 Employment",
     "source_page": "case_data",
     "confidence": "generated",
     "required": true,
@@ -841,6 +961,26 @@
   },
   {
     "section": "所属機関に関する情報等",
+    "form_order": 159,
+    "display_no": "3.2",
+    "label": "所属機関等契約先 法人番号の有無",
+    "canonical_path": "employer.has_corporate_number",
+    "source_paths": [
+      "employer.has_corporate_number"
+    ],
+    "field_name": "item[176].selectData",
+    "field_id": "",
+    "input_type": "radio",
+    "display_value": "True",
+    "fill_value": "有 Yes",
+    "source_page": "case_data",
+    "confidence": "generated",
+    "required": true,
+    "manual_required": false,
+    "notes": ""
+  },
+  {
+    "section": "所属機関に関する情報等",
     "form_order": 160,
     "display_no": "3.2",
     "label": "所属機関等契約先 法人番号",
@@ -853,6 +993,66 @@
     "input_type": "text",
     "display_value": "1234567890123",
     "fill_value": "1234567890123",
+    "source_page": "case_data",
+    "confidence": "generated",
+    "required": true,
+    "manual_required": false,
+    "notes": ""
+  },
+  {
+    "section": "所属機関に関する情報等",
+    "form_order": 161,
+    "display_no": "3.3",
+    "label": "所属機関等契約先 支店・事業所名",
+    "canonical_path": "employer.office_name",
+    "source_paths": [
+      "employer.office_name"
+    ],
+    "field_name": "item[178].textData",
+    "field_id": "switch_256274",
+    "input_type": "text",
+    "display_value": "大阪本社",
+    "fill_value": "大阪本社",
+    "source_page": "case_data",
+    "confidence": "generated",
+    "required": false,
+    "manual_required": false,
+    "notes": ""
+  },
+  {
+    "section": "所属機関に関する情報等",
+    "form_order": 162,
+    "display_no": "3.4",
+    "label": "所属機関等契約先 雇用保険適用事業所番号",
+    "canonical_path": "employer.employment_insurance_office_number",
+    "source_paths": [
+      "employer.employment_insurance_office_number"
+    ],
+    "field_name": "item[179].textData",
+    "field_id": "switch_256275",
+    "input_type": "text",
+    "display_value": "2700-000000-0",
+    "fill_value": "2700-000000-0",
+    "source_page": "case_data",
+    "confidence": "generated",
+    "required": false,
+    "manual_required": false,
+    "notes": ""
+  },
+  {
+    "section": "所属機関に関する情報等",
+    "form_order": 163,
+    "display_no": "3.5",
+    "label": "所属機関等契約先 業種 主たる業種",
+    "canonical_path": "employer.industry_primary",
+    "source_paths": [
+      "employer.industry_primary"
+    ],
+    "field_name": "item[180].selectData",
+    "field_id": "select_256276",
+    "input_type": "select",
+    "display_value": "製造業",
+    "fill_value": "製造業",
     "source_page": "case_data",
     "confidence": "generated",
     "required": true,
@@ -916,6 +1116,166 @@
     "source_page": "case_data",
     "confidence": "generated",
     "required": true,
+    "manual_required": false,
+    "notes": ""
+  },
+  {
+    "section": "所属機関に関する情報等",
+    "form_order": 172,
+    "display_no": "3.12",
+    "label": "所属機関等契約先 資本金",
+    "canonical_path": "employer.capital_jpy",
+    "source_paths": [
+      "employer.capital_jpy"
+    ],
+    "field_name": "item[190].textData",
+    "field_id": "switch_256286",
+    "input_type": "text",
+    "display_value": "10000000",
+    "fill_value": "10000000",
+    "source_page": "case_data",
+    "confidence": "generated",
+    "required": true,
+    "manual_required": false,
+    "notes": ""
+  },
+  {
+    "section": "所属機関に関する情報等",
+    "form_order": 179,
+    "display_no": "5.1",
+    "label": "就労予定期間",
+    "canonical_path": "employment.employment_period_type",
+    "source_paths": [
+      "employment.employment_period_type"
+    ],
+    "field_name": "item[197].selectData",
+    "field_id": "",
+    "input_type": "radio",
+    "display_value": "定めあり Fixed",
+    "fill_value": "定めあり Fixed",
+    "source_page": "case_data",
+    "confidence": "generated",
+    "required": true,
+    "manual_required": false,
+    "notes": ""
+  },
+  {
+    "section": "所属機関に関する情報等",
+    "form_order": 180,
+    "display_no": "5.2",
+    "label": "就労予定期間 年数",
+    "canonical_path": "employment.employment_period_years",
+    "source_paths": [
+      "employment.employment_period_years"
+    ],
+    "field_name": "item[198].selectData",
+    "field_id": "select_256294",
+    "input_type": "select",
+    "display_value": "1",
+    "fill_value": "1",
+    "source_page": "case_data",
+    "confidence": "generated",
+    "required": true,
+    "manual_required": false,
+    "notes": ""
+  },
+  {
+    "section": "所属機関に関する情報等",
+    "form_order": 181,
+    "display_no": "5.3",
+    "label": "就労予定期間 月数",
+    "canonical_path": "employment.employment_period_months",
+    "source_paths": [
+      "employment.employment_period_months"
+    ],
+    "field_name": "item[199].selectData",
+    "field_id": "select_256295",
+    "input_type": "select",
+    "display_value": "0",
+    "fill_value": "0",
+    "source_page": "case_data",
+    "confidence": "generated",
+    "required": true,
+    "manual_required": false,
+    "notes": ""
+  },
+  {
+    "section": "所属機関に関する情報等",
+    "form_order": 173,
+    "display_no": "3.13",
+    "label": "所属機関等契約先 年間売上高",
+    "canonical_path": "employer.annual_sales_jpy",
+    "source_paths": [
+      "employer.annual_sales_jpy"
+    ],
+    "field_name": "item[191].textData",
+    "field_id": "switch_256287",
+    "input_type": "text",
+    "display_value": "250000000",
+    "fill_value": "250000000",
+    "source_page": "case_data",
+    "confidence": "generated",
+    "required": true,
+    "manual_required": false,
+    "notes": ""
+  },
+  {
+    "section": "所属機関に関する情報等",
+    "form_order": 174,
+    "display_no": "3.14",
+    "label": "所属機関等契約先 従業員数",
+    "canonical_path": "employer.employee_count",
+    "source_paths": [
+      "employer.employee_count"
+    ],
+    "field_name": "item[192].textData",
+    "field_id": "switch_256288",
+    "input_type": "text",
+    "display_value": "80",
+    "fill_value": "80",
+    "source_page": "case_data",
+    "confidence": "generated",
+    "required": true,
+    "manual_required": false,
+    "notes": ""
+  },
+  {
+    "section": "所属機関に関する情報等",
+    "form_order": 175,
+    "display_no": "3.15",
+    "label": "所属機関等契約先 外国人職員数",
+    "canonical_path": "employer.foreign_employee_count",
+    "source_paths": [
+      "employer.foreign_employee_count"
+    ],
+    "field_name": "item[193].textData",
+    "field_id": "switch_256289",
+    "input_type": "text",
+    "display_value": "8",
+    "fill_value": "8",
+    "source_page": "case_data",
+    "confidence": "generated",
+    "required": true,
+    "manual_required": false,
+    "notes": ""
+  },
+  {
+    "section": "所属機関に関する情報等",
+    "form_order": 176,
+    "display_no": "3.16",
+    "label": "所属機関等契約先 技能実習生数",
+    "canonical_path": "employer.technical_intern_count",
+    "source_paths": [
+      "employer.technical_intern_count"
+    ],
+    "field_name": "item[194].textData",
+    "field_id": "switch_256290",
+    "input_type": "text",
+    "display_value": "0",
+    "fill_value": "0",
+    "source_page": "case_data",
+    "confidence": "generated",
+    "required": false,
     "manual_required": false,
     "notes": ""
   },

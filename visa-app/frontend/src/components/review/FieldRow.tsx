@@ -1,17 +1,29 @@
 import { useRef, useState } from 'react'
 import type { FieldMeta } from '../../types/caseData'
+import { getDisplayValue, type FieldInput } from '../../lib/fieldPaths'
 import { useViewerStore } from '../../store/viewerStore'
-import { getDisplayValue } from '../../lib/fieldPaths'
 
 interface Props {
   label: string
   fieldPath: string
   value: unknown
+  input: FieldInput
   meta?: FieldMeta
   onUpdate?: (fieldPath: string, value: string) => void
 }
 
-export default function FieldRow({ label, fieldPath, value, meta, onUpdate }: Props) {
+function normalizeEditorValue(value: string, type: FieldInput['type']): string {
+  if (type === 'select') return normalizeChoiceValue(value)
+  if (type === 'number') return value.replace(/\D/g, '')
+  if (type === 'date') return toDateValue(value)
+  if (type === 'month' && /^\d{4}-\d{2}/.test(value)) {
+    return value.slice(0, 7)
+  }
+  if (type === 'month') return toMonthValue(value)
+  return value
+}
+
+export default function FieldRow({ label, fieldPath, value, input, meta, onUpdate }: Props) {
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState('')
   const navigateToSource = useViewerStore((s) => s.navigateToSource)
@@ -23,6 +35,10 @@ export default function FieldRow({ label, fieldPath, value, meta, onUpdate }: Pr
   const displayValue = rawValue === '' ? '(未入力)' : getDisplayValue(rawValue) || rawValue
   const hasSource = meta?.source_refs && meta.source_refs.length > 0
   const isActive = activeFieldPath === fieldPath
+  const inputOptions = input.options ?? []
+  const selectOptions = input.type === 'select' && rawValue !== '' && !inputOptions.some((option) => option.value === rawValue)
+    ? [...inputOptions, { value: rawValue, label: getDisplayValue(rawValue) || rawValue }]
+    : inputOptions
 
   const handleClick = () => {
     setActiveFieldPath(fieldPath)
@@ -33,13 +49,17 @@ export default function FieldRow({ label, fieldPath, value, meta, onUpdate }: Pr
 
   const startEditing = () => {
     if (!onUpdate) return
-    setEditValue(rawValue)
+    setEditValue(normalizeEditorValue(rawValue, input.type))
     setEditing(true)
   }
 
   const handleSave = () => {
     onUpdate?.(fieldPath, editValue)
     setEditing(false)
+  }
+
+  const handleInputChange = (value: string) => {
+    setEditValue(input.type === 'number' ? value.replace(/\D/g, '') : value)
   }
 
   const handleCancel = () => {
@@ -89,18 +109,46 @@ export default function FieldRow({ label, fieldPath, value, meta, onUpdate }: Pr
       <span className="w-44 shrink-0 text-gray-500 truncate text-xs">{label}</span>
 
       {editing ? (
-        <div className="flex-1 flex gap-1">
-          <input
-            className="flex-1 px-2 py-0.5 border border-blue-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
-            value={editValue}
-            onChange={(e) => setEditValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleSave()
-              if (e.key === 'Escape') handleCancel()
-              e.stopPropagation()
-            }}
-            autoFocus
-          />
+        <div
+          className="flex-1 flex gap-1"
+          onClick={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
+        >
+          {input.type === 'select' ? (
+            <select
+              className="flex-1 px-2 py-0.5 border border-blue-300 rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+              value={editValue}
+              onChange={(e) => handleInputChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSave()
+                if (e.key === 'Escape') handleCancel()
+                e.stopPropagation()
+              }}
+              autoFocus
+            >
+              <option value="">(未入力)</option>
+              {selectOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              className="flex-1 px-2 py-0.5 border border-blue-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+              type={input.type === 'number' ? 'text' : input.type}
+              inputMode={input.type === 'number' ? 'numeric' : undefined}
+              pattern={input.type === 'number' ? '[0-9]*' : undefined}
+              value={editValue}
+              onChange={(e) => handleInputChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSave()
+                if (e.key === 'Escape') handleCancel()
+                e.stopPropagation()
+              }}
+              autoFocus
+            />
+          )}
           <button
             onClick={(e) => { e.stopPropagation(); handleSave() }}
             className="px-2 py-0.5 bg-blue-600 text-white rounded text-xs"
@@ -127,4 +175,33 @@ export default function FieldRow({ label, fieldPath, value, meta, onUpdate }: Pr
       )}
     </div>
   )
+}
+
+function normalizeChoiceValue(value: string): string {
+  const normalized = value.trim().toLowerCase()
+  if (['true', 'yes', '有', 'あり', '有 yes', '1'].includes(normalized)) return 'true'
+  if (['false', 'no', '無', 'なし', '無 no', '0'].includes(normalized)) return 'false'
+  if (normalized === 'single') return 'single'
+  if (normalized === 'unmarried') return 'unmarried'
+  if (normalized === 'married') return 'married'
+  return value
+}
+
+function toDateValue(value: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
+  const digits = value.replace(/\D/g, '')
+  if (digits.length >= 8) {
+    return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`
+  }
+  return ''
+}
+
+function toMonthValue(value: string): string {
+  if (/^\d{4}-\d{2}$/.test(value)) return value
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value.slice(0, 7)
+  const digits = value.replace(/\D/g, '')
+  if (digits.length >= 6) {
+    return `${digits.slice(0, 4)}-${digits.slice(4, 6)}`
+  }
+  return ''
 }
