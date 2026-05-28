@@ -2,7 +2,7 @@
 """Compare generated output with golden (expected) files.
 
 Usage:
-    python3 scripts/compare_with_golden.py \
+    python visa-eval/scripts/compare_with_golden.py \
         --generated <generated_dir> \
         --expected <expected_dir> \
         [--output <file>] [--json]
@@ -264,8 +264,11 @@ def _form_no_sort_key(no_str: str) -> tuple:
 
 
 def compare_application_data(gen: list, exp: list) -> dict:
-    gen_by_id = {it.get("canonical_id"): it for it in gen if it.get("canonical_id")}
-    exp_by_id = {it.get("canonical_id"): it for it in exp if it.get("canonical_id")}
+    def row_key(item: dict) -> str:
+        return item.get("canonical_path") or item.get("canonical_id") or ""
+
+    gen_by_id = {row_key(it): it for it in gen if row_key(it)}
+    exp_by_id = {row_key(it): it for it in exp if row_key(it)}
 
     rows: list[dict] = []
     only_generated: list[str] = []
@@ -293,7 +296,12 @@ def compare_application_data(gen: list, exp: list) -> dict:
                 status = ROW_MISSING
 
         # フォーム項目情報: golden 側を優先、なければ generated 側から取得
-        form_no = ev_item.get("no", "") or gv_item.get("no", "")
+        form_no = (
+            ev_item.get("display_no", "")
+            or ev_item.get("no", "")
+            or gv_item.get("display_no", "")
+            or gv_item.get("no", "")
+        )
         form_label = ev_item.get("label", "") or gv_item.get("label", "")
         form_field = f"{form_no} {form_label}".strip() if (form_no or form_label) else ""
 

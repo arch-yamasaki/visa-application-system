@@ -8,7 +8,8 @@ import json
 import sys
 from pathlib import Path
 
-BACKEND_DIR = Path(__file__).resolve().parents[2] / "visa-app/backend"
+ROOT = Path(__file__).resolve().parents[2]
+BACKEND_DIR = ROOT / "visa-app/backend"
 sys.path.insert(0, str(BACKEND_DIR))
 
 from application_data import build_application_data  # noqa: E402
@@ -16,7 +17,7 @@ from application_data import build_application_data  # noqa: E402
 
 def build_rows(case_data: dict, mapping_data: dict, form_definitions: dict | None = None) -> list[dict]:
     if form_definitions is None:
-        form_path = Path(__file__).resolve().parents[1] / "data/form_definitions/rasens_offer_fields.json"
+        form_path = ROOT / "rasens-autofill/data/form_definitions/rasens_offer_fields.json"
         form_definitions = json.loads(form_path.read_text())
     response = build_application_data(
         {"case_id": case_data.get("case", {}).get("case_id", ""), "workflow_state": "extracted", "case_data": case_data},
@@ -35,7 +36,7 @@ def main() -> None:
 
     case_data = json.loads(args.case_data.read_text())
     mapping_data = json.loads(args.mapping.read_text())
-    form_path = Path(__file__).resolve().parents[1] / "data/form_definitions/rasens_offer_fields.json"
+    form_path = ROOT / "rasens-autofill/data/form_definitions/rasens_offer_fields.json"
     form_definitions = json.loads(form_path.read_text())
     rows = build_rows(case_data, mapping_data, form_definitions)
 

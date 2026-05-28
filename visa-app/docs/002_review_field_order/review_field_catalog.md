@@ -246,9 +246,9 @@ canonical v2 では、mapping、`transform`、`visible_when` の評価は backen
 | 174 | 3.14 | 従業員数 | 表示 | `employer.employee_count` | Gemini抽出+人確認 | あり | 数値正規化 |
 | 175 | 3.15 | うち外国人職員数 | 表示 | `employer.foreign_employee_count` | Gemini抽出+人確認 | あり | 数値正規化 |
 | 176 | 3.16 | うち技能実習生数 | 表示 | `employer.technical_intern_count` | Gemini抽出+人確認 | あり | 数値正規化 |
-| 179 | 5.1 | 就労予定期間 区分 | 表示 | `employment.period_type` | Gemini抽出+人確認 | 予定 | 有期/無期等 |
-| 180 | 5.2 | 就労予定期間 年 | 表示 | `employment.period_years` | Gemini抽出+人確認 | 予定 | 有期の場合 |
-| 181 | 5.3 | 就労予定期間 月 | 表示 | `employment.period_months` | Gemini抽出+人確認 | 予定 | 有期の場合 |
+| 179 | 5.1 | 就労予定期間 区分 | 表示 | `employment.employment_period_type` | Gemini抽出+人確認 | 予定 | 有期/無期等 |
+| 180 | 5.2 | 就労予定期間 年 | 表示 | `employment.employment_period_years` | Gemini抽出+人確認 | 予定 | 有期の場合 |
+| 181 | 5.3 | 就労予定期間 月 | 表示 | `employment.employment_period_months` | Gemini抽出+人確認 | 予定 | 有期の場合 |
 | 182 | 6 | 雇用開始年月日 | 表示 | `employment.joining_date` | Gemini抽出 | 予定 | 日付正規化 |
 | 183 | 7 | 月額給与 | 表示 | `employment.monthly_salary` | Gemini抽出+人確認 | 予定 | 金額は円前提。手当込み/なしの運用確認 |
 | 184 | 8 | 実務経験月数 | 表示 | `employment.experience_months` | Gemini抽出+人確認 | 予定 | 学歴要件との関係で確認 |
@@ -283,7 +283,7 @@ canonical v2 では、mapping、`transform`、`visible_when` の評価は backen
 
 - `画面番号（参考）` を技術的なキーとして使わない。
 - `field_id` / `field_name` は `rasens_offer_fields.json` と照合する。
-- `canonical path` が `case_data.schema.json` v2 に存在することを検証する。
+- `canonical path` が `canonical_case_data_v2.md` と `frontend/src/types/caseData.ts` に存在することを検証する。
 - `employer.postal_code` のような誤った物理項目参照を検出する。
 - 274行台帳上で、MVP自動投入対象以外にも `手入力`, `設定値`, `非対応`, `将来対応` の扱いを明示する。
 - `transform` と `visible_when` は backend generator だけで評価する。

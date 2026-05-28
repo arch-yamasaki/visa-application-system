@@ -1,4 +1,4 @@
-/** Matches case_data.schema.json */
+/** Matches the canonical case_data v2 shape documented under visa-app/docs. */
 
 export interface CaseData {
   schema_version: string
@@ -318,7 +318,13 @@ export interface CaseDocument {
 
 export interface CaseSummary {
   case_id: string
+  display_name?: string
+  applicant_name?: string
+  employer_name?: string
+  target_status?: string
+  application_type?: string
   workflow_state: string
   created_at: string
+  updated_at?: string
   applicant_name_preview?: string
 }

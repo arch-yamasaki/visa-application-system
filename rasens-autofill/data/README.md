@@ -22,10 +22,10 @@ cases/demo_case_data.json
 
 ## ディレクトリ
 
-- `schemas/`: canonical v2 case_data、AIレビュー出力、入力資料manifestのJSON Schema。
 - `cases/`: 合成デモ・fixture用の `case_data`。実運用案件の正本ではない。
 - `form_definitions/`: 入管オンライン申請フォームの項目台帳。`reference_form.html` から抽出したもの。
 - `mappings/`: 正規 `case_data` からフォーム入力項目への変換ルール。
+- `schemas/`: AIレビュー出力と入力資料manifestの評価補助用 JSON Schema。
 - `generated/`: Chrome拡張に渡す投入用JSONなど、再生成できる派生物。
 - `visa-eval/`: 以前はここにあったが、現在はリポジトリ直下の `visa-eval/` に移動済み。
 - `reference_form.html`: フォーム項目台帳を作るための参照元HTML。
@@ -55,8 +55,10 @@ cases/demo_case_data.json
 
 ## デモ生成
 
+リポジトリルートから実行する。
+
 ```bash
-python3 rasens-autofill/scripts/build_application_data.py \
+python visa-eval/scripts/build_application_data.py \
   rasens-autofill/data/cases/demo_case_data.json \
   rasens-autofill/data/mappings/rasens_offer_mapping_v2.json \
   rasens-autofill/data/generated/demo_application_data.json

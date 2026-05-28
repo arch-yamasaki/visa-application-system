@@ -600,6 +600,26 @@
     "notes": ""
   },
   {
+    "section": "身分事項",
+    "form_order": 37,
+    "display_no": "21.1",
+    "label": "在日親族及び同居者 有無",
+    "canonical_path": "applicant.family.has_japan_relatives_or_cohabitants",
+    "source_paths": [
+      "applicant.family.has_japan_relatives_or_cohabitants"
+    ],
+    "field_name": "item[40].selectData",
+    "field_id": "",
+    "input_type": "radio",
+    "display_value": "False",
+    "fill_value": "無 No",
+    "source_page": "case_data",
+    "confidence": "generated",
+    "required": true,
+    "manual_required": false,
+    "notes": ""
+  },
+  {
     "section": "申請人に関する情報等",
     "form_order": 80,
     "display_no": "23.1",
@@ -693,6 +713,26 @@
     "input_type": "select",
     "display_value": "工学 Engineer",
     "fill_value": "工学 Engineer",
+    "source_page": "case_data",
+    "confidence": "generated",
+    "required": true,
+    "manual_required": false,
+    "notes": ""
+  },
+  {
+    "section": "申請人に関する情報等",
+    "form_order": 91,
+    "display_no": "",
+    "label": "職歴の有無",
+    "canonical_path": "applicant.has_employment_history",
+    "source_paths": [
+      "applicant.has_employment_history"
+    ],
+    "field_name": "item[101].selectData",
+    "field_id": "",
+    "input_type": "radio",
+    "display_value": "False",
+    "fill_value": "無 No",
     "source_page": "case_data",
     "confidence": "generated",
     "required": true,
@@ -1041,6 +1081,26 @@
   },
   {
     "section": "所属機関に関する情報等",
+    "form_order": 179,
+    "display_no": "5.1",
+    "label": "就労予定期間",
+    "canonical_path": "employment.employment_period_type",
+    "source_paths": [
+      "employment.employment_period_type"
+    ],
+    "field_name": "item[197].selectData",
+    "field_id": "",
+    "input_type": "radio",
+    "display_value": "定めなし Non-Fixed",
+    "fill_value": "定めなし Non-Fixed",
+    "source_page": "case_data",
+    "confidence": "generated",
+    "required": true,
+    "manual_required": false,
+    "notes": ""
+  },
+  {
+    "section": "所属機関に関する情報等",
     "form_order": 163,
     "display_no": "3.5",
     "label": "所属機関等契約先 業種 主たる業種",
@@ -1053,6 +1113,46 @@
     "input_type": "select",
     "display_value": "製造業",
     "fill_value": "製造業",
+    "source_page": "case_data",
+    "confidence": "generated",
+    "required": true,
+    "manual_required": false,
+    "notes": ""
+  },
+  {
+    "section": "所属機関に関する情報等",
+    "form_order": 180,
+    "display_no": "5.2",
+    "label": "就労予定期間 年数",
+    "canonical_path": "employment.employment_period_years",
+    "source_paths": [
+      "employment.employment_period_years"
+    ],
+    "field_name": "item[198].selectData",
+    "field_id": "select_256294",
+    "input_type": "select",
+    "display_value": "1",
+    "fill_value": "1",
+    "source_page": "case_data",
+    "confidence": "generated",
+    "required": true,
+    "manual_required": false,
+    "notes": ""
+  },
+  {
+    "section": "所属機関に関する情報等",
+    "form_order": 181,
+    "display_no": "5.3",
+    "label": "就労予定期間 月数",
+    "canonical_path": "employment.employment_period_months",
+    "source_paths": [
+      "employment.employment_period_months"
+    ],
+    "field_name": "item[199].selectData",
+    "field_id": "select_256295",
+    "input_type": "select",
+    "display_value": "0",
+    "fill_value": "0",
     "source_page": "case_data",
     "confidence": "generated",
     "required": true,
@@ -1133,66 +1233,6 @@
     "input_type": "text",
     "display_value": "10000000",
     "fill_value": "10000000",
-    "source_page": "case_data",
-    "confidence": "generated",
-    "required": true,
-    "manual_required": false,
-    "notes": ""
-  },
-  {
-    "section": "所属機関に関する情報等",
-    "form_order": 179,
-    "display_no": "5.1",
-    "label": "就労予定期間",
-    "canonical_path": "employment.employment_period_type",
-    "source_paths": [
-      "employment.employment_period_type"
-    ],
-    "field_name": "item[197].selectData",
-    "field_id": "",
-    "input_type": "radio",
-    "display_value": "定めあり Fixed",
-    "fill_value": "定めあり Fixed",
-    "source_page": "case_data",
-    "confidence": "generated",
-    "required": true,
-    "manual_required": false,
-    "notes": ""
-  },
-  {
-    "section": "所属機関に関する情報等",
-    "form_order": 180,
-    "display_no": "5.2",
-    "label": "就労予定期間 年数",
-    "canonical_path": "employment.employment_period_years",
-    "source_paths": [
-      "employment.employment_period_years"
-    ],
-    "field_name": "item[198].selectData",
-    "field_id": "select_256294",
-    "input_type": "select",
-    "display_value": "1",
-    "fill_value": "1",
-    "source_page": "case_data",
-    "confidence": "generated",
-    "required": true,
-    "manual_required": false,
-    "notes": ""
-  },
-  {
-    "section": "所属機関に関する情報等",
-    "form_order": 181,
-    "display_no": "5.3",
-    "label": "就労予定期間 月数",
-    "canonical_path": "employment.employment_period_months",
-    "source_paths": [
-      "employment.employment_period_months"
-    ],
-    "field_name": "item[199].selectData",
-    "field_id": "select_256295",
-    "input_type": "select",
-    "display_value": "0",
-    "fill_value": "0",
     "source_page": "case_data",
     "confidence": "generated",
     "required": true,

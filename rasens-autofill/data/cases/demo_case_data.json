@@ -6,7 +6,7 @@
     "source_organization": "Demo Recruiting Agency",
     "application_type": "certificate_of_eligibility",
     "target_status": "engineer_humanities_international",
-    "workflow_state": "ready_to_fill",
+    "workflow_state": "extracted",
     "routed_to_human_reason": []
   },
   "entry_plan": {
@@ -20,9 +20,9 @@
   },
   "employment": {
     "contract_type": "雇用",
-    "period_type": "期間の定めなし",
-    "period_years": "",
-    "period_months": "",
+    "employment_period_type": "定めなし Non-Fixed",
+    "employment_period_years": "",
+    "employment_period_months": "",
     "joining_date": "2026-07-01",
     "monthly_salary": 250000,
     "job_title": "技術総合職",

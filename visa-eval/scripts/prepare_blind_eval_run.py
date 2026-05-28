@@ -51,35 +51,37 @@ Write outputs only under this run directory's `generated/` directory.
 
 Reference schemas:
 
-- `rasens-autofill/data/schemas/case_data.schema.json`
 - `rasens-autofill/data/schemas/review.schema.json`
 - `rasens-autofill/data/schemas/document_manifest.schema.json`
 
+Canonical case data contract:
+
+- `visa-app/docs/002_review_field_order/canonical_case_data_v2.md`
+- `visa-app/frontend/src/types/caseData.ts`
+
 ## generated/case_data.json
 
-Create a single-applicant case object. Use the existing project shape where practical:
+Create a single-applicant value-only canonical v2 case object.
 
 - `schema_version`
 - `case`
-- `application`
 - `applicant`
-- `passport`
-- `residence_card`
-- `immigration_history`
-- `family`
-- `education`
-- `transcript_subjects`
-- `employment_history`
-- `qualifications`
 - `employer`
 - `proxy`
 - `intermediary`
 - `receiving_method`
 - `supporting_documents`
 - `assessments`
-- `field_metadata`
 
 If a value is not found in allowed documents, use an empty string, `null`, or an empty array/object as appropriate. Do not guess.
+
+Do not include `field_metadata` inside `case_data.json`.
+
+## generated/field_metadata.json
+
+Create evidence metadata keyed by canonical v2 dot paths, for example `applicant.education.0.school_name`.
+
+Each value should contain `source_refs` with `document_id`, page/sheet if available, a short `text_quote`, and confidence. If evidence is missing, use an empty `source_refs` array and record the issue in `review.json`.
 
 ## generated/review.json
 
@@ -94,7 +96,7 @@ Include:
 - `findings`
 - `assessments`
 
-Use `needs_review` when human review is required.
+Use `missing_items`, `validation_errors`, and `findings` for human review concerns.
 
 ## generated/run_notes.md
 
@@ -206,12 +208,14 @@ def prepare(fixture_dir: Path) -> Path:
     (run_dir / "allowed_reference_paths.txt").write_text(
         "\n".join(
             [
-                "rasens-autofill/data/schemas/case_data.schema.json",
                 "rasens-autofill/data/schemas/review.schema.json",
                 "rasens-autofill/data/schemas/document_manifest.schema.json",
+                "visa-app/docs/002_review_field_order/canonical_case_data_v2.md",
+                "visa-app/frontend/src/types/caseData.ts",
                 "rasens-autofill/data/mappings/rasens_offer_mapping_v2.json",
                 "rasens-autofill/data/form_definitions/rasens_offer_fields.json",
-                "rasens-autofill/scripts/build_application_data.py",
+                "visa-eval/scripts/build_application_data.py",
+                "visa-eval/scripts/run_gemini_bytes_eval.py",
             ]
         )
         + "\n"

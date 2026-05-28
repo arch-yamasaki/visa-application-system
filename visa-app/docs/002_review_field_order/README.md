@@ -101,7 +101,7 @@ receiving_method
 
 ## 実装への反映順
 
-1. `canonical_case_data_v2.md` を基準に `case_data.schema.json` と `caseData.ts` を作り直す。
+1. `canonical_case_data_v2.md` を基準に `caseData.ts` と backend schema を更新する。
 2. Gemini `schema.py` と `prompt_template.py` を canonical path に寄せる。
 3. Firestore保存時に Gemini raw を canonical `case_data` + `field_metadata` + `review` へ正規化する。
 4. `review_field_catalog.md` に合わせて `fieldPaths.ts` の section / label / ordering を整理する。
@@ -113,6 +113,6 @@ receiving_method
 ## 現時点の注意
 
 - 旧実装由来の `applicant.date_of_birth`, `applicant.gender`, `applicant.nationality`, `passport.*`, `application.*`, `family.*`, `immigration_history.*`, `education.*`, `employment_history.*`, `contract.*`, `employment_conditions.*`, `activity_details.description` は canonical v2 の正本では使いません。
-- `case_data.schema.json` は canonical v2 の基本構造契約です。ただし、実務上の条件付き必須やレビュー規則は別途 `review` / completeness rules で扱います。
+- `canonical_case_data_v2.md` は canonical v2 の基本構造契約です。ただし、実務上の条件付き必須やレビュー規則は別途 `review` / completeness rules で扱います。
 - 旧 `rasens_offer_mapping.json` は削除済みです。`rasens_offer_mapping_v2.json` を `rasens_offer_fields.json` と照合しながら拡張します。
 - `review_field_catalog.md` はMVP主要項目から設計を始めています。RASENS全274行の完全な扱い台帳へ広げる場合は、`rasens_offer_fields.json` を生成元にして更新します。

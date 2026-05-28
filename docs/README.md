@@ -29,12 +29,13 @@
 
 ### visa-app/docs/
 
-- [README.md](../visa-app/docs/README.md): Codex 実行基盤の設計
-- [option3_codex_exec_json_cloud_run_jobs.md](../visa-app/docs/option3_codex_exec_json_cloud_run_jobs.md): Cloud Run Jobs 方式
+- [README.md](../visa-app/docs/README.md): visa-app の現行設計ドキュメント入口
+- [006_current_architecture](../visa-app/docs/006_current_architecture/): 現行アーキテクチャ
+- [001_codex_remote_execution](../visa-app/docs/001_codex_remote_execution/): Codex 実行基盤の設計
 
 ## データの正本と生成物
 
-実運用のケース保存先は Firestore の `cases` コレクション。現時点の `case_data` は Gemini 抽出形式とのズレが残るため、canonical schema は未確定。
+実運用のケース保存先は Firestore の `cases` コレクション。現行の `case_data` は `visa-app/docs/002_review_field_order/canonical_case_data_v2.md` を基準にし、Chrome拡張向けの物理フォーム行は backend が `/application-data` で生成する。
 
 `rasens-autofill/data/cases/*case_data.json` はデモ・fixture用途であり、実運用案件の正本ではない。
 

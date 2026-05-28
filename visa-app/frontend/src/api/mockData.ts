@@ -289,8 +289,14 @@ const demoCaseDocument: CaseDocument = {
 
 const demoCaseSummary: CaseSummary = {
   case_id: DEMO_CASE_ID,
+  display_name: 'NGUYEN VAN DEMO / デモテクノロジー株式会社',
+  applicant_name: 'NGUYEN VAN DEMO',
+  employer_name: 'デモテクノロジー株式会社',
+  target_status: 'engineer_humanities_international',
+  application_type: 'certificate_of_eligibility',
   workflow_state: 'extracted',
   created_at: '2026-05-10T09:00:00Z',
+  updated_at: '2026-05-10T12:00:00Z',
   applicant_name_preview: 'NGUYEN VAN DEMO',
 }
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { apiClient } from '../api/client'
 import CopyableCaseId from '../components/common/CopyableCaseId'
+import { getDisplayValue } from '../lib/fieldPaths'
 import { isExtractedWorkflowState, toWorkflowDisplayState, workflowStateColor, workflowStateLabel } from '../lib/workflowState'
 import type { CaseSummary } from '../types/caseData'
 
@@ -55,19 +56,22 @@ export default function CaseListPage() {
               }}
               className="flex items-center justify-between p-4 bg-white rounded-lg border border-gray-200 hover:border-blue-300 cursor-pointer transition-colors"
             >
-              <div>
+              <div className="min-w-0">
+                <p className="font-medium text-gray-800 text-sm truncate">
+                  {c.display_name || c.applicant_name_preview || c.case_id}
+                </p>
+                <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+                  {c.applicant_name && <span>申請人: {c.applicant_name}</span>}
+                  {c.employer_name && <span>所属機関: {c.employer_name}</span>}
+                  {c.target_status && <span>在留資格: {getDisplayValue(c.target_status)}</span>}
+                </div>
                 <CopyableCaseId
                   caseId={c.case_id}
-                  className="font-medium text-gray-800 text-sm"
+                  className="mt-1 text-xs text-gray-400"
                   stopPropagation
                 />
-                {c.applicant_name_preview && (
-                  <p className="text-sm text-gray-500 mt-0.5">
-                    {c.applicant_name_preview}
-                  </p>
-                )}
               </div>
-              <span className={`px-2 py-0.5 rounded text-xs font-medium ${workflowStateColor[toWorkflowDisplayState(c.workflow_state)]}`}>
+              <span className={`ml-4 shrink-0 px-2 py-0.5 rounded text-xs font-medium ${workflowStateColor[toWorkflowDisplayState(c.workflow_state)]}`}>
                 {workflowStateLabel[toWorkflowDisplayState(c.workflow_state)]}
               </span>
             </div>

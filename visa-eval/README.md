@@ -1,8 +1,8 @@
 # visa-eval
 
-このディレクトリは、Codex やAIエージェントに実PDF・Excelを読ませて、在留資格申請データの抽出・正規化・申請入力生成を検証するためのローカル restricted evaluation workspace です。
+このディレクトリは、Codex や Gemini に実PDF・Excelを読ませて、在留資格申請データの抽出・正規化・申請入力生成を検証するためのローカル restricted evaluation workspace です。
 
-初期は `expected/*.golden.json` のたたき台をCodexで作り、人手確認後にgolden化する。評価時は、AI出力の `generated/*.json` を人手確認済みの `expected/*.golden.json` と比較する。
+初期は `expected/*.golden.json` のたたき台をCodex blind runで作り、人手確認後にgolden化する。Gemini bytes eval は、指定された入力ファイルだけを backend の Gemini 抽出pipelineへ渡す検証フローとして扱う。
 
 ## 重要: 制限付きデータ
 
@@ -51,6 +51,7 @@ visa-eval/
           document_manifest.json
         expected/
           case_data.golden.json
+          field_metadata.golden.json
           application_data.golden.json
           review.golden.json
         generated/
@@ -66,9 +67,12 @@ visa-eval/
 - `test_cases_from_raw/<case_id>/<applicant_id>/...`: 申請人1人=1フォームの単票ケース。まずここでPDF/Excel読取、正規case_data生成、フォーム投入JSON生成を検証する。
 - `.../input/document_manifest.json`: そのケースでAIエージェントへ渡す入力資料リスト。
 - `.../expected/case_data.golden.json`: 人手で完成させる canonical v2 `case_data` の正解データ。旧path互換は持たせない。
+- `.../expected/field_metadata.golden.json`: 抽出根拠の期待データ。現在は採点対象外で、根拠レビュー用に扱う。
 - `.../expected/application_data.golden.json`: canonical v2 `case_data` から backend generator が生成するフォーム投入用JSONの正解データ。
 - `.../expected/review.golden.json`: 不足確認・リスク判定・人レビュー要否の正解データ。現状はExcel起点のscaffoldを含むため、人手確認でgolden化する。
 - `.../generated/`: AIエージェントやスクリプトが出力した結果。expectedと比較する。
+
+fixtureの入出力契約は `docs/fixture_contract.md` を正とする。
 
 ## 現在のケース
 
@@ -82,25 +86,33 @@ visa-eval/
 raw配下を更新したら、以下を実行して `catalog.json` を再生成する。単票fixtureの追加・更新は、既存の `test_cases_from_raw/` 構成を参考に個別に作る。
 
 ```bash
-python3 rasens-autofill/scripts/classify_test_documents.py
+python visa-eval/scripts/classify_test_documents.py
 ```
 
 ## 評価の考え方
 
 ### Golden作成モード
 
-1. `document_manifest.json` をCodex/AIエージェントへ渡す。
-2. AIが `generated/case_data.json` と `generated/review.json` を作る。
+1. `document_manifest.json` をCodex blind runまたはGemini bytes evalへ渡す。
+2. AIが `generated/case_data.json`、`generated/field_metadata.json`、`generated/review.json` を作る。
 3. `generated/case_data.json` を backend generator に渡して `generated/application_data.json` を作る。
 4. 人が `generated/*.json` を確認し、必要な補正後に `expected/*.golden.json` として確定する。
 
 ### 評価モード
 
-1. `document_manifest.json` をAIエージェントへ渡す。
-2. AIが `generated/case_data.json` と `generated/review.json` を作る。
+1. `document_manifest.json` をCodex blind runまたはGemini bytes evalへ渡す。
+2. AIが `generated/case_data.json`、`generated/field_metadata.json`、`generated/review.json` を作る。
 3. `generated/case_data.json` を backend generator に渡して `generated/application_data.json` を作る。
 4. `expected/*.golden.json` と比較する。
 5. 比較は、自然文全文一致ではなく、安定キー、文書種別、必須項目、レビューコードを中心に行う。
+
+### Codex blind run と Gemini bytes eval
+
+- Codex blind run: `prepare_blind_eval_run.py` で `expected/` を除外した作業ディレクトリを作り、Codexに資料読取とJSON作成を任せる。これは自由操作を伴う評価フロー。
+- Gemini bytes eval: `run_gemini_bytes_eval.py` が `document_manifest.json` の `use_as_input: true` だけをローカルbytesとして読み、GCS/Firestoreを使わず backend の scoped Gemini 抽出pipelineへ渡す。
+- `application_data.json` はどちらのフローでもAIに手書きさせない。backend generator が `case_data.json` から決定論的に生成する。
+
+Gemini bytes eval の通常フローは、抽出、`application_data` 生成、golden比較の3コマンドです。具体的な手順は `docs/fixture_contract.md` を参照してください。`--dry-run` は初回や送信対象確認が必要な場合だけ使います。
 
 ### Canonical v2 方針
 
@@ -126,4 +138,4 @@ python3 rasens-autofill/scripts/classify_test_documents.py
 
 ## `test_cases_from_raw/` について
 
-`test_cases_from_raw/` は、申請人1人分の評価用fixtureを置く場所です。まずここで、Codexが実PDF・Excelを読んで `case_data`、`review`、`application_data` を作れるか確認する。
+`test_cases_from_raw/` は、申請人1人分の評価用fixtureを置く場所です。まずここで、AIが実PDF・Excelから `case_data`、`field_metadata`、`review` を作れるか確認し、`application_data` は backend generator で生成する。

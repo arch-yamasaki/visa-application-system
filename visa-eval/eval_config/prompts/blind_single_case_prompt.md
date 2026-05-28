@@ -37,9 +37,7 @@
 - `generated/field_metadata.json`
 - `generated/run_notes.md`
 
-`generated/application_data.json` は手動で作成してはならない。canonical v2移行後は、backend generator またはそれを呼ぶ評価用CLIで `case_data.json` から決定論的に生成すること。旧 `rasens-autofill/scripts/build_application_data.py` 前提には戻さない。
-
-生成コマンドは移行実装で確定する。確定後はこのプロンプトに具体的なCLIを記載する。
+`generated/application_data.json` は手動で作成してはならない。backend generator または `visa-eval/scripts/build_application_data.py` で `case_data.json` から決定論的に生成すること。Chrome拡張側に生成ロジックを戻さない。
 
 ## 出力言語に関するルール
 

@@ -29,16 +29,9 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud import run_v2
 from pydantic import BaseModel
 
-from google.genai import types as genai_types
-from extractors.gemini import (
-    _get_client,
-    extract_text_only,
-    extract_pdf_direct,
-    extract_with_images,
-    extract_all_scopes,
-)
-from extractors.bbox_locator import locate_bboxes
-from extractors.vision import ocr_document
+from extractors.document_models import LoadedDocument
+from extractors.document_preprocessor import prepare_documents
+from extractors.gemini_pipeline import extract_documents
 from extractors.types import ExtractionResult
 from application_data import (
     build_display_case_data,
@@ -145,12 +138,44 @@ class ExtractRequest(BaseModel):
 def _case_summary(data: dict) -> dict:
     case_data = data.get("case_data") or {}
     applicant = case_data.get("applicant") if isinstance(case_data, dict) else {}
+    employer = case_data.get("employer") if isinstance(case_data, dict) else {}
+    case_meta = case_data.get("case") if isinstance(case_data, dict) else {}
+    applicant_name = (
+        data.get("applicant_name_preview")
+        or (applicant or {}).get("name_roman")
+        or (applicant or {}).get("name_kanji")
+        or ""
+    )
+    employer_name = (employer or {}).get("name") or ""
+    display_parts = [part for part in (applicant_name, employer_name) if part]
+    display_name = " / ".join(display_parts) or data.get("case_id") or case_meta.get("case_id", "")
     return {
-        "case_id": data.get("case_id") or case_data.get("case", {}).get("case_id"),
-        "workflow_state": data.get("workflow_state") or case_data.get("case", {}).get("workflow_state", "draft"),
+        "case_id": data.get("case_id") or case_meta.get("case_id"),
+        "display_name": display_name,
+        "applicant_name": applicant_name,
+        "employer_name": employer_name,
+        "target_status": case_meta.get("target_status", ""),
+        "application_type": case_meta.get("application_type", ""),
+        "workflow_state": data.get("workflow_state") or case_meta.get("workflow_state", "draft"),
         "created_at": data.get("created_at") or data.get("updated_at") or "",
-        "applicant_name_preview": data.get("applicant_name_preview") or (applicant or {}).get("name_roman"),
+        "updated_at": data.get("updated_at") or "",
+        "applicant_name_preview": applicant_name,
     }
+
+
+def _deep_merge_dict(base: dict, updates: dict) -> dict:
+    for key, value in updates.items():
+        if isinstance(base.get(key), dict) and isinstance(value, dict):
+            _deep_merge_dict(base[key], value)
+        else:
+            base[key] = value
+    return base
+
+
+def _merge_extracted_case_data(existing_case_data: dict | None, extracted_case_data: dict) -> dict:
+    merged = copy.deepcopy(existing_case_data or {})
+    _deep_merge_dict(merged, copy.deepcopy(extracted_case_data or {}))
+    return merged
 
 
 # ---------------------------------------------------------------------------
@@ -829,7 +854,8 @@ def _extract_with_gemini(
         document_count=len(documents),
     )
 
-    # Download documents from GCS in parallel and classify by type
+    # Download documents from GCS. The extraction pipeline accepts bytes, so
+    # GCS stays at the API boundary and eval can reuse the same pipeline.
     def _download_one(doc):
         started_at = time.monotonic()
         blob = gcs.bucket(GCS_BUCKET).blob(doc["gcs_path"])
@@ -846,247 +872,74 @@ def _extract_with_gemini(
             bytes=len(content),
             elapsed_ms=round((time.monotonic() - started_at) * 1000),
         )
-        return (doc["document_id"], file_name, content)
+        return LoadedDocument(
+            document_id=doc["document_id"],
+            file_name=file_name,
+            document_role=doc.get("document_role", ""),
+            content=content,
+        )
 
     with ThreadPoolExecutor(max_workers=min(len(documents), 8)) as pool:
-        file_entries: list[tuple[str, str, bytes]] = list(pool.map(_download_one, documents))
+        loaded_documents: list[LoadedDocument] = list(pool.map(_download_one, documents))
     _log_extract_metric(
         "documents_download_complete",
         run_id=run_id,
         case_id=case_id,
-        files=len(file_entries),
-        total_bytes=sum(len(content) for _, _, content in file_entries),
+        files=len(loaded_documents),
+        total_bytes=sum(len(document.content) for document in loaded_documents),
         elapsed_ms=round((time.monotonic() - extraction_started_at) * 1000),
     )
     logger.info(
         "Gemini extraction downloaded documents case_id=%s files=%d total_bytes=%d",
         case_doc.get("case_id", ""),
-        len(file_entries),
-        sum(len(content) for _, _, content in file_entries),
+        len(loaded_documents),
+        sum(len(document.content) for document in loaded_documents),
     )
 
-    # Split into PDF/image vs text-extractable formats
-    pdf_contents: list[tuple[str, bytes]] = []
-    text_contents: list[tuple[str, str]] = []
-    image_entries: list[tuple[str, str, bytes]] = []  # for OCR path
+    def log_document_event(event: str, document: LoadedDocument, fields: dict) -> None:
+        _log_extract_metric(
+            event,
+            run_id=run_id,
+            case_id=case_id,
+            document_id=document.document_id,
+            document_role=document.document_role,
+            **fields,
+        )
 
-    for did, fname, content in file_entries:
-        started_at = time.monotonic()
-        ext = fname.rsplit(".", 1)[-1].lower() if "." in fname else ""
-        if ext == "pdf":
-            pdf_contents.append((did, content))
-            image_entries.append((did, fname, content))
-            _log_extract_metric(
-                "document_classified",
-                run_id=run_id,
-                case_id=case_id,
-                document_id=did,
-                ext=ext,
-                route="pdf_direct",
-                bytes=len(content),
-                elapsed_ms=round((time.monotonic() - started_at) * 1000),
-            )
-        elif ext in ("xlsx", "xls"):
-            from extractors.xlsx import extract_xlsx
-            ocr = extract_xlsx(content, did)
-            text = "\n".join(p.text for p in ocr.pages)
-            text_contents.append((did, text))
-            _log_extract_metric(
-                "document_text_extracted",
-                run_id=run_id,
-                case_id=case_id,
-                document_id=did,
-                ext=ext,
-                pages=len(ocr.pages),
-                text_chars=len(text),
-                elapsed_ms=round((time.monotonic() - started_at) * 1000),
-            )
-        elif ext in ("docx", "doc"):
-            from extractors.docx_text import extract_docx
-            ocr = extract_docx(content, did)
-            text = "\n".join(p.text for p in ocr.pages)
-            text_contents.append((did, text))
-            _log_extract_metric(
-                "document_text_extracted",
-                run_id=run_id,
-                case_id=case_id,
-                document_id=did,
-                ext=ext,
-                pages=len(ocr.pages),
-                text_chars=len(text),
-                elapsed_ms=round((time.monotonic() - started_at) * 1000),
-            )
-        elif ext in ("png", "jpg", "jpeg"):
-            image_entries.append((did, fname, content))
-            _log_extract_metric(
-                "document_classified",
-                run_id=run_id,
-                case_id=case_id,
-                document_id=did,
-                ext=ext,
-                route="image_direct",
-                bytes=len(content),
-                elapsed_ms=round((time.monotonic() - started_at) * 1000),
-            )
+    def log_pipeline_event(event: str, fields: dict) -> None:
+        _log_extract_metric(event, **fields)
+
+    prepared = prepare_documents(
+        loaded_documents,
+        event_logger=log_document_event,
+    )
     logger.info(
         "Gemini extraction classified documents case_id=%s pdfs=%d text_docs=%d images=%d",
         case_doc.get("case_id", ""),
-        len(pdf_contents),
-        len(text_contents),
-        len(image_entries),
+        len(prepared.pdf_contents),
+        len(prepared.text_contents),
+        len(prepared.image_entries),
     )
-
-    def _attach_bboxes_if_enabled(result: ExtractionResult) -> ExtractionResult:
-        if not pdf_contents:
-            return result
-        if os.environ.get("ENABLE_BBOX_LOCATOR", "true").lower() != "true":
-            logger.info(
-                "Bbox locator skipped case_id=%s reason=disabled",
-                case_doc.get("case_id", ""),
-            )
-            return result
-
-        logger.info(
-            "Bbox locator started case_id=%s pdfs=%d metadata_fields=%d",
-            case_doc.get("case_id", ""),
-            len(pdf_contents),
-            len(result.field_metadata),
-        )
-        bbox_started_at = time.monotonic()
-        pdf_bytes_map = {did: content for did, content in pdf_contents}
-        try:
-            result.field_metadata = locate_bboxes(result.field_metadata, pdf_bytes_map)
-        except Exception as exc:
-            logger.warning(
-                "Bbox locator failed case_id=%s error_type=%s",
-                case_doc.get("case_id", ""),
-                type(exc).__name__,
-                exc_info=True,
-            )
-            _log_extract_metric(
-                "bbox_failed",
-                run_id=run_id,
-                case_id=case_id,
-                pdfs=len(pdf_contents),
-                metadata_fields=len(result.field_metadata),
-                error_type=type(exc).__name__,
-                elapsed_ms=round((time.monotonic() - bbox_started_at) * 1000),
-            )
-            return result
-        bbox_refs = sum(
-            1
-            for meta in result.field_metadata.values()
-            for ref in meta.get("source_refs", [])
-            if ref.get("bbox")
-        )
-        _log_extract_metric(
-            "bbox_complete",
-            run_id=run_id,
-            case_id=case_id,
-            pdfs=len(pdf_contents),
-            metadata_fields=len(result.field_metadata),
-            bbox_refs=bbox_refs,
-            elapsed_ms=round((time.monotonic() - bbox_started_at) * 1000),
-        )
-        logger.info("Bbox locator completed case_id=%s", case_doc.get("case_id", ""))
-        return result
-
-    def _build_contents_for_scope(scope: str) -> list:
-        scope_parts: list = []
-        if text_contents:
-            for doc_id, text in text_contents:
-                scope_parts.append(f"--- document: {doc_id} ---\n{text}")
-        for doc_id, pdf_bytes in pdf_contents:
-            scope_parts.append(
-                genai_types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf")
-            )
-            scope_parts.append(f"(document_id: {doc_id})")
-        for did, fname, img_bytes in image_entries:
-            if fname.lower().endswith(".pdf"):
-                continue
-            mime = "image/png" if img_bytes[:4] == b"\x89PNG" else "image/jpeg"
-            scope_parts.append(
-                genai_types.Part.from_bytes(data=img_bytes, mime_type=mime)
-            )
-            scope_parts.append(f"(document_id: {did})")
-        return scope_parts
-
-    def _build_documents_for_scope(scope: str) -> list[dict]:
-        return list(documents)
-
-    # --- Scoped parallel extraction (new path) ---
-    if scoped:
-        client = _get_client()
-        contents_by_scope = {
-            "identity": _build_contents_for_scope("identity"),
-            "employer": _build_contents_for_scope("employer"),
-            "education": _build_contents_for_scope("education"),
-            "review": _build_contents_for_scope("review"),
-        }
-        documents_by_scope = {
-            "identity": _build_documents_for_scope("identity"),
-            "employer": _build_documents_for_scope("employer"),
-            "education": _build_documents_for_scope("education"),
-            "review": _build_documents_for_scope("review"),
-        }
-        logger.info(
-            "Gemini scoped contents case_id=%s parts=%s documents=%s",
-            case_doc.get("case_id", ""),
-            {scope: len(parts) for scope, parts in contents_by_scope.items()},
-            {scope: len(docs) for scope, docs in documents_by_scope.items()},
-        )
-        for scope, parts in contents_by_scope.items():
-            _log_extract_metric(
-                "scope_input_built",
-                run_id=run_id,
-                case_id=case_id,
-                scope=scope,
-                parts=len(parts),
-                documents=len(documents_by_scope[scope]),
-            )
-
-        result = extract_all_scopes(
-            client, contents_by_scope, case_meta, documents_by_scope,
-            text_contents=text_contents or None,
-            run_id=run_id,
-            case_id=case_id,
-        )
-        result = _attach_bboxes_if_enabled(result)
-        _log_extract_metric(
-            "extraction_complete",
-            run_id=run_id,
-            case_id=case_id,
-            field_metadata_count=len(result.field_metadata),
-            review_keys=list(result.review.keys()) if isinstance(result.review, dict) else [],
-            elapsed_ms=round((time.monotonic() - extraction_started_at) * 1000),
-        )
-        return result
-
-    # --- Legacy single-call extraction ---
-    if pattern == "auto":
-        # Gemini can read image-based PDFs directly, so prefer pdf_direct
-        # to avoid Cloud Vision API dependency. Fall back to text_and_image
-        # only when there are standalone images (png/jpg) without any PDFs.
-        has_pdfs = any(fname.lower().endswith(".pdf") for _, fname, _ in file_entries)
-        has_images_only = image_entries and not has_pdfs
-        pattern = "text_and_image" if has_images_only else "pdf_direct"
-
-    if pattern == "text_only":
-        ocr_results = [
-            ocr_document(content, fname, did)
-            for did, fname, content in image_entries
-        ]
-        return extract_text_only(ocr_results, case_meta, documents, text_contents=text_contents or None)
-    elif pattern == "pdf_direct":
-        result = extract_pdf_direct(pdf_contents, case_meta, documents, text_contents=text_contents or None)
-        return _attach_bboxes_if_enabled(result)
-    else:  # text_and_image
-        ocr_results = [
-            ocr_document(content, fname, did)
-            for did, fname, content in image_entries
-        ]
-        result = extract_with_images(ocr_results, pdf_contents, case_meta, documents, text_contents=text_contents or None)
-        return _attach_bboxes_if_enabled(result)
+    result = extract_documents(
+        case_meta,
+        documents,
+        loaded_documents,
+        prepared,
+        pattern=pattern,
+        scoped=scoped,
+        run_id=run_id,
+        case_id=case_id,
+        event_logger=log_pipeline_event,
+    )
+    _log_extract_metric(
+        "extraction_complete",
+        run_id=run_id,
+        case_id=case_id,
+        field_metadata_count=len(result.field_metadata),
+        review_keys=list(result.review.keys()) if isinstance(result.review, dict) else [],
+        elapsed_ms=round((time.monotonic() - extraction_started_at) * 1000),
+    )
+    return result
 
 
 @app.post("/cases/{case_id}/extract-stream")
@@ -1148,9 +1001,13 @@ def start_extraction_stream(case_id: str, body: ExtractRequest = ExtractRequest(
                 raise RuntimeError("抽出結果が空です")
 
             yield send("progress", phase="saving", message="保存中...")
+            merged_case_data = _merge_extracted_case_data(
+                data.get("case_data"),
+                result.display_case_data,
+            )
 
             ref.update({
-                "case_data": result.display_case_data,
+                "case_data": merged_case_data,
                 "review": result.review,
                 "field_metadata": result.field_metadata,
                 "extraction": {
@@ -1289,10 +1146,14 @@ def _start_gemini_extraction(
 
     try:
         result = _extract_with_gemini(case_doc, pattern, scoped=scoped)
+        merged_case_data = _merge_extracted_case_data(
+            case_doc.get("case_data"),
+            result.display_case_data,
+        )
 
         case_ref.update(
             {
-                "case_data": result.display_case_data,    # 表示用（従来形式）をFirestoreに保存
+                "case_data": merged_case_data,
                 "review": result.review,
                 "field_metadata": result.field_metadata,  # 互換レイヤーで自動生成済み
                 "workflow_state": "extracted",
@@ -1484,6 +1345,7 @@ def _harvest_extraction_results(
         updates: dict = {"updated_at": _now_iso(), "workflow_state": "extracted"}
 
         # Look for generated/ files
+        extracted_case_data = None
         for name, field in [
             ("case_data.json", "case_data"),
             ("review.json", "review"),
@@ -1495,9 +1357,19 @@ def _harvest_extraction_results(
                 try:
                     content = matches[0].read_text(encoding="utf-8")
                     parsed = json.loads(content)
-                    updates[field] = parsed
+                    if field == "case_data":
+                        extracted_case_data = parsed
+                    else:
+                        updates[field] = parsed
                 except (json.JSONDecodeError, OSError):
                     pass
+
+        if extracted_case_data is not None:
+            current_doc = case_ref.get().to_dict() or {}
+            updates["case_data"] = _merge_extracted_case_data(
+                current_doc.get("case_data"),
+                extracted_case_data,
+            )
 
         case_ref.update(updates)
 
