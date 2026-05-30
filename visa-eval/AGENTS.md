@@ -12,7 +12,7 @@ visa-eval/
     <case_id>/<applicant_id>/
       scenario.json
       input/document_manifest.json
-      expected/         # golden: case_data, field_metadata, application_data, review
+      expected/         # golden: case_dataが正本。application_data/reviewは旧成果物または参考
       generated/        # AI出力先
   blind_runs_from_test_cases/  # ブラインド実行ワークスペース — git管理外
   eval_config/
@@ -43,19 +43,18 @@ visa-eval/
 3. `visa-eval/scripts/build_application_data.py` で `application_data.json` を決定論的に生成
 4. `expected/*.golden.json` と比較して精度を検証
 
-Geminiを評価する場合は、自由操作させず `visa-eval/scripts/run_gemini_bytes_eval.py` で指定ファイルだけをbytesとして backend の scoped Gemini 抽出pipelineへ渡す。GCS/Firestoreは不要。通常フローは次の3コマンド。
+Geminiを評価する場合は、自由操作させず `visa-eval/scripts/run_gemini_bytes_eval.py` で指定ファイルだけをbytesとして backend の scoped Gemini 抽出pipelineへ渡す。GCS/Firestoreは不要。通常フローは次の2コマンド。`application_data` は比較時に `case_data` から生成する。
 
 ```bash
-python visa-eval/scripts/run_gemini_bytes_eval.py <fixture_dir> --output-dir <run_output>
-python visa-eval/scripts/build_application_data.py <run_output>/case_data.json rasens-autofill/data/mappings/rasens_offer_mapping_v2.json <run_output>/application_data.json
-python visa-eval/scripts/compare_with_golden.py --generated <run_output> --expected <fixture_dir>/expected
+visa-app/backend/.venv/bin/python visa-eval/scripts/run_gemini_bytes_eval.py <fixture_dir> --output-dir <run_output>
+visa-app/backend/.venv/bin/python visa-eval/scripts/compare_with_golden.py --generated <run_output> --expected <fixture_dir>/expected --targets case_data,application_data
 ```
 
 ### codex exec によるローカル実行例
 
 ```bash
 # 1. blind run を作成
-python visa-eval/scripts/prepare_blind_eval_run.py \
+visa-app/backend/.venv/bin/python visa-eval/scripts/prepare_blind_eval_run.py \
   visa-eval/test_cases_from_raw/gijinkoku_a_company_round1/amit_tamang
 
 # 2. codex exec で AI 抽出を実行
@@ -64,7 +63,7 @@ codex exec \
   "$(cat visa-eval/blind_runs_from_test_cases/<run_id>/AGENT_TASK.md)"
 
 # 3. application_data を生成
-python visa-eval/scripts/build_application_data.py \
+visa-app/backend/.venv/bin/python visa-eval/scripts/build_application_data.py \
   visa-eval/blind_runs_from_test_cases/<run_id>/generated/case_data.json \
   rasens-autofill/data/mappings/rasens_offer_mapping_v2.json \
   visa-eval/blind_runs_from_test_cases/<run_id>/generated/application_data.json

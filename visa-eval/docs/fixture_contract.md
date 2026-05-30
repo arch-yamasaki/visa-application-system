@@ -22,29 +22,36 @@
 
 ### Gemini Bytes Eval
 
-通常の評価は次の3コマンドで実行します。
+通常の評価は次の2コマンドで実行します。project 内の Python を使うため、基本は `visa-app/backend/.venv/bin/python` を使います。
 
 ```bash
-python visa-eval/scripts/run_gemini_bytes_eval.py \
+visa-app/backend/.venv/bin/python visa-eval/scripts/run_gemini_bytes_eval.py \
   <fixture_dir> \
   --output-dir <run_output>
 
-python visa-eval/scripts/build_application_data.py \
-  <run_output>/case_data.json \
-  rasens-autofill/data/mappings/rasens_offer_mapping_v2.json \
-  <run_output>/application_data.json
-
-python visa-eval/scripts/compare_with_golden.py \
+visa-app/backend/.venv/bin/python visa-eval/scripts/compare_with_golden.py \
   --generated <run_output> \
-  --expected <fixture_dir>/expected
+  --expected <fixture_dir>/expected \
+  --targets case_data,application_data
 ```
 
 `<fixture_dir>` は `visa-eval/test_cases_from_raw/<case_id>/<applicant_id>` です。`<run_output>` は `generated/<run_id>` のような実行ごとの出力先を推奨します。
 
+`application_data` は保存済みgoldenを正本にせず、比較時に expected / generated の `case_data` から backend generator で生成します。
+
 `--dry-run` は必須ではありません。初回、新しいfixture、大きいPDF、送信対象確認が必要な場合だけ、Gemini APIへ送る前の確認として使います。
 
 ```bash
-python visa-eval/scripts/run_gemini_bytes_eval.py <fixture_dir> --dry-run
+visa-app/backend/.venv/bin/python visa-eval/scripts/run_gemini_bytes_eval.py <fixture_dir> --dry-run
 ```
 
 `field_metadata` は現時点では主に根拠レビュー用です。定量比較に含める場合は `compare_with_golden.py` に比較ロジックを追加します。
+
+## Golden比較のMVP方針
+
+MVPでは `expected/case_data.golden.json` を唯一の正本にします。
+
+- `application_data` は expected / generated の `case_data` から比較時に生成します。
+- `expected/application_data.golden.json` は旧成果物として残っていても、初期MVPの比較では使いません。
+- `review.golden.json` は残しますが、初期MVPでは gate にしません。
+- `field_metadata` は generated を人間が確認するだけで、初期MVPでは採点しません。

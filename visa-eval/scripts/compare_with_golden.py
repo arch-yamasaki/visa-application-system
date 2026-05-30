@@ -5,7 +5,7 @@ Usage:
     python visa-eval/scripts/compare_with_golden.py \
         --generated <generated_dir> \
         --expected <expected_dir> \
-        [--output <file>] [--json]
+        [--targets case_data,application_data] [--output <file>] [--json]
 
 If --output is omitted, the report is saved to <generated_dir>/comparison_report.md
 and a summary is printed to stdout.
@@ -19,12 +19,17 @@ import sys
 from pathlib import Path
 from typing import Any
 
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from build_application_data import build_rows  # noqa: E402
+
 # ---------------------------------------------------------------------------
 # Normalisation helpers
 # ---------------------------------------------------------------------------
 
 _EMPTY_SYNONYMS = {None, "", "unknown", "n/a", "na", "null"}
-_SKIP_KEYS_CASE_DATA = {"source_refs", "field_metadata", "schema_version"}
+_SKIP_KEYS_CASE_DATA = {"source_refs", "field_metadata", "schema_version", "case"}
 
 
 def _normalise(value: Any) -> Any:
@@ -352,6 +357,9 @@ _FILE_PAIRS = [
     ("review.json", "review.golden.json", "review", compare_review),
 ]
 
+_DEFAULT_TARGETS = ("case_data", "application_data")
+_ALL_TARGETS = {"case_data", "application_data", "review"}
+
 
 def _load_json(path: Path) -> Any:
     try:
@@ -365,9 +373,49 @@ def _load_json(path: Path) -> Any:
         sys.exit(1)
 
 
-def run_comparison(generated_dir: Path, expected_dir: Path) -> list[dict]:
+def _load_case_data_pair(generated_dir: Path, expected_dir: Path) -> tuple[dict, dict]:
+    gen_path = generated_dir / "case_data.json"
+    if not gen_path.exists():
+        gen_path = generated_dir / "case_data.golden.json"
+    exp_path = expected_dir / "case_data.golden.json"
+    if not exp_path.exists():
+        exp_path = expected_dir / "case_data.json"
+    return _load_json(gen_path), _load_json(exp_path)
+
+
+def _build_application_rows_pair(generated_dir: Path, expected_dir: Path) -> tuple[list[dict], list[dict]]:
+    generated_case_data, expected_case_data = _load_case_data_pair(generated_dir, expected_dir)
+    mapping_path = ROOT / "rasens-autofill/data/mappings/rasens_offer_mapping_v2.json"
+    mapping_data = _load_json(mapping_path)
+    return build_rows(generated_case_data, mapping_data), build_rows(expected_case_data, mapping_data)
+
+
+def _parse_targets(value: str) -> list[str]:
+    targets = [item.strip() for item in value.split(",") if item.strip()]
+    unknown = [target for target in targets if target not in _ALL_TARGETS]
+    if unknown:
+        print(f"ERROR: unknown target(s): {', '.join(unknown)}", file=sys.stderr)
+        sys.exit(1)
+    return targets
+
+
+def run_comparison(generated_dir: Path, expected_dir: Path, targets: list[str]) -> list[dict]:
     results: list[dict] = []
     for gen_name, exp_name, label, compare_fn in _FILE_PAIRS:
+        if label not in targets:
+            continue
+        if label == "application_data":
+            if not (generated_dir / "case_data.json").exists() and not (generated_dir / "case_data.golden.json").exists():
+                results.append({"file": label, "status": "MISSING", "reason": "generated case_data.json not found"})
+                continue
+            exp_case_data = expected_dir / "case_data.golden.json"
+            if not exp_case_data.exists():
+                results.append({"file": label, "status": "MISSING", "reason": "expected case_data.golden.json not found"})
+                continue
+            gen_data, exp_data = _build_application_rows_pair(generated_dir, expected_dir)
+            results.append(compare_fn(gen_data, exp_data))
+            continue
+
         gen_path = generated_dir / gen_name
         if not gen_path.exists():
             gen_path = generated_dir / exp_name
@@ -410,6 +458,57 @@ def format_markdown(results: list[dict]) -> str:
     agg_missing = 0
     agg_extra = 0
 
+    problem_rows: list[tuple[str, dict]] = []
+    for r in results:
+        if r["status"] not in ("SKIP", "MISSING"):
+            agg_match += r["match_count"]
+            agg_golden_total += r["golden_total"]
+            agg_mismatch += r["mismatch_count"]
+            agg_missing += r["only_expected_count"]
+            agg_extra += r["only_generated_count"]
+            for row in r.get("rows", []):
+                if row["status"] != ROW_MATCH:
+                    problem_rows.append((r["file"], row))
+            for path in r.get("only_generated", []):
+                major, minor = _split_path(path)
+                problem_rows.append((
+                    r["file"],
+                    {
+                        "path": path,
+                        "major": major,
+                        "minor": minor,
+                        "expected": "",
+                        "generated": path,
+                        "status": ROW_EXTRA,
+                    },
+                ))
+
+    lines.append("## 判定\n")
+    lines.append(("OK" if not problem_rows and not agg_extra else "NG") + "\n")
+    lines.append("## 問題サマリ\n")
+    lines.append("| 指標 | 件数 |")
+    lines.append("|---|---:|")
+    lines.append(f"| ✅ 一致 | {agg_match} |")
+    lines.append(f"| ❌ 値の間違い | {agg_mismatch} |")
+    lines.append(f"| ⚠️ 抽出漏れ | {agg_missing} |")
+    lines.append(f"| ➕ 過剰抽出 | {agg_extra} |")
+    lines.append("")
+
+    if problem_rows:
+        lines.append("## 確認すべき項目\n")
+        lines.append("| ファイル | 項目 | 大項目 | 小項目 | 正解データ | AI出力 | 判定 |")
+        lines.append("|---|---|---|---|---|---|---|")
+        for file_name, row in problem_rows:
+            item = _escape_md(row.get("form_field", "") or row["path"])
+            major = _escape_md(row["major"])
+            minor = _escape_md(row["minor"])
+            exp_val = _escape_md(_display(row["expected"]))
+            gen_val = _escape_md(_display(row["generated"]))
+            lines.append(f"| {file_name} | {item} | {major} | {minor} | {exp_val} | {gen_val} | {row['status']} |")
+        lines.append("")
+
+    lines.append("---\n")
+
     for r in results:
         lines.append(f"## {r['file']}\n")
 
@@ -423,12 +522,6 @@ def format_markdown(results: list[dict]) -> str:
         og_count = r["only_generated_count"]
         g_total = r["golden_total"]
 
-        agg_match += m_count
-        agg_golden_total += g_total
-        agg_mismatch += mm_count
-        agg_missing += oe_count
-        agg_extra += og_count
-
         accuracy = (m_count / g_total * 100) if g_total else 0
         lines.append(f"**Golden正答率: {accuracy:.1f}%** ({m_count}/{g_total} 項目)\n")
         lines.append(f"| 指標 | 件数 |")
@@ -436,6 +529,7 @@ def format_markdown(results: list[dict]) -> str:
         lines.append(f"| ✅ 一致 | {m_count} |")
         lines.append(f"| ❌ 値の間違い | {mm_count} |")
         lines.append(f"| ⚠️ 抽出漏れ | {oe_count} |")
+        lines.append(f"| ➕ 過剰抽出 | {og_count} |")
         lines.append("")
 
         # Full detail table for golden fields
@@ -462,8 +556,6 @@ def format_markdown(results: list[dict]) -> str:
 
         lines.append("")
 
-    # Overall summary
-    lines.append("---\n")
     lines.append("## 全体サマリ\n")
     if agg_golden_total:
         overall = agg_match / agg_golden_total * 100
@@ -476,6 +568,7 @@ def format_markdown(results: list[dict]) -> str:
     lines.append(f"| ✅ 一致 | {agg_match} |")
     lines.append(f"| ❌ 値の間違い | {agg_mismatch} |")
     lines.append(f"| ⚠️ 抽出漏れ | {agg_missing} |")
+    lines.append(f"| ➕ 過剰抽出 | {agg_extra} |")
 
     return "\n".join(lines) + "\n"
 
@@ -489,6 +582,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Compare generated output with golden files")
     parser.add_argument("--generated", required=True, type=Path, help="Directory with generated files")
     parser.add_argument("--expected", required=True, type=Path, help="Directory with golden files")
+    parser.add_argument("--targets", default=",".join(_DEFAULT_TARGETS), help="Comma-separated targets: case_data,application_data,review")
     parser.add_argument("--output", type=Path, default=None, help="Write output to file (default: generated/comparison_report.md)")
     parser.add_argument("--json", dest="as_json", action="store_true", help="Output as JSON")
     args = parser.parse_args()
@@ -500,7 +594,7 @@ def main() -> None:
         print(f"ERROR: expected directory not found: {args.expected}", file=sys.stderr)
         sys.exit(1)
 
-    results = run_comparison(args.generated, args.expected)
+    results = run_comparison(args.generated, args.expected, _parse_targets(args.targets))
 
     # Default output path
     output_path = args.output or (args.generated / "comparison_report.md")

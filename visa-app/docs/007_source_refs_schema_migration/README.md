@@ -29,6 +29,7 @@ backend の証跡情報と bbox / highlight の精度を上げるための大枠
 | 8 | bbox retry / scope retry loop | [08_retry_loop.md](08_retry_loop.md) |
 | 9 | 取次者 autofill bug | [09_intermediary_autofill_bug.md](09_intermediary_autofill_bug.md) |
 | 10 | Eval golden canonical v2 移行 | [10_eval_golden_canonical_v2_plan.md](10_eval_golden_canonical_v2_plan.md) |
+| 11 | Golden data 確認ワークフロー | [11_golden_data_review_workflow.md](11_golden_data_review_workflow.md) |
 
 ## 現状の重要ポイント
 
