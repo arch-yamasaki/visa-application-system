@@ -10,6 +10,7 @@ from google.genai import types as genai_types
 from .bbox_locator import locate_bboxes
 from .document_models import LoadedDocument, PreparedDocuments
 from .gemini import (
+    EXTRACTION_SCOPES,
     _get_client,
     extract_all_scopes,
     extract_pdf_direct,
@@ -142,17 +143,14 @@ def extract_documents(
 
     if scoped:
         client = _get_client()
+        scoped_names = [*EXTRACTION_SCOPES, "review"]
         contents_by_scope = {
-            "identity": build_gemini_contents(prepared),
-            "employer": build_gemini_contents(prepared),
-            "education": build_gemini_contents(prepared),
-            "review": build_gemini_contents(prepared),
+            scope: build_gemini_contents(prepared)
+            for scope in scoped_names
         }
         documents_by_scope = {
-            "identity": list(manifest_documents),
-            "employer": list(manifest_documents),
-            "education": list(manifest_documents),
-            "review": list(manifest_documents),
+            scope: list(manifest_documents)
+            for scope in scoped_names
         }
         logger.info(
             "Gemini scoped contents case_id=%s parts=%s documents=%s",

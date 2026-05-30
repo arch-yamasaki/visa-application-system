@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import time
+import copy
 from concurrent.futures import ThreadPoolExecutor
 
 from google import genai
@@ -31,11 +32,25 @@ except ImportError:
 
 # Mapping from logical scope names to schema registry keys
 _SCOPE_KEY_MAP = {
-    "identity": "S1",
-    "employer": "S2",
-    "education": "S3",
-    "review": "S6",
+    "applicant_identity": "applicant_identity",
+    "entry_plan": "entry_plan",
+    "immigration_history": "immigration_history",
+    "education": "education",
+    "employment_history": "employment_history",
+    "employer": "employer",
+    "employment": "employment",
+    "review": "review",
 }
+
+EXTRACTION_SCOPES = [
+    "applicant_identity",
+    "entry_plan",
+    "immigration_history",
+    "education",
+    "employment_history",
+    "employer",
+    "employment",
+]
 
 MODEL_NAME = os.environ.get("GEMINI_MODEL", "gemini-3-flash-preview")
 BBOX_MODEL_NAME = os.environ.get("GEMINI_BBOX_MODEL", "gemini-3-flash-preview")
@@ -80,27 +95,29 @@ def _thinking_config() -> types.ThinkingConfig | None:
 
 def get_bboxes_for_page(
     page_image_bytes: bytes,
-    field_quotes: dict[str, str],
+    bbox_candidates: dict[str, dict],
 ) -> dict[str, list[int] | None]:
-    """Gemini にページ画像を渡し、各text_quoteの bbox を取得。
+    """Gemini にページ画像を渡し、各candidateの bbox を取得。
 
-    Returns: {field_path: [y_min, x_min, y_max, x_max]} (0-1000正規化座標)
+    Returns: {candidate_id: [y_min, x_min, y_max, x_max]} (0-1000正規化座標)
     """
-    if not field_quotes:
+    if not bbox_candidates:
         return {}
 
     client = _get_client()
 
     prompt = (
-        "この画像内で以下のテキストの位置を特定してください。\n"
+        "この画像内で以下の候補テキストの位置を特定してください。\n"
         "各テキストについて、bounding box を [y_min, x_min, y_max, x_max] の形式で返してください。\n"
         "座標は 0-1000 の正規化座標です。\n"
         "見つからない場合は null を返してください。\n\n"
-        "テキストリスト:\n"
+        "候補リスト:\n"
     )
-    for path, quote in field_quotes.items():
-        prompt += f'- "{path}": "{quote}"\n'
-    prompt += '\nJSON形式で返してください: {"field_path": [y_min, x_min, y_max, x_max] or null}'
+    for candidate_id, candidate in bbox_candidates.items():
+        field_path = candidate.get("field_path", "")
+        quote = candidate.get("locator_text") or candidate.get("text_quote", "")
+        prompt += f'- "{candidate_id}" ({field_path}): "{quote}"\n'
+    prompt += '\nJSON形式で返してください: {"candidate_id": [y_min, x_min, y_max, x_max] or null}'
 
     image_part = types.Part.from_bytes(data=page_image_bytes, mime_type="image/png")
     response = client.models.generate_content(
@@ -338,11 +355,14 @@ def _extract_display_values(case_data: dict) -> dict:
 def _is_new_format(case_data: dict) -> bool:
     """case_data が新形式（FieldValue 構造）かどうかを判定する。
 
-    新形式: 末端が {value, source_refs} または {value, document_id, ...} の dict。
+    新形式: 末端が {value, source_ref}, {value, source_refs},
+    または {value, document_id, ...} の dict。
     旧形式: 末端がスカラ値（str, int 等）。
     """
     def check(obj):
         if isinstance(obj, dict):
+            if "value" in obj and "source_ref" in obj:
+                return True
             if "value" in obj and "source_refs" in obj:
                 return True
             # Compact source-string format from current schema.py
@@ -438,13 +458,45 @@ def _parse_source_string(source: str) -> dict | None:
     }
 
 
+def _normalize_source_ref(source_ref) -> dict | None:
+    """Normalize a single source_ref dict into field_metadata source_refs item."""
+    if not isinstance(source_ref, dict):
+        return None
+    document_id = str(source_ref.get("document_id") or "").strip()
+    text_quote = str(source_ref.get("text_quote") or "").strip()
+    if not document_id or not text_quote:
+        return None
+    try:
+        page = int(source_ref.get("page", 1))
+    except (ValueError, TypeError):
+        page = 1
+    try:
+        confidence = float(source_ref.get("confidence", 0))
+    except (ValueError, TypeError):
+        confidence = 0.0
+    return {
+        "document_id": document_id,
+        "page": page,
+        "text_quote": text_quote,
+        "confidence": confidence,
+    }
+
+
 def _unflatten_field_values(obj):
-    """Convert compact FieldValue {value, source} into standard
+    """Convert Gemini FieldValue variants into standard
     {value, source_refs: [{document_id, page, text_quote, confidence}]} format.
 
-    Also handles the older flattened format {value, document_id, page, ...}.
+    Handles:
+    - current target format {value, source_ref}
+    - legacy compact format {value, source}
+    - legacy flattened format {value, document_id, page, ...}
     """
     if isinstance(obj, dict):
+        # Structured primary source_ref format
+        if "value" in obj and "source_ref" in obj and "source_refs" not in obj:
+            ref = _normalize_source_ref(obj.get("source_ref"))
+            source_refs = [ref] if ref else []
+            return {"value": obj.get("value"), "source_refs": source_refs}
         # Compact source-string format from current schema.py
         if "value" in obj and "source" in obj and "source_refs" not in obj:
             ref = _parse_source_string(obj.get("source", ""))
@@ -539,6 +591,11 @@ def _normalize_source_refs_in_entry(meta: dict) -> None:
                 ref["page"] = int(ref["page"])
             except (ValueError, TypeError):
                 ref["page"] = 1
+        if "confidence" in ref and isinstance(ref["confidence"], str):
+            try:
+                ref["confidence"] = float(ref["confidence"])
+            except (ValueError, TypeError):
+                ref["confidence"] = 0.0
 
 
 def _log_source_coverage(field_metadata: dict, display_values: dict) -> None:
@@ -665,10 +722,11 @@ def extract_all_scopes(
 ) -> ExtractionResult:
     """Run all extraction scopes in parallel, then review, then build result.
 
-    Phase 1 scopes: identity (S1), employer (S2), education (S3) — parallel.
+    Extraction scopes run in parallel. Then review runs sequentially with
+    merged value-only data as context.
     Then review (S6) — sequential, using merged results as context.
     """
-    extraction_scopes = ["identity", "employer", "education"]
+    extraction_scopes = EXTRACTION_SCOPES
 
     def contents_for(scope: str) -> list:
         if isinstance(contents, dict):
@@ -680,8 +738,10 @@ def extract_all_scopes(
             return documents.get(scope) or documents.get("default") or []
         return documents
 
-    # Phase 1: S1, S2, S3 in parallel via ThreadPoolExecutor
-    with ThreadPoolExecutor(max_workers=3) as executor:
+    # Phase 1: extraction scopes in parallel via ThreadPoolExecutor.
+    # Keep worker count modest; each scope still receives all documents until routing exists.
+    max_workers = min(4, len(extraction_scopes))
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {
             scope: executor.submit(
                 extract_scoped, scope, client, contents_for(scope),
@@ -739,13 +799,16 @@ def extract_all_scopes(
         data = result.get("case_data", result) if isinstance(result, dict) else {}
         _deep_merge_case_data(merged_case_data, data)
 
-    # Phase 3: Review (S6) — sequential, with merged data as context
+    # Phase 3: Review (S6) — sequential, with value-only merged data as context
     review: dict = {}
     try:
         review_schema_key = _SCOPE_KEY_MAP["review"]
         review_schema = SCOPE_SCHEMAS.get(review_schema_key)
+        review_context = _extract_display_values(
+            _unflatten_field_values(copy.deepcopy(merged_case_data))
+        )
         review_prompt = build_scoped_prompt(
-            "review", case_meta, documents_for("review"), extra_context=merged_case_data,
+            "review", case_meta, documents_for("review"), extra_context=review_context,
         )
         review = _call_gemini(
             client,

@@ -61,6 +61,12 @@ BBOX_TARGET_FIELDS = [
 ]
 
 
+def _locator_text(text_quote: str) -> str:
+    """Return a short locator text for bbox detection."""
+    quote = " ".join((text_quote or "").split())
+    return quote[:80]
+
+
 def locate_bboxes(
     field_metadata: dict | list,
     pdf_bytes_map: dict[str, bytes],
@@ -77,12 +83,14 @@ def locate_bboxes(
     field_metadata = _map_field_metadata(field_metadata)
 
     # bbox対象フィールドのsource_refsを (document_id, page) でグループ化
-    page_groups: dict[tuple[str, int], dict[str, str]] = {}
+    page_groups: dict[tuple[str, int], dict[str, dict]] = {}
+    candidate_map: dict[str, dict] = {}
+    candidate_count = 0
     for field_path in BBOX_TARGET_FIELDS:
         meta = field_metadata.get(field_path)
         if not meta:
             continue
-        for ref in meta.get("source_refs", []):
+        for ref_index, ref in enumerate(meta.get("source_refs", [])):
             doc_id = ref.get("document_id", "")
             page_num = ref.get("page", 1)
             text_quote = ref.get("text_quote", "")
@@ -94,7 +102,18 @@ def locate_bboxes(
             key = (doc_id, page_num)
             if key not in page_groups:
                 page_groups[key] = {}
-            page_groups[key][field_path] = text_quote
+            candidate_id = f"candidate_{candidate_count:04d}"
+            candidate_count += 1
+            candidate = {
+                "field_path": field_path,
+                "ref_index": ref_index,
+                "document_id": doc_id,
+                "page": page_num,
+                "text_quote": text_quote,
+                "locator_text": _locator_text(text_quote),
+            }
+            page_groups[key][candidate_id] = candidate
+            candidate_map[candidate_id] = candidate
 
     if not page_groups:
         logger.info("bbox_locator_metric event=no_candidates fields=%d", len(field_metadata))
@@ -105,8 +124,9 @@ def locate_bboxes(
     render_workers = int(os.environ.get("BBOX_RENDER_WORKERS", "8"))
     started_at = time.monotonic()
     logger.info(
-        "bbox_locator_metric event=started page_groups=%d render_workers=%d bbox_workers=%s",
+        "bbox_locator_metric event=started page_groups=%d candidates=%d render_workers=%d bbox_workers=%s",
         len(page_groups),
+        len(candidate_map),
         render_workers,
         os.environ.get("BBOX_MAX_WORKERS", "8"),
     )
@@ -152,9 +172,9 @@ def locate_bboxes(
 
     def _fetch_bboxes(key: tuple[str, int]):
         doc_id, page_num = key
-        field_quotes = page_groups[key]
+        candidates = page_groups[key]
         page_image_bytes = page_images[key]
-        bboxes = get_bboxes_for_page(page_image_bytes, field_quotes)
+        bboxes = get_bboxes_for_page(page_image_bytes, candidates)
         return key, bboxes
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -172,24 +192,31 @@ def locate_bboxes(
                 continue
 
             # 結果を field_metadata に反映
-            for field_path, bbox_coords in bboxes.items():
-                if bbox_coords is None or field_path not in field_metadata:
+            for candidate_id, bbox_coords in bboxes.items():
+                candidate = candidate_map.get(candidate_id)
+                if bbox_coords is None or not candidate:
                     continue
                 if not isinstance(bbox_coords, list) or len(bbox_coords) != 4:
                     continue
-                for ref in field_metadata[field_path].get("source_refs", []):
-                    if ref.get("document_id") == doc_id and ref.get("page", 1) == page_num:
-                        ref["bbox"] = {
-                            "y_min": bbox_coords[0],
-                            "x_min": bbox_coords[1],
-                            "y_max": bbox_coords[2],
-                            "x_max": bbox_coords[3],
-                        }
-                        applied += 1
+                if candidate.get("document_id") != doc_id or candidate.get("page") != page_num:
+                    continue
+                field_path = candidate["field_path"]
+                ref_index = candidate["ref_index"]
+                refs = field_metadata.get(field_path, {}).get("source_refs", [])
+                if ref_index >= len(refs):
+                    continue
+                refs[ref_index]["bbox"] = {
+                    "y_min": bbox_coords[0],
+                    "x_min": bbox_coords[1],
+                    "y_max": bbox_coords[2],
+                    "x_max": bbox_coords[3],
+                }
+                applied += 1
 
     logger.info(
-        "bbox_locator_metric event=completed page_groups=%d rendered_pages=%d applied_refs=%d elapsed_ms=%d",
+        "bbox_locator_metric event=completed page_groups=%d candidates=%d rendered_pages=%d applied_refs=%d elapsed_ms=%d",
         len(page_groups),
+        len(candidate_map),
         len(page_images),
         applied,
         round((time.monotonic() - started_at) * 1000),

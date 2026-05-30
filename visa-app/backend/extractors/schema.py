@@ -4,14 +4,9 @@ Defines EXTRACTION_SCHEMA — a JSON Schema dict using Gemini's type
 conventions (uppercase type names: STRING, OBJECT, ARRAY, INTEGER, NUMBER,
 BOOLEAN).
 
-Design: every data field is wrapped in FieldValue = {value, source} where
-source is a compact string encoding "document_id|page|text_quote|confidence".
-This keeps the schema small enough to avoid Gemini's "too many states" error.
-
-The original design used {value, source_refs: [{document_id, page,
-text_quote, confidence}]} but that produced too many schema constraints.
-Downstream code in gemini.py parses the source string back into structured
-source_refs.
+Design: every data field is wrapped in FieldValue = {value, source_ref}.
+source_ref is a single primary evidence object. Downstream code in gemini.py
+normalizes source_ref into field_metadata.source_refs[] for UI compatibility.
 
 The top-level review section keeps its own shape (not FieldValue-wrapped).
 """
@@ -20,13 +15,24 @@ The top-level review section keeps its own shape (not FieldValue-wrapped).
 # FieldValue — the common wrapper for every extracted field
 # ---------------------------------------------------------------------------
 
+SOURCE_REF_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "document_id": {"type": "STRING"},
+        "page": {"type": "INTEGER"},
+        "text_quote": {"type": "STRING"},
+        "confidence": {"type": "NUMBER"},
+    },
+    "required": ["document_id", "page", "text_quote", "confidence"],
+}
+
 FIELD_VALUE_SCHEMA = {
     "type": "OBJECT",
     "properties": {
         "value": {"type": "STRING"},
-        "source": {"type": "STRING"},
+        "source_ref": SOURCE_REF_SCHEMA,
     },
-    "required": ["value", "source"],
+    "required": ["value", "source_ref"],
 }
 
 
@@ -312,7 +318,131 @@ SCOPE6_REVIEW_SCHEMA = {
 # Registry: all scoped schemas
 # ---------------------------------------------------------------------------
 
+SCOPE_APPLICANT_IDENTITY_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "applicant": {
+            "type": "OBJECT",
+            "properties": {
+                "nationality_region": _fv(),
+                "birth_date": _fv(),
+                "name_roman": _fv(),
+                "sex": _fv(),
+                "birth_place": _fv(),
+                "marital_status": _fv(),
+                "occupation": _fv(),
+                "home_country_address": _fv(),
+                "japan_contact": _S1_JAPAN_CONTACT,
+                "passport": _S1_PASSPORT,
+            },
+            "required": [
+                "nationality_region",
+                "birth_date",
+                "name_roman",
+                "sex",
+                "birth_place",
+                "marital_status",
+                "occupation",
+                "home_country_address",
+                "japan_contact",
+                "passport",
+            ],
+        },
+    },
+    "required": ["applicant"],
+}
+
+SCOPE_ENTRY_PLAN_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "entry_plan": _S1_ENTRY_PLAN,
+        "applicant": {
+            "type": "OBJECT",
+            "properties": {
+                "family": _S1_FAMILY,
+            },
+            "required": ["family"],
+        },
+    },
+    "required": ["entry_plan", "applicant"],
+}
+
+SCOPE_IMMIGRATION_HISTORY_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "applicant": {
+            "type": "OBJECT",
+            "properties": {
+                "immigration_history": _S1_IMMIGRATION_HISTORY,
+            },
+            "required": ["immigration_history"],
+        },
+    },
+    "required": ["applicant"],
+}
+
+SCOPE_EDUCATION_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "applicant": {
+            "type": "OBJECT",
+            "properties": {
+                "education": {
+                    "type": "ARRAY",
+                    "items": _S3_EDUCATION,
+                },
+                "qualifications": _S3_QUALIFICATIONS,
+            },
+            "required": ["education", "qualifications"],
+        },
+    },
+    "required": ["applicant"],
+}
+
+SCOPE_EMPLOYMENT_HISTORY_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "applicant": {
+            "type": "OBJECT",
+            "properties": {
+                "has_employment_history": _fv(),
+                "employment_history": {
+                    "type": "ARRAY",
+                    "items": _S3_EMPLOYMENT_HISTORY,
+                },
+            },
+            "required": ["has_employment_history", "employment_history"],
+        },
+    },
+    "required": ["applicant"],
+}
+
+SCOPE_EMPLOYER_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "employer": _S2_EMPLOYER,
+    },
+    "required": ["employer"],
+}
+
+SCOPE_EMPLOYMENT_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "employment": _S2_EMPLOYMENT,
+    },
+    "required": ["employment"],
+}
+
 SCOPE_SCHEMAS: dict[str, dict] = {
+    "applicant_identity": SCOPE_APPLICANT_IDENTITY_SCHEMA,
+    "entry_plan": SCOPE_ENTRY_PLAN_SCHEMA,
+    "immigration_history": SCOPE_IMMIGRATION_HISTORY_SCHEMA,
+    "education": SCOPE_EDUCATION_SCHEMA,
+    "employment_history": SCOPE_EMPLOYMENT_HISTORY_SCHEMA,
+    "employer": SCOPE_EMPLOYER_SCHEMA,
+    "employment": SCOPE_EMPLOYMENT_SCHEMA,
+    "review": SCOPE6_REVIEW_SCHEMA,
+    # Legacy aliases kept while scoped extraction tests and docs migrate.
     "S1": SCOPE1_IDENTITY_SCHEMA,
     "S2": SCOPE2_EMPLOYER_SCHEMA,
     "S3": SCOPE3_EDUCATION_SCHEMA,

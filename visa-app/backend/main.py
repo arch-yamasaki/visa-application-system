@@ -1379,40 +1379,40 @@ def _harvest_extraction_results(
 # Frontend
 # ---------------------------------------------------------------------------
 # Serve Vite build assets (JS, CSS, images, etc.)
-app.mount("/assets", StaticFiles(directory="static/assets"), name="static-assets")
+STATIC_DIR = Path("static")
+if (STATIC_DIR / "assets").is_dir() and (STATIC_DIR / "index.html").is_file():
+    app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="static-assets")
 
+    @app.get("/")
+    def serve_frontend():
+        return FileResponse(STATIC_DIR / "index.html")
 
-@app.get("/")
-def serve_frontend():
-    return FileResponse("static/index.html")
+    @app.get("/{full_path:path}")
+    def serve_spa(full_path: str):
+        """SPA catch-all: return index.html for any unmatched frontend route.
 
+        Requests starting with "api/" should never reach here (they are rewritten
+        by StripApiPrefixMiddleware).  If they do, return 404 instead of HTML to
+        avoid confusing API clients with an HTML response.
 
-@app.get("/{full_path:path}")
-def serve_spa(full_path: str):
-    """SPA catch-all: return index.html for any unmatched frontend route.
+        Static files (e.g. .wasm, .js placed at root by pdfjs-dist) that exist
+        in the static/ directory are served directly with the correct MIME type.
+        """
+        if full_path.startswith("api/") or full_path == "api":
+            raise HTTPException(status_code=404, detail="Not found")
 
-    Requests starting with "api/" should never reach here (they are rewritten
-    by StripApiPrefixMiddleware).  If they do, return 404 instead of HTML to
-    avoid confusing API clients with an HTML response.
+        # Serve root-level static files such as pdfjs wasm assets.
+        static_path = STATIC_DIR / full_path
+        if static_path.is_file() and not full_path.startswith("."):
+            mime_overrides = {
+                ".wasm": "application/wasm",
+                ".js": "application/javascript",
+                ".mjs": "application/javascript",
+                ".css": "text/css",
+                ".svg": "image/svg+xml",
+            }
+            ext = Path(full_path).suffix.lower()
+            media_type = mime_overrides.get(ext) or mimetypes.guess_type(str(static_path))[0]
+            return FileResponse(str(static_path), media_type=media_type)
 
-    Static files (e.g. .wasm, .js placed at root by pdfjs-dist) that exist
-    in the static/ directory are served directly with the correct MIME type.
-    """
-    if full_path.startswith("api/") or full_path == "api":
-        raise HTTPException(status_code=404, detail="Not found")
-
-    # Serve root-level static files (e.g. jbig2.wasm, openjpeg.wasm) if they exist
-    static_path = Path("static") / full_path
-    if static_path.is_file() and not full_path.startswith("."):
-        mime_overrides = {
-            ".wasm": "application/wasm",
-            ".js": "application/javascript",
-            ".mjs": "application/javascript",
-            ".css": "text/css",
-            ".svg": "image/svg+xml",
-        }
-        ext = Path(full_path).suffix.lower()
-        media_type = mime_overrides.get(ext) or mimetypes.guess_type(str(static_path))[0]
-        return FileResponse(str(static_path), media_type=media_type)
-
-    return FileResponse("static/index.html")
+        return FileResponse(STATIC_DIR / "index.html")

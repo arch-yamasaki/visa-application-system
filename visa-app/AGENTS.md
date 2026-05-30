@@ -15,7 +15,7 @@
 cd frontend && npm run dev        # localhost:5173
 
 # ターミナル2: バックエンド
-cd backend && uvicorn main:app --reload --port 8080
+cd backend && .venv/bin/python -m uvicorn main:app --reload --port 8080
 ```
 
 frontend の Vite proxy が `/api/*` を `localhost:8080` に転送する。
@@ -43,6 +43,8 @@ cd backend
 ```
 
 `python3 -m pytest` や bare `pytest` は使わない。`python3` は環境によって Homebrew Python を拾い、プロジェクト側に入っている `pytest` などの依存を見失うことがある。
+
+実画面QAは Chrome DevTools MCP を使う。レビュー画面、PDF bbox、Network/Console の確認手順は `../docs/shared/chrome_devtools_mcp_qa.md` を参照。
 
 ## 本番環境でのAPIアクセス
 

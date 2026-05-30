@@ -65,5 +65,6 @@
 - `rasens-autofill/data/` は設計資産としてgit管理する。ただし一時CSV、PDF/画像キャプチャ、実案件由来データは入れない。
 - まずは技人国で型を固め、周辺業務としてシャローム入力、社会保険・雇用保険、助成金に広げる。
 - QA検証スクリーンショットやテスト入力ファイルは `qa/` 配下に集約する（`qa/screenshots/`, `qa/test-files/`）。git管理外。
-- Playwright E2Eテストのコードは `visa-app/frontend/e2e/` に配置し、テスト成果物（test-results/, playwright-report/, .playwright-mcp/）はコミットしない。
 - QA手順は `visa-app/QA_MANUAL.md` を参照。テスト用ファイルは `qa/test-files/` に配置（git管理外）。
+- `visa-app/backend` の Python 実行は `.venv/bin/python` を使う。作成・更新手順は `visa-app/AGENTS.md` を参照。
+- Chrome DevTools MCP での実画面QA手順は `docs/shared/chrome_devtools_mcp_qa.md` を参照。

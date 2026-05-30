@@ -8,13 +8,15 @@ from extractors.gemini import (
     _call_gemini,
     _extract_field_metadata,
     _extract_display_values,
+    _unflatten_field_values,
     _map_field_metadata,
+    EXTRACTION_SCOPES,
     extract_all_scopes,
     extract_pdf_direct,
     extract_text_only,
     extract_with_images,
 )
-from extractors.prompt_template import build_extraction_prompt
+from extractors.prompt_template import build_extraction_prompt, build_scoped_prompt
 from extractors.types import (
     BoundingBox,
     ExtractionResult,
@@ -50,25 +52,21 @@ _GEMINI_RESPONSE_NEW = {
         "applicant": {
             "name_roman": {
                 "value": "TANAKA TARO",
-                "source_refs": [
-                    {
-                        "document_id": "doc_p",
-                        "page": 1,
-                        "text_quote": "TANAKA TARO",
-                        "confidence": 0.95,
-                    }
-                ],
+                "source_ref": {
+                    "document_id": "doc_p",
+                    "page": 1,
+                    "text_quote": "TANAKA TARO",
+                    "confidence": 0.95,
+                },
             },
             "nationality_region": {
                 "value": "JP",
-                "source_refs": [
-                    {
-                        "document_id": "doc_p",
-                        "page": 1,
-                        "text_quote": "JP",
-                        "confidence": 0.9,
-                    }
-                ],
+                "source_ref": {
+                    "document_id": "doc_p",
+                    "page": 1,
+                    "text_quote": "JP",
+                    "confidence": 0.9,
+                },
             },
         },
     },
@@ -162,6 +160,16 @@ class TestBuildPrompt:
     def test_no_documents_shows_placeholder(self):
         prompt = build_extraction_prompt(_CASE_META, [])
         assert "(なし)" in prompt
+
+    def test_uses_source_ref_dict_contract(self):
+        prompt = build_extraction_prompt(_CASE_META, _DOCUMENTS)
+        assert "source_ref" in prompt
+        assert "document_id|page|text_quote|confidence" not in prompt
+
+    def test_scoped_prompt_accepts_new_scope(self):
+        prompt = build_scoped_prompt("applicant_identity", _CASE_META, _DOCUMENTS)
+        assert "source_ref" in prompt
+        assert "applicant_identity" not in prompt
 
 
 # ---------- _build_ocr_context ------------------------------------------
@@ -363,11 +371,13 @@ class TestExtractAllScopes:
     @patch("extractors.gemini.extract_scoped")
     def test_merges_scope_results_deeply(self, mock_extract_scoped, mock_call_gemini):
         def scoped_result(scope, *_args, **_kwargs):
-            if scope == "identity":
+            if scope == "applicant_identity":
                 return {"case_data": {"applicant": {"name_roman": "TANAKA TARO"}}}
             if scope == "education":
                 return {"case_data": {"applicant": {"education": [{"school_name": "ABC University"}]}}}
-            return {"case_data": {"employer": {"name": "Example Inc."}}}
+            if scope == "employer":
+                return {"case_data": {"employer": {"name": "Example Inc."}}}
+            return {"case_data": {}}
 
         mock_extract_scoped.side_effect = scoped_result
         mock_call_gemini.return_value = {"missing_items": []}
@@ -382,11 +392,13 @@ class TestExtractAllScopes:
     @patch("extractors.gemini.extract_scoped")
     def test_partial_scope_failure_returns_reviewable_result(self, mock_extract_scoped, mock_call_gemini):
         def scoped_result(scope, *_args, **_kwargs):
-            if scope == "identity":
+            if scope == "applicant_identity":
                 raise TimeoutError("read operation timed out")
             if scope == "employer":
                 return {"case_data": {"employer": {"name": "Example Inc."}}}
-            return {"case_data": {"applicant": {"education": [{"school_name": "ABC University"}]}}}
+            if scope == "education":
+                return {"case_data": {"applicant": {"education": [{"school_name": "ABC University"}]}}}
+            return {"case_data": {}}
 
         mock_extract_scoped.side_effect = scoped_result
         mock_call_gemini.return_value = {"missing_items": [], "validation_errors": [], "findings": []}
@@ -395,7 +407,18 @@ class TestExtractAllScopes:
 
         assert result.display_case_data["employer"]["name"] == "Example Inc."
         assert result.display_case_data["applicant"]["education"][0]["school_name"] == "ABC University"
-        assert any("identity" in error for error in result.review["validation_errors"])
+        assert any("applicant_identity" in error for error in result.review["validation_errors"])
+
+    @patch("extractors.gemini._call_gemini")
+    @patch("extractors.gemini.extract_scoped")
+    def test_runs_new_extraction_scopes(self, mock_extract_scoped, mock_call_gemini):
+        mock_extract_scoped.return_value = {"case_data": {}}
+        mock_call_gemini.return_value = {"missing_items": [], "validation_errors": [], "findings": []}
+
+        extract_all_scopes(MagicMock(), [], _CASE_META, _DOCUMENTS)
+
+        called_scopes = [call.args[0] for call in mock_extract_scoped.call_args_list]
+        assert set(called_scopes) == set(EXTRACTION_SCOPES)
 
     @patch("extractors.gemini.extract_scoped")
     def test_raises_when_all_required_scopes_fail(self, mock_extract_scoped):
@@ -459,6 +482,49 @@ class TestExtractFieldMetadata:
         }
         result = _extract_field_metadata(case_data)
         assert result["applicant.name"]["confidence"] is None
+
+
+class TestUnflattenFieldValues:
+    def test_accepts_source_ref_dict(self):
+        raw = {
+            "value": "TANAKA TARO",
+            "source_ref": {
+                "document_id": "doc_p",
+                "page": "1",
+                "text_quote": "TANAKA TARO",
+                "confidence": "0.95",
+            },
+        }
+        result = _unflatten_field_values(raw)
+        assert result == {
+            "value": "TANAKA TARO",
+            "source_refs": [
+                {
+                    "document_id": "doc_p",
+                    "page": 1,
+                    "text_quote": "TANAKA TARO",
+                    "confidence": 0.95,
+                }
+            ],
+        }
+
+    def test_drops_empty_source_ref(self):
+        raw = {
+            "value": "",
+            "source_ref": {
+                "document_id": "",
+                "page": 0,
+                "text_quote": "",
+                "confidence": 0,
+            },
+        }
+        result = _unflatten_field_values(raw)
+        assert result == {"value": "", "source_refs": []}
+
+    def test_keeps_legacy_source_string(self):
+        raw = {"value": "TANAKA TARO", "source": "doc_p|1|TANAKA TARO|0.95"}
+        result = _unflatten_field_values(raw)
+        assert result["source_refs"][0]["document_id"] == "doc_p"
 
 
 # ---------- _extract_display_values ------------------------------------

@@ -3,7 +3,14 @@
 ## 起動
 
 ターミナル1: `cd visa-app/frontend && npm run dev`
-ターミナル2: `cd visa-app/backend && uvicorn main:app --reload --port 8080`
+ターミナル2: `cd visa-app/backend && .venv/bin/python -m uvicorn main:app --reload --port 8080`
+
+backend のPythonコマンドは project-local venv を使う。
+
+```bash
+cd visa-app/backend
+.venv/bin/python -m pytest -q
+```
 
 ## テスト用ファイル
 
@@ -27,10 +34,12 @@
 ## 再抽出（API）
 
 ```bash
-curl -X POST http://localhost:8080/cases/{case_id}/extract
+curl -N -X POST http://localhost:8080/cases/{case_id}/extract-stream \
+  -H 'Content-Type: application/json' \
+  -d '{"backend":"gemini","pattern":"auto","scoped":true}'
 ```
 
-ボディ不要（デフォルト: gemini + auto）。既存の case_data/field_metadata/review は全上書き。
+`extract-stream` はSSEで進捗を返す。抽出結果は既存の `case_data` に merge され、`case.*`, `proxy`, `receiving_method` など抽出対象外の保存データを残す。
 
 ## 確認ポイント
 
@@ -42,11 +51,10 @@ curl -X POST http://localhost:8080/cases/{case_id}/extract
 - [ ] 入国目的: `entry_plan.purpose_of_entry` が表示される
 - [ ] 証跡: source_refs がある場合、ドキュメントビューアに証跡表示
 - [ ] PDFハイライト: bbox 座標でのハイライト表示
+- [ ] source_ref: Gemini raw response は `{ value, source_ref }`、保存後は `field_metadata.*.source_refs[]`
+- [ ] source_ref: `case_data` に `source`, `source_ref`, `source_refs` が混入しない
+- [ ] scope: `applicant_identity`, `entry_plan`, `immigration_history`, `education`, `employment_history`, `employer`, `employment`, `review` がエラーなく完了
 - [ ] application-data: `/cases/{case_id}/application-data` が `rows`, `fillable`, `warnings` を返す
-- [ ] Chrome拡張: `/application-data` の rows を入力し、拡張内で mapping / transform / visible_when を処理しない
+- [ ] Chrome DevTools MCP: 実画面でレビュー画面、PDF bbox、Network/Consoleを確認する
 
-## Playwright E2E
-
-```bash
-cd visa-app/frontend && npx playwright test
-```
+Chrome DevTools MCP の共通手順は `../docs/shared/chrome_devtools_mcp_qa.md` を参照。
