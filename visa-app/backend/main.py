@@ -140,6 +140,7 @@ def _case_summary(data: dict) -> dict:
     applicant = case_data.get("applicant") if isinstance(case_data, dict) else {}
     employer = case_data.get("employer") if isinstance(case_data, dict) else {}
     case_meta = case_data.get("case") if isinstance(case_data, dict) else {}
+    case_meta = case_meta or {}
     applicant_name = (
         data.get("applicant_name_preview")
         or (applicant or {}).get("name_roman")
