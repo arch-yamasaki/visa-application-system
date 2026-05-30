@@ -6,7 +6,6 @@
   "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": [
     "https://www.rasens-immi.moj.go.jp/*",
-    "http://localhost:8080/*",
     "https://visa-app-913363513517.asia-northeast1.run.app/*"
   ],
   "action": {
@@ -18,12 +17,6 @@
       "matches": ["https://www.rasens-immi.moj.go.jp/*"],
       "js": ["content.js"],
       "run_at": "document_idle"
-    }
-  ],
-  "web_accessible_resources": [
-    {
-      "resources": ["application_data.json"],
-      "matches": ["https://www.rasens-immi.moj.go.jp/*"]
     }
   ]
 }

@@ -74,12 +74,13 @@ function chooseSelect(select, rawValue) {
   if (!select?.options) return false;
   const wanted = normalize(rawValue);
   const options = Array.from(select.options);
-  const exact = options.find((option) => normalize(option.textContent) === wanted || normalize(option.value) === wanted);
+  const textExact = options.find((option) => normalize(option.textContent) === wanted);
   const partial = options.find((option) => {
     const text = normalize(option.textContent);
     return text.includes(wanted) || wanted.includes(text);
   });
-  const option = exact || partial;
+  const valueExact = options.find((option) => normalize(option.value) === wanted);
+  const option = textExact || partial || valueExact;
   if (!option) return false;
   select.value = option.value;
   eventInput(select);
@@ -303,21 +304,6 @@ function resultSummary(results) {
   return `入力完了: ${filled}件入力、${skipped}件スキップ、${missed.length}件未検出。詳細はDevTools consoleを確認してください。`;
 }
 
-function previewRows(rows) {
-  const results = rows.map((row) => {
-    const element = targetForRow(row);
-    return {
-      label: row.label,
-      value: maskedValue(row.fill_value),
-      target: element ? `${element.tagName.toLowerCase()}#${element.id || ""}[name="${element.name || ""}"]` : "",
-      status: element ? "found" : "missed"
-    };
-  });
-  console.table(results);
-  const found = results.filter((row) => row.status === "found").length;
-  return `入力対象確認: ${found}/${results.length}件見つかりました。詳細はDevTools consoleを確認してください。`;
-}
-
 function fillRows(rows) {
   const results = rows.map((row) => {
     try {
@@ -364,7 +350,7 @@ async function fillRowsProgressively(rows) {
   return resultSummary(results);
 }
 
-var VISA_AUTOFILL_CONTENT_VERSION = "0.2.0";
+var VISA_AUTOFILL_CONTENT_VERSION = "0.3.0";
 
 if (window.__visaAutofillContentHandler) {
   chrome.runtime.onMessage.removeListener(window.__visaAutofillContentHandler);
@@ -375,10 +361,6 @@ window.__visaAutofillContentVersion = VISA_AUTOFILL_CONTENT_VERSION;
 window.__visaAutofillContentHandler = (message, _sender, sendResponse) => {
   if (!isRasensOfferFormPage()) {
     sendResponse({ message: "在留申請オンラインシステムの申請フォーム画面で実行してください" });
-    return true;
-  }
-  if (message.type === "VISA_AUTOFILL_PREVIEW") {
-    sendResponse({ message: previewRows(message.rows || []) });
     return true;
   }
   if (message.type === "VISA_AUTOFILL_FILL") {

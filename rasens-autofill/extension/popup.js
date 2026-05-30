@@ -2,14 +2,10 @@ const elements = {
   statusBox: document.querySelector("#status"),
   caseSelect: document.querySelector("#caseSelect"),
   caseListStatus: document.querySelector("#caseListStatus"),
-  caseIdInput: document.querySelector("#caseId"),
   refreshCases: document.querySelector("#refreshCases"),
-  loadBundled: document.querySelector("#loadBundled"),
   loadFromApi: document.querySelector("#loadFromApi"),
   fill: document.querySelector("#fill"),
   fillProgressive: document.querySelector("#fillProgressive"),
-  preview: document.querySelector("#preview"),
-  setApiUrl: document.querySelector("#setApiUrl"),
   workflowWarning: document.querySelector("#workflowWarning"),
   workflowReady: document.querySelector("#workflowReady"),
   workflowState: document.querySelector("#wfState"),
@@ -107,8 +103,8 @@ async function sendToTab(type) {
     setStatus("先にデータを読み込んでください");
     return;
   }
-  if (type !== "VISA_AUTOFILL_PREVIEW" && !visaFillable) {
-    setStatus("このケースはまだ入力可能状態ではありません。入力対象の確認だけ実行できます。");
+  if (!visaFillable) {
+    setStatus("このケースはまだ入力可能状態ではありません。");
     return;
   }
 
@@ -185,9 +181,6 @@ function renderCaseOptions(cases, selectedCaseId = "", placeholderText = "案件
   elements.caseSelect.value = cases.some((caseSummary) => caseSummary.case_id === selectedCaseId)
     ? selectedCaseId
     : "";
-  if (elements.caseSelect.value) {
-    elements.caseIdInput.value = elements.caseSelect.value;
-  }
   elements.caseSelect.disabled = cases.length === 0;
 }
 
@@ -213,12 +206,12 @@ async function loadCases() {
     if (availableCases.length) {
       setCaseListStatus(`${availableCases.length}件の案件を取得しました`);
     } else {
-      setCaseListStatus("案件がありません。必要なら case_id を手入力してください");
+      setCaseListStatus("案件がありません");
     }
   } catch (error) {
     availableCases = [];
     renderCaseOptions([], "", "案件一覧を取得できませんでした");
-    setCaseListStatus(`案件一覧の取得に失敗しました。case_id を手入力してください: ${error.message}`);
+    setCaseListStatus(`案件一覧の取得に失敗しました: ${error.message}`);
   } finally {
     elements.refreshCases.disabled = false;
     elements.caseSelect.disabled = availableCases.length === 0;
@@ -230,12 +223,6 @@ function getRequestedCase() {
   if (selectedCaseId) {
     return { caseId: selectedCaseId, caseSummary: getCaseSummary(selectedCaseId) };
   }
-
-  const manualCaseId = elements.caseIdInput.value.trim();
-  if (manualCaseId) {
-    return { caseId: manualCaseId, caseSummary: null };
-  }
-
   return null;
 }
 
@@ -247,49 +234,22 @@ function getCaseSourceLabel(caseId, caseSummary) {
   return `visa-app: ${caseId}`;
 }
 
-elements.loadBundled.addEventListener("click", async () => {
-  const response = await fetch(chrome.runtime.getURL("application_data.json"));
-  await saveRows(await response.json(), "同梱JSON");
-});
-
 elements.fill.addEventListener("click", () => sendToTab("VISA_AUTOFILL_FILL"));
 elements.fillProgressive.addEventListener("click", () => sendToTab("VISA_AUTOFILL_FILL_PROGRESSIVE"));
-elements.preview.addEventListener("click", () => sendToTab("VISA_AUTOFILL_PREVIEW"));
 
 elements.caseSelect.addEventListener("change", async () => {
   const selectedCaseId = elements.caseSelect.value.trim();
-  if (selectedCaseId) {
-    elements.caseIdInput.value = selectedCaseId;
-  }
   await chrome.storage.local.set({ visaSelectedCaseId: selectedCaseId });
-});
-
-elements.caseIdInput.addEventListener("input", async () => {
-  if (!elements.caseIdInput.value.trim() || !elements.caseSelect.value) {
-    return;
-  }
-  elements.caseSelect.value = "";
-  await chrome.storage.local.set({ visaSelectedCaseId: "" });
 });
 
 elements.refreshCases.addEventListener("click", () => {
   loadCases();
 });
 
-elements.setApiUrl.addEventListener("click", (event) => {
-  event.preventDefault();
-  const url = prompt("visa-app APIのURLを入力してください:", window.apiClient.defaultApiUrl);
-  if (url?.trim()) {
-    chrome.storage.local.set({ visaAppApiUrl: url.trim() });
-    setCaseListStatus("API URL を保存しました。必要なら案件一覧を更新してください");
-    setStatus("API URL を保存しました");
-  }
-});
-
 elements.loadFromApi.addEventListener("click", async () => {
   const requestedCase = getRequestedCase();
   if (!requestedCase) {
-    setStatus("案件一覧から選択するか case_id を入力してください");
+    setStatus("案件一覧から選択してください");
     return;
   }
 

@@ -10,7 +10,6 @@
     <main>
       <h1>Visa Autofill</h1>
       <section id="firestoreSection">
-        <h2>visa-app から読込</h2>
         <div class="fieldGroup">
           <label for="caseSelect">案件一覧</label>
           <div class="inlineControls">
@@ -21,10 +20,6 @@
           </div>
           <p id="caseListStatus" class="subtleStatus" aria-live="polite">起動時に案件一覧を取得します</p>
         </div>
-        <div class="fieldGroup">
-          <label for="caseId">case_id 手入力</label>
-          <input id="caseId" type="text" placeholder="案件一覧が使えない場合のみ入力">
-        </div>
         <div id="workflowWarning" class="warning" hidden>
           ⚠ このケースは入力可能状態ではありません（状態: <span id="wfState"></span>）
         </div>
@@ -32,13 +27,13 @@
           ✓ 抽出済み: 入力できます
         </div>
         <button id="loadFromApi" type="button">visa-appから読込</button>
-        <a href="#" id="setApiUrl">接続先設定</a>
       </section>
       <hr>
-      <button id="loadBundled" type="button">同梱データを使う</button>
       <button id="fill" type="button">一括入力</button>
-      <button id="fillProgressive" type="button">ゆっくり入力</button>
-      <button id="preview" type="button">入力対象を確認</button>
+      <details>
+        <summary>オプション</summary>
+        <button id="fillProgressive" type="button">ゆっくり入力</button>
+      </details>
       <pre id="status" aria-live="polite">データ未読込</pre>
     </main>
     <script src="api_client.js"></script>

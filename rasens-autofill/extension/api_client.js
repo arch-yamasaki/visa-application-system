@@ -6,27 +6,17 @@
 const DEFAULT_API_URL = "https://visa-app-913363513517.asia-northeast1.run.app";
 
 /**
- * Retrieve visa-app API URL from chrome.storage.local.
- * @returns {Promise<string>}
- */
-async function getApiUrl() {
-  const { visaAppApiUrl } = await chrome.storage.local.get(["visaAppApiUrl"]);
-  return visaAppApiUrl?.trim() || DEFAULT_API_URL;
-}
-
-/**
  * Fetch a case's application-data rows from visa-app API.
  * @param {string} caseId
  * @returns {Promise<object>} application-data response
  */
 async function getApplicationData(caseId) {
-  const apiUrl = await getApiUrl();
-  const url = `${apiUrl}/cases/${encodeURIComponent(caseId)}/application-data`;
+  const url = `${DEFAULT_API_URL}/cases/${encodeURIComponent(caseId)}/application-data`;
 
   const response = await fetch(url);
 
   if (response.status === 404) {
-    throw new Error(`ケース「${caseId}」が見つかりません。case_id を確認してください。`);
+    throw new Error(`ケース「${caseId}」が見つかりません。案件一覧を更新してください。`);
   }
   if (response.status === 401 || response.status === 403) {
     throw new Error("認証エラー: アクセス権限がありません。");
@@ -47,8 +37,7 @@ async function getApplicationData(caseId) {
  * @returns {Promise<Array>} Array of case summary objects
  */
 async function listCases() {
-  const apiUrl = await getApiUrl();
-  const url = `${apiUrl}/cases?limit=20`;
+  const url = `${DEFAULT_API_URL}/cases?limit=100`;
 
   const response = await fetch(url);
 
@@ -60,4 +49,4 @@ async function listCases() {
 }
 
 // Export for use by popup.js
-window.apiClient = { getApplicationData, listCases, defaultApiUrl: DEFAULT_API_URL };
+window.apiClient = { getApplicationData, listCases };
