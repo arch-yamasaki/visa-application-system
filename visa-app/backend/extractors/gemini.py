@@ -315,7 +315,7 @@ def _call_gemini(
 # ---------------------------------------------------------------------------
 
 def _extract_field_metadata(case_data: dict) -> dict:
-    """新形式のcase_dataからfield_metadataを自動生成（後方互換用）。"""
+    """FieldValue case_dataからfield_metadataを生成する。"""
     metadata = {}
     def walk(obj, prefix=""):
         if isinstance(obj, dict):
@@ -353,23 +353,12 @@ def _extract_display_values(case_data: dict) -> dict:
 
 
 def _is_new_format(case_data: dict) -> bool:
-    """case_data が新形式（FieldValue 構造）かどうかを判定する。
-
-    新形式: 末端が {value, source_ref}, {value, source_refs},
-    または {value, document_id, ...} の dict。
-    旧形式: 末端がスカラ値（str, int 等）。
-    """
+    """case_data が FieldValue 構造かどうかを判定する。"""
     def check(obj):
         if isinstance(obj, dict):
             if "value" in obj and "source_ref" in obj:
                 return True
             if "value" in obj and "source_refs" in obj:
-                return True
-            # Compact source-string format from current schema.py
-            if "value" in obj and "source" in obj:
-                return True
-            # Flattened FieldValue format (legacy)
-            if "value" in obj and "document_id" in obj and "text_quote" in obj:
                 return True
             for v in obj.values():
                 result = check(v)
@@ -426,38 +415,6 @@ def _map_field_metadata(
     return raw_metadata
 
 
-def _parse_source_string(source: str) -> dict | None:
-    """Parse a 'document_id|page|text_quote|confidence' string into a source_ref dict.
-
-    Returns None if the source string is empty or unparseable.
-    """
-    if not source or not source.strip():
-        return None
-    parts = source.split("|", 3)  # max 4 parts
-    if len(parts) < 4:
-        # Fallback: treat whole string as text_quote
-        return {
-            "document_id": "",
-            "page": 1,
-            "text_quote": source.strip(),
-            "confidence": 0.5,
-        }
-    try:
-        page = int(parts[1].strip())
-    except (ValueError, TypeError):
-        page = 1
-    try:
-        confidence = float(parts[3].strip())
-    except (ValueError, TypeError):
-        confidence = 0.5
-    return {
-        "document_id": parts[0].strip(),
-        "page": page,
-        "text_quote": parts[2].strip(),
-        "confidence": confidence,
-    }
-
-
 def _normalize_source_ref(source_ref) -> dict | None:
     """Normalize a single source_ref dict into field_metadata source_refs item."""
     if not isinstance(source_ref, dict):
@@ -483,34 +440,13 @@ def _normalize_source_ref(source_ref) -> dict | None:
 
 
 def _unflatten_field_values(obj):
-    """Convert Gemini FieldValue variants into standard
+    """Convert Gemini FieldValue into standard
     {value, source_refs: [{document_id, page, text_quote, confidence}]} format.
-
-    Handles:
-    - current target format {value, source_ref}
-    - legacy compact format {value, source}
-    - legacy flattened format {value, document_id, page, ...}
     """
     if isinstance(obj, dict):
-        # Structured primary source_ref format
         if "value" in obj and "source_ref" in obj and "source_refs" not in obj:
             ref = _normalize_source_ref(obj.get("source_ref"))
             source_refs = [ref] if ref else []
-            return {"value": obj.get("value"), "source_refs": source_refs}
-        # Compact source-string format from current schema.py
-        if "value" in obj and "source" in obj and "source_refs" not in obj:
-            ref = _parse_source_string(obj.get("source", ""))
-            source_refs = [ref] if ref else []
-            return {"value": obj.get("value"), "source_refs": source_refs}
-        # Flattened FieldValue format (legacy)
-        if "value" in obj and "document_id" in obj and "text_quote" in obj and "source_refs" not in obj:
-            ref = {
-                "document_id": obj.get("document_id", ""),
-                "page": obj.get("page", 1),
-                "text_quote": obj.get("text_quote", ""),
-                "confidence": obj.get("confidence", 0.0),
-            }
-            source_refs = [ref] if obj.get("document_id") else []
             return {"value": obj.get("value"), "source_refs": source_refs}
         return {k: _unflatten_field_values(v) for k, v in obj.items()}
     elif isinstance(obj, list):
@@ -518,52 +454,45 @@ def _unflatten_field_values(obj):
     return obj
 
 
+def _uses_raw_source_refs(obj) -> bool:
+    """Detect old Gemini raw FieldValue format using source_refs directly."""
+    if isinstance(obj, dict):
+        if "value" in obj and "source_refs" in obj and "source_ref" not in obj:
+            return True
+        return any(_uses_raw_source_refs(value) for value in obj.values())
+    if isinstance(obj, list):
+        return any(_uses_raw_source_refs(item) for item in obj)
+    return False
+
+
 def _build_extraction_result(parsed: dict) -> ExtractionResult:
     """Gemini のパース結果から ExtractionResult を構築する。
 
-    新形式（FieldValue 構造）と旧形式の両方に対応。
-    フラット化された FieldValue も source_refs 形式に正規化する。
+    Gemini response_schema の FieldValue 構造を、UI/API用の value-only
+    case_data と field_metadata.source_refs[] に分ける。
     """
     raw_case_data = parsed.get("case_data", {})
-    # Unflatten if needed (schema.py outputs flattened format)
+    if _uses_raw_source_refs(raw_case_data):
+        raise ValueError("Gemini response must use source_ref, not source_refs")
     raw_case_data = _unflatten_field_values(raw_case_data)
     parsed["case_data"] = raw_case_data
 
     # 法人番号の正規化（ハイフン・スペース除去）
     _normalize_corporate_number(raw_case_data)
 
-    if _is_new_format(raw_case_data):
-        # 新形式: case_data の FieldValue 構造から field_metadata と display 値を生成
-        field_metadata = _extract_field_metadata(raw_case_data)
-        display_case_data = _extract_display_values(raw_case_data)
-        # source_refs の正規化
-        _normalize_source_refs_in_metadata(field_metadata)
-        _log_source_coverage(field_metadata, display_case_data)
-        return ExtractionResult(
-            case_data=raw_case_data,
-            display_case_data=display_case_data,
-            review=parsed.get("review", {}),
-            field_metadata=field_metadata,
-        )
-    else:
-        # 旧形式（response_schema 未適用時のフォールバック）
-        # field_metadata の正規化
-        raw_fm = parsed.get("field_metadata", {})
-        if isinstance(raw_fm, dict):
-            _normalize_source_refs_in_metadata(raw_fm)
-        elif isinstance(raw_fm, list):
-            for entry in raw_fm:
-                if isinstance(entry, dict):
-                    _normalize_source_refs_in_entry(entry)
-            parsed["field_metadata"] = raw_fm
-        field_metadata = _map_field_metadata(parsed.get("field_metadata", {}))
-        _log_source_coverage(field_metadata, raw_case_data)
-        return ExtractionResult(
-            case_data=raw_case_data,
-            display_case_data=raw_case_data,  # 旧形式はそのまま
-            review=parsed.get("review", {}),
-            field_metadata=field_metadata,
-        )
+    if not _is_new_format(raw_case_data):
+        raise ValueError("Gemini response case_data must use FieldValue objects with source_ref")
+
+    field_metadata = _extract_field_metadata(raw_case_data)
+    display_case_data = _extract_display_values(raw_case_data)
+    _normalize_source_refs_in_metadata(field_metadata)
+    _log_source_coverage(field_metadata, display_case_data)
+    return ExtractionResult(
+        case_data=raw_case_data,
+        display_case_data=display_case_data,
+        review=parsed.get("review", {}),
+        field_metadata=field_metadata,
+    )
 
 
 def _normalize_source_refs_in_metadata(fm: dict) -> None:

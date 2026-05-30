@@ -8,6 +8,7 @@ from extractors.gemini import (
     _call_gemini,
     _extract_field_metadata,
     _extract_display_values,
+    _build_extraction_result,
     _unflatten_field_values,
     _map_field_metadata,
     EXTRACTION_SCOPES,
@@ -76,29 +77,6 @@ _GEMINI_RESPONSE_NEW = {
     },
 }
 
-# 旧形式（field_metadata 別出し）の Gemini レスポンス
-_GEMINI_RESPONSE_OLD = {
-    "case_data": {
-        "applicant": {"name_roman": "TANAKA TARO", "nationality_region": "JP"},
-    },
-    "review": {
-        "missing_items": [],
-        "summary": "問題なし",
-    },
-    "field_metadata": {
-        "applicant.name_roman": {
-            "source_refs": [
-                {
-                    "document_id": "doc_p",
-                    "page": "1",
-                    "text_quote": "TANAKA TARO",
-                    "confidence": "0.95",
-                }
-            ]
-        }
-    },
-}
-
 
 def _make_ocr_results() -> list[OcrResult]:
     return [
@@ -134,6 +112,19 @@ def _mock_gemini_response(raw: dict):
     candidate.finish_reason = "STOP"
     response.candidates = [candidate]
     return response
+
+
+def _field_value(value, quote=None, confidence=0.95):
+    text_quote = quote if quote is not None else str(value)
+    return {
+        "value": value,
+        "source_ref": {
+            "document_id": "doc_p",
+            "page": 1,
+            "text_quote": text_quote,
+            "confidence": confidence,
+        },
+    }
 
 
 # ---------- build_extraction_prompt (prompt_template) -------------------
@@ -250,22 +241,32 @@ class TestExtractTextOnly:
         assert result.field_metadata["applicant.name_roman"]["confidence"] == 0.95
         mock_client.models.generate_content.assert_called_once()
 
-    @patch("extractors.gemini._get_client")
-    def test_returns_extraction_result_old_format(self, mock_get_client):
-        """旧形式のレスポンスでも動作する（互換性テスト）。"""
-        mock_client = MagicMock()
-        mock_client.models.generate_content.return_value = _mock_gemini_response(
-            _GEMINI_RESPONSE_OLD
-        )
-        mock_get_client.return_value = mock_client
+    def test_rejects_raw_source_refs_format(self):
+        raw = {
+            "case_data": {
+                "applicant": {
+                    "name_roman": {
+                        "value": "TANAKA TARO",
+                        "source_refs": [
+                            {
+                                "document_id": "doc_p",
+                                "page": 1,
+                                "text_quote": "TANAKA TARO",
+                                "confidence": 0.95,
+                            }
+                        ],
+                    }
+                }
+            },
+            "review": {},
+        }
 
-        result = extract_text_only(_make_ocr_results(), _CASE_META, _DOCUMENTS)
-
-        assert isinstance(result, ExtractionResult)
-        assert result.case_data["applicant"]["name_roman"] == "TANAKA TARO"
-        assert result.display_case_data["applicant"]["name_roman"] == "TANAKA TARO"
-        assert result.review["summary"] == "問題なし"
-        mock_client.models.generate_content.assert_called_once()
+        try:
+            _build_extraction_result(raw)
+        except ValueError as exc:
+            assert "source_ref" in str(exc)
+        else:
+            raise AssertionError("raw source_refs response should be rejected")
 
     @patch("extractors.gemini._get_client")
     def test_prompt_contains_ocr_text(self, mock_get_client):
@@ -372,11 +373,11 @@ class TestExtractAllScopes:
     def test_merges_scope_results_deeply(self, mock_extract_scoped, mock_call_gemini):
         def scoped_result(scope, *_args, **_kwargs):
             if scope == "applicant_identity":
-                return {"case_data": {"applicant": {"name_roman": "TANAKA TARO"}}}
+                return {"case_data": {"applicant": {"name_roman": _field_value("TANAKA TARO")}}}
             if scope == "education":
-                return {"case_data": {"applicant": {"education": [{"school_name": "ABC University"}]}}}
+                return {"case_data": {"applicant": {"education": [{"school_name": _field_value("ABC University")}]}}}
             if scope == "employer":
-                return {"case_data": {"employer": {"name": "Example Inc."}}}
+                return {"case_data": {"employer": {"name": _field_value("Example Inc.")}}}
             return {"case_data": {}}
 
         mock_extract_scoped.side_effect = scoped_result
@@ -395,9 +396,9 @@ class TestExtractAllScopes:
             if scope == "applicant_identity":
                 raise TimeoutError("read operation timed out")
             if scope == "employer":
-                return {"case_data": {"employer": {"name": "Example Inc."}}}
+                return {"case_data": {"employer": {"name": _field_value("Example Inc.")}}}
             if scope == "education":
-                return {"case_data": {"applicant": {"education": [{"school_name": "ABC University"}]}}}
+                return {"case_data": {"applicant": {"education": [{"school_name": _field_value("ABC University")}]}}}
             return {"case_data": {}}
 
         mock_extract_scoped.side_effect = scoped_result
@@ -412,7 +413,9 @@ class TestExtractAllScopes:
     @patch("extractors.gemini._call_gemini")
     @patch("extractors.gemini.extract_scoped")
     def test_runs_new_extraction_scopes(self, mock_extract_scoped, mock_call_gemini):
-        mock_extract_scoped.return_value = {"case_data": {}}
+        mock_extract_scoped.return_value = {
+            "case_data": {"applicant": {"name_roman": _field_value("TANAKA TARO")}}
+        }
         mock_call_gemini.return_value = {"missing_items": [], "validation_errors": [], "findings": []}
 
         extract_all_scopes(MagicMock(), [], _CASE_META, _DOCUMENTS)
@@ -520,12 +523,6 @@ class TestUnflattenFieldValues:
         }
         result = _unflatten_field_values(raw)
         assert result == {"value": "", "source_refs": []}
-
-    def test_keeps_legacy_source_string(self):
-        raw = {"value": "TANAKA TARO", "source": "doc_p|1|TANAKA TARO|0.95"}
-        result = _unflatten_field_values(raw)
-        assert result["source_refs"][0]["document_id"] == "doc_p"
-
 
 # ---------- _extract_display_values ------------------------------------
 

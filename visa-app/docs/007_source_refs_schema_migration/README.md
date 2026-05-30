@@ -39,7 +39,7 @@ backend の証跡情報と bbox / highlight の精度を上げるための大枠
 }
 ```
 
-現在は Gemini raw response を `{ value, source_ref }` に変更し、backend が `field_metadata.source_refs[]` に変換している。旧 `source` 文字列も互換としてまだ読める。
+現在は Gemini raw response を `{ value, source_ref }` に変更し、backend が `field_metadata.source_refs[]` に変換している。旧 `source` 文字列、旧 raw `source_refs[]`、旧 `field_metadata` 別出しレスポンスの互換処理は削除済み。
 
 この方式は Gemini response schema を軽くするためには有効だったが、次の問題がある。
 
