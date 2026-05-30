@@ -27,6 +27,8 @@ backend の証跡情報と bbox / highlight の精度を上げるための大枠
 | 6 | Golden data 評価 | [06_golden_data_evaluation.md](06_golden_data_evaluation.md) |
 | 7 | document routing 実装 | [07_document_routing.md](07_document_routing.md) |
 | 8 | bbox retry / scope retry loop | [08_retry_loop.md](08_retry_loop.md) |
+| 9 | 取次者 autofill bug | [09_intermediary_autofill_bug.md](09_intermediary_autofill_bug.md) |
+| 10 | Eval golden canonical v2 移行 | [10_eval_golden_canonical_v2_plan.md](10_eval_golden_canonical_v2_plan.md) |
 
 ## 現状の重要ポイント
 
@@ -101,4 +103,4 @@ backend の証跡情報と bbox / highlight の精度を上げるための大枠
 未実行:
 
 - Cloud Run deploy後の動作確認
-- Chrome拡張の取次者入力バグ修正
+- Chrome拡張の取次者入力バグ修正。詳細は [09_intermediary_autofill_bug.md](09_intermediary_autofill_bug.md)

@@ -49,17 +49,9 @@ Chrome拡張QAでは、申請の最終送信を絶対に押さない。
 
 ### 3. 取次者がRASENSに入力されない
 
-`/application-data` では取次者欄を `settings.intermediary` または `INTERMEDIARY_*` 環境変数から注入する設計だが、実RASENS画面で取次者（オンラインシステム利用者）の5項目が入力されないバグが残っている。
+取次者欄の修正タスクは、証跡・連携QAの残タスクとして `007_source_refs_schema_migration` 側に切り出した。
 
-確認する項目:
-
-- 取次者 氏名
-- 取次者 郵便番号
-- 取次者 住所
-- 取次者 所属機関等
-- 取次者 電話番号
-
-まず `/cases/{case_id}/application-data` の rows に上記5項目が含まれるかを確認し、含まれる場合は Chrome拡張の DOM 探索または field mapping 側を確認する。rows に含まれない場合は backend の固定設定注入を確認する。
+詳細: [09_intermediary_autofill_bug.md](../007_source_refs_schema_migration/09_intermediary_autofill_bug.md)
 
 ## 今回対応済み
 

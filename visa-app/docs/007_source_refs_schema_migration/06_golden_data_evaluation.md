@@ -8,6 +8,8 @@ Golden data 評価は後回しにする。
 
 ただし、将来 `source_ref` dict 化、PDF bbox 改善、XLSX cell anchor、DOCX block anchor が入ったあとに、何を成果物として残し、どこまでを自動比較し、どこからを人手確認にするかは今のうちに決めておく。
 
+実際の canonical v2 移行手順は [10_eval_golden_canonical_v2_plan.md](10_eval_golden_canonical_v2_plan.md) に分けて管理する。この文書は評価方針、10は作業順と対象ファイルを扱う。
+
 ## 調査した現状
 
 ### visa-eval
