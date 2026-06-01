@@ -217,6 +217,26 @@ def test_visible_when_accepts_boolean_strings():
     ]
 
 
+def test_visible_when_accepts_native_boolean_and_integer_zero_value():
+    case_data = {
+        **CASE_DOC["case_data"],
+        "applicant": {
+            "birth_date": "1995-03-15",
+            "immigration_history": {"has_entries": True, "entries_count": 0},
+        },
+    }
+
+    rows = build_rows(case_data, MAPPING, FORM_DEFINITIONS)
+    row = next(
+        row
+        for row in rows
+        if row["canonical_path"] == "applicant.immigration_history.entries_count"
+    )
+
+    assert row["display_value"] == "0"
+    assert row["fill_value"] == "0"
+
+
 def test_build_application_data_summary_and_fillable():
     result = build_application_data(CASE_DOC, MAPPING, FORM_DEFINITIONS)
 

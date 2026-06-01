@@ -26,31 +26,47 @@ SOURCE_REF_SCHEMA = {
     "required": ["document_id", "page", "text_quote", "confidence"],
 }
 
+STRING_VALUE_SCHEMA = {"type": "STRING"}
+BOOLEAN_VALUE_SCHEMA = {"type": "BOOLEAN"}
+INTEGER_VALUE_SCHEMA = {"type": "INTEGER"}
+
 FIELD_VALUE_SCHEMA = {
     "type": "OBJECT",
     "properties": {
-        "value": {"type": "STRING"},
+        "value": STRING_VALUE_SCHEMA,
         "source_ref": SOURCE_REF_SCHEMA,
     },
     "required": ["value", "source_ref"],
 }
 
 
-def _fv() -> dict:
-    """Return a fresh copy of FIELD_VALUE_SCHEMA (avoids shared-mutation)."""
+def _fv(value_schema: dict | None = None) -> dict:
+    """Return a fresh FieldValue schema with the requested value type."""
     import copy
-    return copy.deepcopy(FIELD_VALUE_SCHEMA)
+
+    schema = copy.deepcopy(FIELD_VALUE_SCHEMA)
+    schema["properties"]["value"] = copy.deepcopy(value_schema or STRING_VALUE_SCHEMA)
+    return schema
+
+
+def _bool_fv() -> dict:
+    return _fv(BOOLEAN_VALUE_SCHEMA)
+
+
+def _int_fv() -> dict:
+    return _fv(INTEGER_VALUE_SCHEMA)
 
 
 # ---------------------------------------------------------------------------
 # Section helpers
 # ---------------------------------------------------------------------------
 
-def _object_of_fields(field_names: list[str]) -> dict:
+def _object_of_fields(field_names: list[str], field_types: dict[str, dict] | None = None) -> dict:
     """Build an OBJECT schema where every property is a FieldValue."""
+    field_types = field_types or {}
     return {
         "type": "OBJECT",
-        "properties": {name: _fv() for name in field_names},
+        "properties": {name: _fv(field_types.get(name)) for name in field_names},
         "required": field_names,
     }
 
@@ -111,20 +127,29 @@ _S1_JAPAN_CONTACT = _object_of_fields([
     "email",
 ])
 
-_S1_FAMILY = _object_of_fields([
-    "has_accompanying_members",
-    "has_japan_relatives_or_cohabitants",
-])
+_S1_FAMILY = _object_of_fields(
+    [
+        "has_accompanying_members",
+        "has_japan_relatives_or_cohabitants",
+    ],
+    {
+        "has_accompanying_members": BOOLEAN_VALUE_SCHEMA,
+        "has_japan_relatives_or_cohabitants": BOOLEAN_VALUE_SCHEMA,
+    },
+)
 
-_S1_JAPAN_RELATIVE = _object_of_fields([
-    "relationship",
-    "name",
-    "birth_date",
-    "nationality_region",
-    "will_cohabit",
-    "workplace_or_school_name",
-    "residence_card_or_certificate_number",
-])
+_S1_JAPAN_RELATIVE = _object_of_fields(
+    [
+        "relationship",
+        "name",
+        "birth_date",
+        "nationality_region",
+        "will_cohabit",
+        "workplace_or_school_name",
+        "residence_card_or_certificate_number",
+    ],
+    {"will_cohabit": BOOLEAN_VALUE_SCHEMA},
+)
 
 _S1_FAMILY["properties"]["japan_relatives_or_cohabitants"] = {
     "type": "ARRAY",
@@ -142,25 +167,41 @@ _S1_ENTRY_PLAN = _object_of_fields([
     "visa_application_location",
 ])
 
-_S1_IMMIGRATION_HISTORY = _object_of_fields([
-    "has_entries",
-    "entries_count",
-    "criminal_record",
-    "deportation_or_departure_order",
-    "deportation_count",
-    "deportation_latest",
-])
+_S1_IMMIGRATION_HISTORY = _object_of_fields(
+    [
+        "has_entries",
+        "entries_count",
+        "criminal_record",
+        "deportation_or_departure_order",
+        "deportation_count",
+        "deportation_latest",
+    ],
+    {
+        "has_entries": BOOLEAN_VALUE_SCHEMA,
+        "entries_count": INTEGER_VALUE_SCHEMA,
+        "criminal_record": BOOLEAN_VALUE_SCHEMA,
+        "deportation_or_departure_order": BOOLEAN_VALUE_SCHEMA,
+        "deportation_count": INTEGER_VALUE_SCHEMA,
+    },
+)
 
 _S1_LATEST_ENTRY = _object_of_fields([
     "start_date",
     "end_date",
 ])
 
-_S1_PRIOR_COE = _object_of_fields([
-    "has_history",
-    "count",
-    "denial_count",
-])
+_S1_PRIOR_COE = _object_of_fields(
+    [
+        "has_history",
+        "count",
+        "denial_count",
+    ],
+    {
+        "has_history": BOOLEAN_VALUE_SCHEMA,
+        "count": INTEGER_VALUE_SCHEMA,
+        "denial_count": INTEGER_VALUE_SCHEMA,
+    },
+)
 
 _S1_IMMIGRATION_HISTORY["properties"]["latest_entry"] = _S1_LATEST_ENTRY
 _S1_IMMIGRATION_HISTORY["properties"]["prior_coe_applications"] = _S1_PRIOR_COE
@@ -186,37 +227,43 @@ SCOPE1_IDENTITY_SCHEMA = {
 # SCOPE2: Employer + Employment conditions + Activity (所属機関+雇用条件+活動内容, No.2〜11)
 # ---------------------------------------------------------------------------
 
-_S2_EMPLOYMENT = _object_of_fields([
-    "contract_type",
-    "employment_period_type",
-    "employment_period_years",
-    "employment_period_months",
-    "joining_date",
-    "monthly_salary",
-    "experience_months",
-    "has_position",
-    "position_title",
-    "job_category_primary",
-    "activity_details",
-])
+_S2_EMPLOYMENT = _object_of_fields(
+    [
+        "contract_type",
+        "employment_period_type",
+        "employment_period_years",
+        "employment_period_months",
+        "joining_date",
+        "monthly_salary",
+        "experience_months",
+        "has_position",
+        "position_title",
+        "job_category_primary",
+        "activity_details",
+    ],
+    {"has_position": BOOLEAN_VALUE_SCHEMA},
+)
 
-_S2_EMPLOYER = _object_of_fields([
-    "name",
-    "has_corporate_number",
-    "corporate_number",
-    "office_name",
-    "employment_insurance_office_number",
-    "industry_primary",
-    "industry_other",
-    "postal_code",
-    "address",
-    "phone",
-    "capital_jpy",
-    "annual_sales_jpy",
-    "employee_count",
-    "foreign_employee_count",
-    "technical_intern_count",
-])
+_S2_EMPLOYER = _object_of_fields(
+    [
+        "name",
+        "has_corporate_number",
+        "corporate_number",
+        "office_name",
+        "employment_insurance_office_number",
+        "industry_primary",
+        "industry_other",
+        "postal_code",
+        "address",
+        "phone",
+        "capital_jpy",
+        "annual_sales_jpy",
+        "employee_count",
+        "foreign_employee_count",
+        "technical_intern_count",
+    ],
+    {"has_corporate_number": BOOLEAN_VALUE_SCHEMA},
+)
 
 SCOPE2_EMPLOYER_SCHEMA = {
     "type": "OBJECT",
@@ -242,20 +289,29 @@ _S3_EDUCATION = _object_of_fields([
     "graduation_date",
 ])
 
-_S3_IT_QUALIFICATION = _object_of_fields([
-    "has_qualification",
-    "qualification_name",
-])
+_S3_IT_QUALIFICATION = _object_of_fields(
+    [
+        "has_qualification",
+        "qualification_name",
+    ],
+    {"has_qualification": BOOLEAN_VALUE_SCHEMA},
+)
 
-_S3_EMPLOYMENT_HISTORY = _object_of_fields([
-    "country_region",
-    "start_month_unknown",
-    "start_date",
-    "end_month_unknown",
-    "end_date",
-    "company_name_en",
-    "company_name_local",
-])
+_S3_EMPLOYMENT_HISTORY = _object_of_fields(
+    [
+        "country_region",
+        "start_month_unknown",
+        "start_date",
+        "end_month_unknown",
+        "end_date",
+        "company_name_en",
+        "company_name_local",
+    ],
+    {
+        "start_month_unknown": BOOLEAN_VALUE_SCHEMA,
+        "end_month_unknown": BOOLEAN_VALUE_SCHEMA,
+    },
+)
 
 _S3_QUALIFICATIONS = {
     "type": "OBJECT",
@@ -268,7 +324,7 @@ _S3_QUALIFICATIONS = {
 _S3_APPLICANT = {
     "type": "OBJECT",
     "properties": {
-        "has_employment_history": _fv(),
+        "has_employment_history": _bool_fv(),
         "employment_history": {
             "type": "ARRAY",
             "items": _S3_EMPLOYMENT_HISTORY,
@@ -405,7 +461,7 @@ SCOPE_EMPLOYMENT_HISTORY_SCHEMA = {
         "applicant": {
             "type": "OBJECT",
             "properties": {
-                "has_employment_history": _fv(),
+                "has_employment_history": _bool_fv(),
                 "employment_history": {
                     "type": "ARRAY",
                     "items": _S3_EMPLOYMENT_HISTORY,
@@ -459,7 +515,7 @@ def _combined_applicant_schema() -> dict:
         "type": "ARRAY",
         "items": _S3_EDUCATION,
     }
-    applicant["properties"]["has_employment_history"] = _fv()
+    applicant["properties"]["has_employment_history"] = _bool_fv()
     applicant["properties"]["employment_history"] = {
         "type": "ARRAY",
         "items": _S3_EMPLOYMENT_HISTORY,

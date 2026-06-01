@@ -157,6 +157,12 @@ class TestBuildPrompt:
         assert "source_ref" in prompt
         assert "document_id|page|text_quote|confidence" not in prompt
 
+    def test_contains_typed_value_contract(self):
+        prompt = build_extraction_prompt(_CASE_META, _DOCUMENTS)
+        assert "JSON boolean" in prompt
+        assert "JSON number" in prompt
+        assert "空文字やnullは使わない" in prompt
+
     def test_scoped_prompt_accepts_new_scope(self):
         prompt = build_scoped_prompt("applicant_identity", _CASE_META, _DOCUMENTS)
         assert "source_ref" in prompt
@@ -267,6 +273,76 @@ class TestExtractTextOnly:
             assert "source_ref" in str(exc)
         else:
             raise AssertionError("raw source_refs response should be rejected")
+
+    def test_build_extraction_result_preserves_typed_values(self):
+        raw = {
+            "case_data": {
+                "applicant": {
+                    "family": {
+                        "has_accompanying_members": _field_value(False, "同伴者の有無 無"),
+                    },
+                    "immigration_history": {
+                        "has_entries": _field_value(False, "過去の出入国歴 無"),
+                        "entries_count": _field_value(0, "回数 0"),
+                        "prior_coe_applications": {
+                            "has_history": _field_value(True, "申請歴 有"),
+                            "count": _field_value(1, "申請回数 1"),
+                        },
+                    },
+                },
+                "employer": {
+                    "has_corporate_number": _field_value(True, "法人番号 有"),
+                },
+            },
+            "review": {},
+        }
+
+        result = _build_extraction_result(raw)
+
+        assert result.display_case_data["applicant"]["family"]["has_accompanying_members"] is False
+        assert result.display_case_data["applicant"]["immigration_history"]["has_entries"] is False
+        assert result.display_case_data["applicant"]["immigration_history"]["entries_count"] == 0
+        assert result.display_case_data["applicant"]["immigration_history"]["prior_coe_applications"]["has_history"] is True
+        assert result.display_case_data["applicant"]["immigration_history"]["prior_coe_applications"]["count"] == 1
+        assert result.display_case_data["employer"]["has_corporate_number"] is True
+        assert result.case_data["applicant"]["immigration_history"]["entries_count"]["value"] == 0
+        assert result.field_metadata["applicant.immigration_history.entries_count"]["confidence"] == 0.95
+
+    def test_build_extraction_result_allows_typed_default_without_source_ref(self):
+        raw = {
+            "case_data": {
+                "applicant": {
+                    "immigration_history": {
+                        "has_entries": {
+                            "value": False,
+                            "source_ref": {
+                                "document_id": "",
+                                "page": 0,
+                                "text_quote": "",
+                                "confidence": 0,
+                            },
+                        },
+                        "entries_count": {
+                            "value": 0,
+                            "source_ref": {
+                                "document_id": "",
+                                "page": 0,
+                                "text_quote": "",
+                                "confidence": 0,
+                            },
+                        },
+                    },
+                },
+            },
+            "review": {"findings": ["過去の出入国歴は記載なしのため既定値"]},
+        }
+
+        result = _build_extraction_result(raw)
+
+        assert result.display_case_data["applicant"]["immigration_history"]["has_entries"] is False
+        assert result.display_case_data["applicant"]["immigration_history"]["entries_count"] == 0
+        assert result.field_metadata["applicant.immigration_history.has_entries"]["source_refs"] == []
+        assert result.field_metadata["applicant.immigration_history.entries_count"]["source_refs"] == []
 
     @patch("extractors.gemini._get_client")
     def test_prompt_contains_ocr_text(self, mock_get_client):

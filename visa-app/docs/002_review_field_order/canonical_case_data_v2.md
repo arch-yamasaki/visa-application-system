@@ -91,6 +91,21 @@ application_data rows
 
 `case_data` は、RASENSの意味体系には寄せますが、画面の物理IDには寄せません。
 
+## Gemini extraction value types
+
+Gemini の `response_schema` は、まず影響が小さい範囲だけ typed にします。
+保存前normalizeは入れず、Gemini schema と prompt で型を制約します。
+
+| field kind | Gemini `FieldValue.value` | 備考 |
+|---|---|---|
+| boolean | JSON boolean | `has_*`, `criminal_record`, `has_corporate_number`, `has_position` など |
+| small count | JSON integer | 入出国回数、COE申請回数、不交付回数、退去強制等の回数 |
+| date | string | 当面は `YYYY-MM-DD` 文字列。UI編集と既存データの安定後に再検討 |
+| money / employee count | string | 単位・桁区切り・資料表記ゆれがあるため当面維持 |
+| free text / select label | string | RASENS投入値は `application_data` 生成時に変換 |
+
+BOOLEAN / INTEGER の `value` には空文字やnullを使いません。書類上の明確な記載がないbooleanは、各項目の既定方針に従って `false` を使います。回数系は該当なしなら `0` を使います。
+
 ```json
 {
   "schema_version": "2.0",
