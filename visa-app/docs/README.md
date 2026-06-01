@@ -9,3 +9,4 @@
 | 005 | [case_navigation_and_review_order](005_case_navigation_and_review_order/) | 案件一覧・Chrome拡張の案件選択・レビューUIのRASENS順化の作業計画 |
 | 006 | [current_architecture](006_current_architecture/) | 現行実装の全体構成、backend/API、frontend review UI |
 | 007 | [source_refs_schema_migration](007_source_refs_schema_migration/) | source_ref dict 化、bbox改善、Office anchor、retry loop の作業計画 |
+| 008 | [eval_workflow](008_eval_workflow/) | 実資料fixture、golden、Gemini bytes eval、比較結果の解釈 |

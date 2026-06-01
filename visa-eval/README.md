@@ -91,6 +91,10 @@ python visa-eval/scripts/classify_test_documents.py
 
 ## 評価の考え方
 
+eval の進め方、`expected` vs `expected` の smoke check と実Gemini比較の違い、goldenの薄さや比較正規化の扱いは `../visa-app/docs/008_eval_workflow/README.md` を正とする。
+
+このREADMEでは、workspace構成と実行入口だけを説明する。
+
 ### Golden作成モード
 
 1. `document_manifest.json` をCodex blind runまたはGemini bytes evalへ渡す。
@@ -112,7 +116,7 @@ python visa-eval/scripts/classify_test_documents.py
 - Gemini bytes eval: `run_gemini_bytes_eval.py` が `document_manifest.json` の `use_as_input: true` だけをローカルbytesとして読み、GCS/Firestoreを使わず backend の scoped Gemini 抽出pipelineへ渡す。
 - `application_data.json` はどちらのフローでもAIに手書きさせない。backend generator が `case_data.json` から決定論的に生成する。
 
-Gemini bytes eval の通常フローは、抽出、`application_data` 生成、golden比較の3コマンドです。具体的な手順は `docs/fixture_contract.md` を参照してください。`--dry-run` は初回や送信対象確認が必要な場合だけ使います。
+Gemini bytes eval の通常フローは、抽出とgolden比較の2コマンドです。`application_data` は比較時に `case_data` から backend generator で生成します。具体的な手順は `docs/fixture_contract.md` を参照してください。`--dry-run` は初回や送信対象確認が必要な場合だけ使います。
 
 ### Canonical v2 方針
 
@@ -131,7 +135,7 @@ Gemini bytes eval の通常フローは、抽出、`application_data` 生成、g
 - 実在個人情報を含むため、raw資料とgenerated出力の共有範囲に注意する。
 - 実案件データをChrome拡張の同梱 `application_data.json` に入れない。
 - DevTools Consoleには値をマスクして出す。必要があっても実値ログを外部共有しない。
-- `case_data.golden.json` は人手レビュー済みの正解データとして扱う。
+- `case_data.golden.json` は人手レビュー済みの正解データを目指す。ただし、scaffoldや未確認値が残る場合は `partial` / `suspect` として扱い、モデル精度としては読まない。
 - `application_data.golden.json` は派生物。案件正本ではない。
 - `unused_resume` と分類された履歴書は、申請には添付しないが、記載情報（職歴・学歴等）はAI抽出の対象とする。
 - `not_attached_reference` は添付外資料。差分確認・参考用として扱う。

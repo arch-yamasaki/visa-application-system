@@ -24,12 +24,12 @@ backend の証跡情報と bbox / highlight の精度を上げるための大枠
 | 3 | scope 別 Gemini 入力 | [03_scoped_gemini_input.md](03_scoped_gemini_input.md) |
 | 4 | XLSX cell anchor | [04_xlsx_cell_anchor.md](04_xlsx_cell_anchor.md) |
 | 5 | DOCX block anchor | [05_docx_block_anchor.md](05_docx_block_anchor.md) |
-| 6 | Golden data 評価 | [06_golden_data_evaluation.md](06_golden_data_evaluation.md) |
+| 6 | Eval workflow | [../008_eval_workflow/](../008_eval_workflow/) |
 | 7 | document routing 実装 | [07_document_routing.md](07_document_routing.md) |
 | 8 | bbox retry / scope retry loop | [08_retry_loop.md](08_retry_loop.md) |
 | 9 | 取次者 autofill bug | [09_intermediary_autofill_bug.md](09_intermediary_autofill_bug.md) |
-| 10 | Eval golden canonical v2 移行 | [10_eval_golden_canonical_v2_plan.md](10_eval_golden_canonical_v2_plan.md) |
-| 11 | Golden data 確認ワークフロー | [11_golden_data_review_workflow.md](11_golden_data_review_workflow.md) |
+| 10 | Eval golden canonical v2 移行 | [../008_eval_workflow/](../008_eval_workflow/) |
+| 11 | Golden data 確認ワークフロー | [../008_eval_workflow/](../008_eval_workflow/) |
 
 ## 現状の重要ポイント
 

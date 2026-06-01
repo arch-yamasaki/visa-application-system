@@ -47,6 +47,8 @@ visa-app/backend/.venv/bin/python visa-eval/scripts/run_gemini_bytes_eval.py <fi
 
 `field_metadata` は現時点では主に根拠レビュー用です。定量比較に含める場合は `compare_with_golden.py` に比較ロジックを追加します。
 
+全体方針と実測結果の解釈は `../../visa-app/docs/008_eval_workflow/README.md` を参照します。
+
 ## Golden比較のMVP方針
 
 MVPでは `expected/case_data.golden.json` を唯一の正本にします。

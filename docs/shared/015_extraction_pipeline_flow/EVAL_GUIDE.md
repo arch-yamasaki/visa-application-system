@@ -2,6 +2,8 @@
 
 バックエンドのみで抽出品質を評価する方法。
 
+> 現在のeval方針の正本は `../../../visa-app/docs/008_eval_workflow/README.md` です。この文書は将来の pytest eval 構想メモとして扱います。
+
 ## 概要
 
 visa-eval の既存ゴールデンデータ（13申請人分）を使い、pytest で自動評価する。

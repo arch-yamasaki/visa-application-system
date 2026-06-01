@@ -27,6 +27,7 @@ visa-eval/
 - `docs/単票評価ワークフローまとめ.md`: 単票fixture → Chrome拡張投入までの全体像
 - `docs/AIブラインド抽出実行手順.md`: goldenを見せずにAI抽出を実行する手順
 - `docs/fixture_contract.md`: fixture入出力とCodex/Gemini評価フローの契約
+- `../visa-app/docs/008_eval_workflow/README.md`: evalの進め方、golden確認、Gemini bytes eval結果の解釈
 - `eval_config/suites/single_smoke.json`: 13ケースのスモーク評価スイート
 - `eval_config/prompts/blind_single_case_prompt.md`: AI抽出時のプロンプトテンプレート
 
