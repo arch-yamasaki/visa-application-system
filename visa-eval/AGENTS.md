@@ -7,7 +7,6 @@
 ```text
 visa-eval/
   raw/                 # 元資料 (PDF/Excel/DOCX) — git管理外
-  catalog.json         # 資料メタデータ — git管理外
   test_cases_from_raw/     # 単票テストケース — git管理外 (README.mdのみ管理)
     <case_id>/<applicant_id>/
       scenario.json
@@ -34,7 +33,7 @@ visa-eval/
 ## PII・gitルール
 
 - **git管理する**: `README.md`, `test_cases_from_raw/README.md`, `eval_config/suites/*.json`, `eval_config/prompts/`, `docs/`
-- **git管理しない**: `raw/`, `catalog.json`, `test_cases_from_raw/<case_id>/`, `blind_runs_from_test_cases/`, `**/generated/`
+- **git管理しない**: `raw/`, `test_cases_from_raw/<case_id>/`, `blind_runs_from_test_cases/`, `**/generated/`
 - 実PIIを含むファイルはローカル管理のみ。バグ報告・チャットではPIIを伏せる。
 
 ## 評価実行の流れ
