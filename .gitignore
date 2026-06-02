@@ -13,6 +13,7 @@ Desktop.ini
 # Local/restricted evaluation workspace
 visa-eval/raw/
 visa-eval/catalog.json
+visa-eval/archived/
 visa-eval/test_cases_from_raw/*
 !visa-eval/test_cases_from_raw/README.md
 visa-eval/blind_runs_from_test_cases/*

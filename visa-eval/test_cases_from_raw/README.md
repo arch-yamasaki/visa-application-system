@@ -4,7 +4,12 @@
 
 - `test_cases_from_raw/`: 申請人1人=1フォームの単票ケース。PDF/Excel読取、canonical v2 `case_data` 生成、backend generator由来の `application_data` 確認用。
 
-`test_cases_from_raw/` の各ケースは、`scenario.json`、`input/document_manifest.json`、`expected/*.golden.json`、`generated/` を持ちます。
+`test_cases_from_raw/` の各ケースは、`scenario.json`、`input/document_manifest.json`、`output/output_manifest.json`、`expected/`、`generated/` を持ちます。
+
+- `input/`: Gemini に渡す資料。元ファイル名は変更せず、どのファイルを使うかは `input/document_manifest.json` に書きます。
+- `output/`: すでに入力済みの RASENS 申請書など、golden 作成・監査の根拠にする資料。Gemini 入力には使いません。
+- `expected/`: golden 作成後に `*.golden.json` を置きます。golden 作成前のfixtureでは空でも構いません。
+- `generated/`: Gemini や評価スクリプトの出力先です。
 
 `expected/review.golden.json` は、Excel起点の scaffold を含む場合があります。抽出・投入の形を揃えるための期待値であり、レビュー判定の最終真実としてはPDF・会社資料・申請書類束を確認して更新します。
 
