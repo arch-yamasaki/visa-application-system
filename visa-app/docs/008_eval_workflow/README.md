@@ -20,7 +20,7 @@ source_ref、bbox、Office anchor、retry loop の実装計画は `../007_source
 
 以前出ていた3ケースの `100.0%` は、Gemini抽出精度ではありません。
 
-これは expected data を expected data と比較した smoke check です。
+これは expected data を expected data と比較した smoke check でした。
 
 ```text
 expected/case_data.golden.json
@@ -29,8 +29,9 @@ expected/case_data.golden.json
   = 100%
 ```
 
-この確認は、fixtureと比較スクリプトが読めることを見るためには有効です。
-ただし、抽出精度として報告してはいけません。
+この確認は、fixtureと比較スクリプトが読めることを見るためには有効でした。
+ただし抽出精度として報告してはいけないため、現在の `compare_with_golden.py` は generated 側に `case_data.json` を要求します。
+`expected/` を `--generated` に渡しても、`case_data.golden.json` へfallbackしません。
 
 実Gemini出力を現在の golden と比較した暫定結果は次の通りです。
 
@@ -49,7 +50,7 @@ golden不足と比較正規化不足が混ざっています。
 
 | 種類 | 答える問い | 例 | モデル精度と呼べるか |
 |---|---|---|---|
-| Smoke check | fixtureと比較器が動くか | `expected` vs `expected` | 呼べない |
+| Smoke check | fixtureと比較器が動くか | 専用の小テスト | 呼べない |
 | 抽出比較 | Gemini出力が現在のgoldenと合うか | `generated/<run_id>` vs `expected` | 暫定のみ |
 | Golden監査 | expected自体が資料に照らして正しいか | raw XLSX/DOCX/PDF vs `case_data.golden.json` | 呼べないが必須 |
 | 根拠レビュー | 値の出典を追えるか | `field_metadata`, source quote, bbox | 呼べない |
@@ -209,7 +210,7 @@ generated case_data -> backend generator -> generated application_data rows
 
 ### Phase 0: 評価境界を明確にする
 
-- self-compare は smoke check と明記する。
+- self-compare を通常比較フローに入れない。
 - 実評価では必ず `generated/<run_id>` を `--generated` に指定する。
 - Geminiやblind agentに `expected/` を渡さない。
 - restricted fixture と generated output は git に入れない。
@@ -217,6 +218,7 @@ generated case_data -> backend generator -> generated application_data rows
 受け入れ条件:
 
 - expected-vs-expected の100%を抽出精度として扱わない。
+- generated 側の `*.golden.json` fallback がない。
 - モデル評価時は actual generated output を比較に使う。
 
 ### Phase 1: 2ケースの golden を補完する
@@ -280,8 +282,10 @@ visa-app/backend/.venv/bin/python visa-eval/scripts/run_gemini_bytes_eval.py \
 visa-app/backend/.venv/bin/python visa-eval/scripts/compare_with_golden.py \
   --generated <fixture_dir>/generated/<run_id> \
   --expected <fixture_dir>/expected \
-  --targets case_data,application_data
+  --targets case_data
 ```
+
+`application_data` はChrome拡張用rowsの補助確認です。MVPの抽出採点には含めず、必要なときだけ別で実行します。
 
 比較結果は次に分類します。
 

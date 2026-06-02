@@ -5,7 +5,7 @@ Usage:
     python visa-eval/scripts/compare_with_golden.py \
         --generated <generated_dir> \
         --expected <expected_dir> \
-        [--targets case_data,application_data] [--output <file>] [--json]
+        [--targets case_data] [--output <file>] [--json]
 
 If --output is omitted, the report is saved to <generated_dir>/comparison_report.md
 and a summary is printed to stdout.
@@ -357,7 +357,7 @@ _FILE_PAIRS = [
     ("review.json", "review.golden.json", "review", compare_review),
 ]
 
-_DEFAULT_TARGETS = ("case_data", "application_data")
+_DEFAULT_TARGETS = ("case_data",)
 _ALL_TARGETS = {"case_data", "application_data", "review"}
 
 
@@ -375,8 +375,6 @@ def _load_json(path: Path) -> Any:
 
 def _load_case_data_pair(generated_dir: Path, expected_dir: Path) -> tuple[dict, dict]:
     gen_path = generated_dir / "case_data.json"
-    if not gen_path.exists():
-        gen_path = generated_dir / "case_data.golden.json"
     exp_path = expected_dir / "case_data.golden.json"
     if not exp_path.exists():
         exp_path = expected_dir / "case_data.json"
@@ -405,7 +403,7 @@ def run_comparison(generated_dir: Path, expected_dir: Path, targets: list[str]) 
         if label not in targets:
             continue
         if label == "application_data":
-            if not (generated_dir / "case_data.json").exists() and not (generated_dir / "case_data.golden.json").exists():
+            if not (generated_dir / "case_data.json").exists():
                 results.append({"file": label, "status": "MISSING", "reason": "generated case_data.json not found"})
                 continue
             exp_case_data = expected_dir / "case_data.golden.json"
@@ -417,8 +415,6 @@ def run_comparison(generated_dir: Path, expected_dir: Path, targets: list[str]) 
             continue
 
         gen_path = generated_dir / gen_name
-        if not gen_path.exists():
-            gen_path = generated_dir / exp_name
         exp_path = expected_dir / exp_name
         if not exp_path.exists():
             exp_path = expected_dir / gen_name
@@ -582,7 +578,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Compare generated output with golden files")
     parser.add_argument("--generated", required=True, type=Path, help="Directory with generated files")
     parser.add_argument("--expected", required=True, type=Path, help="Directory with golden files")
-    parser.add_argument("--targets", default=",".join(_DEFAULT_TARGETS), help="Comma-separated targets: case_data,application_data,review")
+    parser.add_argument("--targets", default=",".join(_DEFAULT_TARGETS), help="Comma-separated targets: case_data,application_data,review (default: case_data)")
     parser.add_argument("--output", type=Path, default=None, help="Write output to file (default: generated/comparison_report.md)")
     parser.add_argument("--json", dest="as_json", action="store_true", help="Output as JSON")
     args = parser.parse_args()

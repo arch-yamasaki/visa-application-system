@@ -32,12 +32,21 @@ visa-app/backend/.venv/bin/python visa-eval/scripts/run_gemini_bytes_eval.py \
 visa-app/backend/.venv/bin/python visa-eval/scripts/compare_with_golden.py \
   --generated <run_output> \
   --expected <fixture_dir>/expected \
-  --targets case_data,application_data
+  --targets case_data
 ```
 
 `<fixture_dir>` は `visa-eval/test_cases_from_raw/<case_id>/<applicant_id>` です。`<run_output>` は `generated/<run_id>` のような実行ごとの出力先を推奨します。
 
-`application_data` は保存済みgoldenを正本にせず、比較時に expected / generated の `case_data` から backend generator で生成します。
+`compare_with_golden.py` の generated 側は `case_data.json` を必須にします。`case_data.golden.json` は expected 側だけのファイルです。
+
+`application_data` は保存済みgoldenを正本にせず、比較時に expected / generated の `case_data` から backend generator で生成します。MVP採点には含めず、generator/mapping確認が必要なときだけ明示的に実行します。
+
+```bash
+visa-app/backend/.venv/bin/python visa-eval/scripts/compare_with_golden.py \
+  --generated <run_output> \
+  --expected <fixture_dir>/expected \
+  --targets application_data
+```
 
 `--dry-run` は必須ではありません。初回、新しいfixture、大きいPDF、送信対象確認が必要な場合だけ、Gemini APIへ送る前の確認として使います。
 
