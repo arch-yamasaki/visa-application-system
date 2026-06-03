@@ -15,6 +15,6 @@
 
 canonical v2移行後は、`expected/case_data.golden.json` を唯一の正本として扱います。`application_data` は `case_data` から比較時に backend generator で生成します。`expected/application_data.golden.json` が残っているケースでも、初期MVPの比較では使いません。`application.*`, top-level `passport.*`, `employment_conditions.*` などの旧pathはgoldenに残しません。
 
-単票の評価をすぐ回す場合は `eval_config/suites/single_smoke.json` を使います。`fixture_family` は `single` です。
+当面はAmit/Kushangの2ケースを優先します。`eval_config/suites/single_smoke.json` は旧13ケース拡張用の参考であり、active fixture が揃うまでは標準スイートとして扱いません。
 
 eval の進め方と比較結果の読み方は `../../visa-app/docs/008_eval_workflow/README.md` を参照してください。`expected` と `expected` の比較は smoke check であり、Gemini抽出精度ではありません。

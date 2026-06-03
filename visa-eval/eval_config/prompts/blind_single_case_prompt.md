@@ -26,7 +26,8 @@
 - `*.golden.json` に一致するすべてのファイル
 - 他のブラインド実行で生成された `generated/` 出力
 - 実案件データを含む `rasens-autofill/extension/application_data.json`
-- 提出済み申請PDF（`submitted_application_pdf`）：これはゴールデンアンサーの参照元であり、AI抽出の入力として使ってはならない
+- RASENS入力済み申請書PDF（`output/rasens_application/`、または `submitted_application_pdf` として扱う正解監査資料）：これはゴールデンアンサーの参照元であり、AI抽出の入力として使ってはならない
+- 物理分割済みの添付資料PDF（`submitted_application_bundle`）：manifestで `use_as_input: true` の場合は入力資料として読んでよい
 
 ## 必須出力ファイル
 

@@ -142,9 +142,11 @@ AIに渡してはいけないファイル:
 - `*.golden.json`
 - 他runの `generated/**`
 - 実案件入りの `rasens-autofill/extension/application_data.json`
-- 提出済み申請書PDF（`submitted_application_pdf`）
+- RASENS入力済み申請書PDF（`output/rasens_application/`、または `submitted_application_pdf` として扱う正解監査資料）
 
-提出済み申請書PDF（`submitted_application_pdf`）はAIブラインド抽出のインプットではない。これはgolden正解データの根拠として使用するものであり、AIには読ませない。`document_manifest.json` で `"use_as_input": false` が設定されており、`prepare_blind_eval_run.py` はこれらをrunディレクトリの `documents/` にコピーしない。
+RASENS入力済み申請書PDFはAIブラインド抽出のインプットではない。これはgolden正解データの根拠として使用するものであり、AIには読ませない。
+
+ただし、同じ元PDFの後半に旅券・証明書などの添付資料が含まれている場合は、事前に物理分割し、添付資料ページだけを `input/submitted_application_attachments/` に置く。その場合の `document_role` は `submitted_application_bundle` とし、`use_as_input: true` にできる。
 
 ## 4. AIが作る出力
 

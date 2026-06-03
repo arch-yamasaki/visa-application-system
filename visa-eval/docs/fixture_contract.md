@@ -6,6 +6,7 @@
 
 - `scenario.json`: ケースID、申請種別、対象在留資格などの評価メタデータ。
 - `input/document_manifest.json`: AIへ渡す候補資料。`use_as_input: true` の資料だけを抽出入力に使う。
+- `output/output_manifest.json`: RASENS入力済み申請書など、golden作成・監査で使う資料。AIやGeminiへは渡さない。
 - `expected/`: 人手確認済みのgolden。AIやGeminiへは渡さない。
 
 ## Generated Outputs
@@ -19,6 +20,10 @@
 
 - Codex blind run: `prepare_blind_eval_run.py` が `expected/` を除外したrunディレクトリを作り、Codexが資料を読んで `case_data`, `field_metadata`, `review`, `run_notes` を作る。
 - Gemini bytes eval: `run_gemini_bytes_eval.py` が指定ファイルをbytesとして読み、GCS/Firestoreを使わず backend の scoped Gemini 抽出pipelineへ渡す。
+
+提出済み申請書PDFに RASENS 出力ページと添付資料ページが混ざる場合は、事前に物理分割します。RASENS 出力ページは `output/rasens_application/`、添付資料ページは必要に応じて `input/submitted_application_attachments/` に置きます。前者は golden 監査用、後者は Gemini 入力用です。
+
+fixtureの作り方は `manual_fixture_creation.md` を参照します。
 
 ### Gemini Bytes Eval
 

@@ -21,6 +21,7 @@
 ### visa-eval/docs/
 
 - [AIブラインド抽出実行手順.md](../visa-eval/docs/AIブラインド抽出実行手順.md): expected/goldenを見せずにAI抽出を実行する手順
+- [manual_fixture_creation.md](../visa-eval/docs/manual_fixture_creation.md): eval fixtureを手動で作る手順。input/output分離とPDF分割方針
 - [単票評価ワークフローまとめ.md](../visa-eval/docs/単票評価ワークフローまとめ.md): 単票fixture、expected、Chrome拡張投入までの全体像
 
 ### rasens-autofill/docs/
@@ -44,7 +45,7 @@
 
 Chrome拡張へ渡す `application_data.json` は生成物。`case_data` と `mappings` から作る投入用データであり、案件管理の正本ではない。
 
-テストデータは `visa-eval/test_cases_from_raw/` に置く。申請人1人=1フォームの単票ケースとして、実PDF・Excelから `case_data`、`review`、`application_data` を作れるか検証する。
+テストデータは `visa-eval/test_cases_from_raw/` に置く。現行はまずAmit/Kushangの2ケースを手動整備し、申請人1人=1フォームの単票ケースとして、実PDF・Excelから `case_data`、`field_metadata`、`review` を作れるか検証する。旧ケース群は `visa-eval/archived/` に退避する。
 
 `visa-eval/` は実案件由来のrestricted評価ワークスペース。git管理するのは `README.md` と `eval_config/suites/*.json` など実PIIを含まない説明・評価定義に限る。
 

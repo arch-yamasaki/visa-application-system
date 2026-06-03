@@ -11,7 +11,8 @@ visa-eval/
     <case_id>/<applicant_id>/
       scenario.json
       input/document_manifest.json
-      expected/         # golden: case_dataが正本。application_data/reviewは旧成果物または参考
+      output/output_manifest.json
+      expected/         # golden: case_dataが正本。golden作成前は空でもよい
       generated/        # AI出力先
   blind_runs_from_test_cases/  # ブラインド実行ワークスペース — git管理外
   eval_config/
@@ -24,16 +25,17 @@ visa-eval/
 
 - `README.md`: 評価ワークスペースの入口、データ機密性ルール
 - `docs/単票評価ワークフローまとめ.md`: 単票fixture → Chrome拡張投入までの全体像
+- `docs/manual_fixture_creation.md`: 手動fixture作成手順。input/output分離、PDF物理分割、manifestの書き方
 - `docs/AIブラインド抽出実行手順.md`: goldenを見せずにAI抽出を実行する手順
 - `docs/fixture_contract.md`: fixture入出力とCodex/Gemini評価フローの契約
 - `../visa-app/docs/008_eval_workflow/README.md`: evalの進め方、golden確認、Gemini bytes eval結果の解釈
-- `eval_config/suites/single_smoke.json`: 13ケースのスモーク評価スイート
+- `eval_config/suites/single_smoke.json`: 旧13ケース拡張用の参考スイート。現行はAmit/Kushangの2ケースを優先
 - `eval_config/prompts/blind_single_case_prompt.md`: AI抽出時のプロンプトテンプレート
 
 ## PII・gitルール
 
 - **git管理する**: `README.md`, `test_cases_from_raw/README.md`, `eval_config/suites/*.json`, `eval_config/prompts/`, `docs/`
-- **git管理しない**: `raw/`, `test_cases_from_raw/<case_id>/`, `blind_runs_from_test_cases/`, `**/generated/`
+- **git管理しない**: `raw/`, `archived/`, `test_cases_from_raw/<case_id>/`, `blind_runs_from_test_cases/`, `**/generated/`
 - 実PIIを含むファイルはローカル管理のみ。バグ報告・チャットではPIIを伏せる。
 
 ## 評価実行の流れ

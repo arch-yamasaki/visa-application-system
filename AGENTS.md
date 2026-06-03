@@ -61,7 +61,7 @@
 - 実務判断をAIだけで確定させない。初期は「OK / 要確認 / 人の判断必須」のようなレビュー前提にする。
 - 入管の制度・運用は変わるため、公式資料や実務家の確認を前提にする。
 - 申請人情報、旅券、在留カード、家族情報、給与、契約情報など個人情報を扱うため、ログ・保存先・共有範囲に注意する。
-- `visa-eval/raw/`, `visa-eval/test_cases_from_raw/<case_id>/` は実PIIを含む restricted test data としてローカル管理し、gitに入れない。
+- `visa-eval/raw/`, `visa-eval/archived/`, `visa-eval/test_cases_from_raw/<case_id>/` は実PIIを含む restricted test data としてローカル管理し、gitに入れない。
 - `rasens-autofill/data/` は設計資産としてgit管理する。ただし一時CSV、PDF/画像キャプチャ、実案件由来データは入れない。
 - まずは技人国で型を固め、周辺業務としてシャローム入力、社会保険・雇用保険、助成金に広げる。
 - QA検証スクリーンショットやテスト入力ファイルは `qa/` 配下に集約する（`qa/screenshots/`, `qa/test-files/`）。git管理外。
