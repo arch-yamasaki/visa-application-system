@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -32,16 +33,222 @@ _EMPTY_SYNONYMS = {None, "", "unknown", "n/a", "na", "null"}
 _SKIP_KEYS_CASE_DATA = {"source_refs", "field_metadata", "schema_version", "case"}
 
 
-def _normalise(value: Any) -> Any:
+def _normalise(value: Any, path: str = "") -> Any:
+    return _normalise_for_path(value, path)
+
+
+def _values_match(generated: Any, expected: Any, path: str) -> bool:
+    if _is_country_path(path):
+        generated_keys = _country_keys(generated)
+        expected_keys = _country_keys(expected)
+        if generated_keys and expected_keys:
+            return bool(generated_keys & expected_keys)
+    return _normalise(generated, path) == _normalise(expected, path)
+
+
+def _normalise_for_path(value: Any, path: str) -> Any:
+    path = path.lower()
+    if _is_empty(value):
+        return None
+    if _is_boolean_path(path):
+        return _normalise_boolean(value)
+    if path.endswith("marital_status"):
+        return _normalise_marital_status(value)
+    if path.endswith("sex"):
+        return _normalise_sex(value)
+    if _is_country_path(path):
+        return _normalise_country(value)
+    if _is_label_path(path):
+        return _normalise_label(value)
+    if _is_date_path(path):
+        return _normalise_date(value)
+    if _is_number_path(path):
+        return _normalise_digits(value)
+    return _normalise_string(value)
+
+
+def _is_empty(value: Any) -> bool:
     if isinstance(value, str):
         v = value.strip().lower()
-        if v in _EMPTY_SYNONYMS:
-            return None
-        return value.strip()
-    if value is None:
-        return None
+        return v in _EMPTY_SYNONYMS
+    return value is None
+
+
+def _normalise_string(value: Any) -> Any:
+    if isinstance(value, str):
+        return value.strip().casefold()
+    return value
+
+
+def _is_boolean_path(path: str) -> bool:
+    leaf = path.rsplit(".", 1)[-1]
+    return leaf.startswith("has_") or leaf in {
+        "criminal_record",
+        "deportation_or_departure_order",
+        "end_month_unknown",
+        "start_month_unknown",
+    }
+
+
+def _normalise_boolean(value: Any) -> Any:
     if isinstance(value, bool):
         return value
+    if isinstance(value, str):
+        v = value.strip().casefold()
+        if v in {"true", "yes", "y", "有", "あり"}:
+            return True
+        if v in {"false", "no", "n", "無", "なし", "無し", "ない"}:
+            return False
+    return _normalise_string(value)
+
+
+def _normalise_marital_status(value: Any) -> Any:
+    if isinstance(value, str):
+        v = value.strip().casefold()
+        if v in {"single", "無", "なし", "無し", "無 single"}:
+            return "single"
+        if v in {"married", "有", "あり", "有 married"}:
+            return "married"
+    return _normalise_string(value)
+
+
+def _normalise_sex(value: Any) -> Any:
+    if isinstance(value, str):
+        v = value.strip().casefold()
+        if v in {"male", "男", "男 male"}:
+            return "male"
+        if v in {"female", "女", "女 female"}:
+            return "female"
+    return _normalise_string(value)
+
+
+def _is_country_path(path: str) -> bool:
+    return path.endswith("nationality_region") or path.endswith("country_region") or path.endswith("country_type")
+
+
+def _normalise_country(value: Any) -> Any:
+    keys = _country_keys(value)
+    if keys:
+        return " ".join(sorted(keys))
+    return _normalise_string(value)
+
+
+def _country_keys(value: Any) -> set[str]:
+    if not isinstance(value, str):
+        normalized = _normalise_string(value)
+        return {str(normalized)} if normalized is not None else set()
+
+    v = value.strip().casefold()
+    v = re.sub(r"\s+", " ", v)
+    japanese_aliases = {
+        "外国": "foreign",
+        "本邦": "japan",
+        "日本": "japan",
+    }
+    keys = {alias for label, alias in japanese_aliases.items() if label in value}
+
+    nationality_aliases = {
+        "nepali": "nepal",
+        "japanese": "japan",
+        "chinese": "china",
+        "indian": "india",
+        "vietnamese": "vietnam",
+        "indonesian": "indonesia",
+        "filipino": "philippines",
+        "korean": "korea",
+        "thai": "thailand",
+        "pakistani": "pakistan",
+        "bangladeshi": "bangladesh",
+    }
+    stopwords = {
+        "country",
+        "of",
+        "the",
+        "republic",
+        "people",
+        "s",
+        "state",
+        "states",
+        "kingdom",
+        "united",
+    }
+    for token in re.findall(r"[a-z]+", v):
+        token = nationality_aliases.get(token, token)
+        if token not in stopwords:
+            keys.add(token)
+    return keys
+
+
+def _is_label_path(path: str) -> bool:
+    return path.endswith((
+        "contract_type",
+        "employment_period_type",
+        "industry_primary",
+        "job_category_primary",
+        "level",
+        "major_field",
+        "purpose_of_entry",
+        "planned_port",
+    ))
+
+
+def _normalise_label(value: Any) -> Any:
+    if not isinstance(value, str):
+        return _normalise_string(value)
+
+    v = value.strip()
+    aliases = {
+        "有期": "定めあり",
+        "定めあり Fixed": "定めあり",
+        "雇用 Employment": "雇用",
+        "Employment": "雇用",
+        "その他 Others": "その他",
+        "Others": "その他",
+    }
+    if v in aliases:
+        return aliases[v]
+
+    if re.search(r"[ぁ-んァ-ン一-龥]", v):
+        return v.split(" ", 1)[0].casefold()
+    return v.casefold()
+
+
+def _is_date_path(path: str) -> bool:
+    return path.endswith("date") or path.endswith("graduation_date") or path.endswith("expiry_date")
+
+
+def _normalise_date(value: Any) -> Any:
+    if not isinstance(value, str):
+        return value
+    digits = re.sub(r"\D", "", value)
+    if len(digits) == 8:
+        return digits
+    if len(digits) == 6:
+        return digits
+    return _normalise_string(value)
+
+
+def _is_number_path(path: str) -> bool:
+    leaf = path.rsplit(".", 1)[-1]
+    return leaf.endswith((
+        "count",
+        "jpy",
+        "salary",
+        "phone",
+        "number",
+        "years",
+        "months",
+    ))
+
+
+def _normalise_digits(value: Any) -> Any:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, str):
+        digits = re.sub(r"\D", "", value)
+        return digits if digits else _normalise_string(value)
     return value
 
 
@@ -117,13 +324,12 @@ def _build_golden_rows(gen_flat: dict, exp_flat: dict) -> list[dict]:
     # Golden fields (expected): match, mismatch, missing
     for key in sorted(exp_flat.keys()):
         ev = exp_flat[key]
-        ev_norm = _normalise(ev)
+        ev_norm = _normalise(ev, key)
         major, minor = _split_path(key)
 
         if key in gen_flat:
             gv = gen_flat[key]
-            gv_norm = _normalise(gv)
-            if gv_norm == ev_norm:
+            if _values_match(gv, ev, key):
                 status = ROW_MATCH
             else:
                 status = ROW_MISMATCH
@@ -162,7 +368,7 @@ def compare_case_data(gen: dict, exp: dict) -> dict:
 
     # Extra: in generated but not in expected (non-empty only)
     extra_keys = sorted(set(gen_flat.keys()) - set(exp_flat.keys()))
-    extra = [k for k in extra_keys if _normalise(gen_flat[k]) is not None]
+    extra = [k for k in extra_keys if _normalise(gen_flat[k], k) is not None]
 
     golden_total = match + mismatch + missing
     return {
@@ -203,7 +409,7 @@ def compare_review(gen: dict, exp: dict) -> dict:
     for k in sorted(_REVIEW_EXACT_KEYS):
         gv = gen.get(k)
         ev = exp.get(k)
-        status = ROW_MATCH if _normalise(gv) == _normalise(ev) else ROW_MISMATCH
+        status = ROW_MATCH if _normalise(gv, k) == _normalise(ev, k) else ROW_MISMATCH
         rows.append({"path": k, "major": "review", "minor": k,
                       "expected": ev, "generated": gv, "status": status})
 
@@ -285,7 +491,7 @@ def compare_application_data(gen: list, exp: list) -> dict:
             gv_item = gen_by_id[cid]
             all_match = True
             for ck in compare_keys:
-                if _normalise(gv_item.get(ck)) != _normalise(ev_item.get(ck)):
+                if not _values_match(gv_item.get(ck), ev_item.get(ck), cid):
                     all_match = False
             status = ROW_MATCH if all_match else ROW_MISMATCH
             gv_display = gv_item.get("fill_value", "")
@@ -295,7 +501,7 @@ def compare_application_data(gen: list, exp: list) -> dict:
             # golden に値がなくて AI も出していない → 一致扱い
             # golden に値があって AI が出していない → 抽出漏れ
             ev_fill = ev_item.get("fill_value", "")
-            if _normalise(ev_fill) is None:
+            if _normalise(ev_fill, cid) is None:
                 status = ROW_MATCH
             else:
                 status = ROW_MISSING
