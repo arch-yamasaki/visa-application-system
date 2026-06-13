@@ -11,10 +11,10 @@
 
 ## Generated Outputs
 
-- `generated/case_data.json`: value-only canonical v2 case data。
-- `generated/field_metadata.json`: canonical v2 dot pathごとの根拠情報。`case_data.json` には入れない。
-- `generated/review.json`: 欠損、矛盾、不確実、人手確認事項。
-- `generated/application_data.json`: `case_data.json` から backend generator が生成するフォーム投入用JSON。AIが手書きしない。
+- `eval_runs/<run_id>/<case_id>/case_data.json`: value-only canonical v2 case data。
+- `eval_runs/<run_id>/<case_id>/field_metadata.json`: canonical v2 dot pathごとの根拠情報。`case_data.json` には入れない。
+- `eval_runs/<run_id>/<case_id>/review.json`: 欠損、矛盾、不確実、人手確認事項。
+- `eval_runs/<run_id>/<case_id>/application_data.json`: `case_data.json` から backend generator が生成するフォーム投入用JSON。AIが手書きしない。
 
 ## Execution Flows
 
@@ -32,7 +32,7 @@ fixtureの作り方は `manual_fixture_creation.md` を参照します。
 ```bash
 visa-app/backend/.venv/bin/python visa-eval/scripts/run_gemini_bytes_eval.py \
   <fixture_dir> \
-  --output-dir <run_output>
+  --run-id <run_id>
 
 visa-app/backend/.venv/bin/python visa-eval/scripts/compare_with_golden.py \
   --generated <run_output> \
@@ -40,7 +40,7 @@ visa-app/backend/.venv/bin/python visa-eval/scripts/compare_with_golden.py \
   --targets case_data
 ```
 
-`<fixture_dir>` は `visa-eval/test_cases_from_raw/<case_id>/<applicant_id>` です。`<run_output>` は `generated/<run_id>` のような実行ごとの出力先を推奨します。
+`<fixture_dir>` は `visa-eval/test_cases_from_raw/<case_id>/<applicant_id>` です。`<run_output>` は通常 `visa-eval/eval_runs/<run_id>/<case_id>` です。`--output-dir` を明示した場合だけ任意の出力先に書きます。
 
 `compare_with_golden.py` の generated 側は `case_data.json` を必須にします。`case_data.golden.json` は expected 側だけのファイルです。
 
@@ -60,6 +60,12 @@ visa-app/backend/.venv/bin/python visa-eval/scripts/run_gemini_bytes_eval.py <fi
 ```
 
 `field_metadata` は現時点では主に根拠レビュー用です。定量比較に含める場合は `compare_with_golden.py` に比較ロジックを追加します。
+
+比較器自体の軽い確認は、pytestではなく通常のPythonスクリプトで実行します。
+
+```bash
+visa-app/backend/.venv/bin/python visa-eval/scripts/check_compare_with_golden.py
+```
 
 全体方針と実測結果の解釈は `../../visa-app/docs/008_eval_workflow/README.md` を参照します。
 

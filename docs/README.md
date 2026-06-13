@@ -45,7 +45,7 @@
 
 Chrome拡張へ渡す `application_data.json` は生成物。`case_data` と `mappings` から作る投入用データであり、案件管理の正本ではない。
 
-テストデータは `visa-eval/test_cases_from_raw/` に置く。現行はまずAmit/Kushangの2ケースを手動整備し、申請人1人=1フォームの単票ケースとして、実PDF・Excelから `case_data`、`field_metadata`、`review` を作れるか検証する。旧ケース群は `visa-eval/archived/` に退避する。
+テストデータは `visa-eval/test_cases_from_raw/` に置く。現行はまずAmit/Kushangの2ケースを手動整備し、申請人1人=1フォームの単票ケースとして、実PDF・Excelから `case_data`、`field_metadata`、`review` を作れるか検証する。実行結果は `visa-eval/eval_runs/` に分離する。旧ケース群は `visa-eval/archived/` に退避する。
 
 `visa-eval/` は実案件由来のrestricted評価ワークスペース。git管理するのは `README.md` と `eval_config/suites/*.json` など実PIIを含まない説明・評価定義に限る。
 

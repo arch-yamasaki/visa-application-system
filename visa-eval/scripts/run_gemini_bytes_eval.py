@@ -7,12 +7,15 @@ import argparse
 import json
 import sys
 import uuid
+import re
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
 BACKEND = ROOT / "visa-app" / "backend"
+EVAL_RUNS = ROOT / "visa-eval" / "eval_runs"
 INLINE_MIB = 1024 * 1024
 
 sys.path.insert(0, str(BACKEND))
@@ -34,17 +37,21 @@ def write_json(path: Path, data: Any) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
 
 
-def fixture_paths(work_dir: Path) -> tuple[Path, Path, Path]:
+def slug(value: str) -> str:
+    return re.sub(r"[^a-zA-Z0-9_]+", "_", value).strip("_")
+
+
+def fixture_paths(work_dir: Path) -> tuple[Path, Path, bool]:
     if (work_dir / "document_manifest.blind.json").exists():
         return (
             work_dir / "scenario.json",
             work_dir / "document_manifest.blind.json",
-            work_dir / "generated",
+            True,
         )
     return (
         work_dir / "scenario.json",
         work_dir / "input" / "document_manifest.json",
-        work_dir / "generated",
+        False,
     )
 
 
@@ -97,15 +104,33 @@ def case_meta(scenario: dict[str, Any], manifest: dict[str, Any]) -> dict[str, s
     }
 
 
+def default_output_dir(
+    work_dir: Path,
+    scenario: dict[str, Any],
+    manifest: dict[str, Any],
+    run_id: str | None,
+    is_blind_run: bool,
+) -> Path:
+    if is_blind_run:
+        return work_dir / "generated"
+    case_id = scenario.get("case_id") or manifest.get("case_id") or work_dir.name
+    run_name = (
+        slug(run_id)
+        if run_id
+        else f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{slug(case_id)}"
+    )
+    return EVAL_RUNS / run_name / slug(case_id)
+
+
 def run(args: argparse.Namespace) -> None:
     work_dir = args.fixture_dir.resolve()
-    scenario_path, manifest_path, default_output_dir = fixture_paths(work_dir)
+    scenario_path, manifest_path, is_blind_run = fixture_paths(work_dir)
     scenario = read_json(scenario_path)
     manifest = read_json(manifest_path)
     documents = input_documents(manifest)
     loaded_documents = load_documents(work_dir, documents)
     prepared = prepare_documents(loaded_documents)
-    output_dir = (args.output_dir or default_output_dir).resolve()
+    output_dir = (args.output_dir or default_output_dir(work_dir, scenario, manifest, args.run_id, is_blind_run)).resolve()
 
     print(
         "loaded documents=%d pdfs=%d text_docs=%d images=%d inline_mib=%.2f"
@@ -162,6 +187,10 @@ def main() -> None:
         help="Path to a test case fixture or blind run directory",
     )
     parser.add_argument("--output-dir", type=Path)
+    parser.add_argument(
+        "--run-id",
+        help="Eval run directory name under visa-eval/eval_runs/. Ignored when --output-dir is set.",
+    )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--max-inline-mib", type=int, default=20)
     run(parser.parse_args())

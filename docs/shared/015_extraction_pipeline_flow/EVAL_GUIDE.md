@@ -2,7 +2,9 @@
 
 バックエンドのみで抽出品質を評価する方法。
 
-> 現在のeval方針の正本は `../../../visa-app/docs/008_eval_workflow/README.md` です。この文書は将来の pytest eval 構想メモとして扱います。
+> 現在のeval方針の正本は `../../../visa-app/docs/008_eval_workflow/README.md` です。
+> この文書は非採用の pytest eval 構想メモとして残しているだけです。
+> 現行の visa-eval は、pytest ではなく `visa-eval/scripts/*.py` を project 内 Python で直接実行します。
 
 ## 概要
 

@@ -2,9 +2,9 @@
 
 ## 目的
 
-この手順は、Codexに実PDF・Excel・Docx等を読ませて `generated/case_data.json`、`generated/field_metadata.json`、`generated/review.json` を作らせるためのものです。
+この手順は、Codexに実PDF・Excel・Docx等を読ませて `visa-eval/blind_runs_from_test_cases/<run_id>/generated/` 配下に `case_data.json`、`field_metadata.json`、`review.json` を作らせるためのものです。
 
-Geminiを評価する場合は、この自由操作型の手順ではなく `visa-eval/scripts/run_gemini_bytes_eval.py` を使います。Gemini bytes eval は指定ファイルだけを backend の scoped Gemini 抽出pipelineへ渡すため、GCSやCloud Run Jobは不要です。
+Geminiを評価する場合は、この自由操作型の手順ではなく `visa-eval/scripts/run_gemini_bytes_eval.py` を使います。Gemini bytes eval は指定ファイルだけを backend の scoped Gemini 抽出pipelineへ渡すため、GCSやCloud Run Jobは不要です。Gemini bytes eval の実行結果は `visa-eval/eval_runs/<run_id>/<case_id>/` に出します。
 
 最重要ルールはこれです。
 
@@ -15,6 +15,7 @@ AIに expected/*.golden.json を絶対に見せない。
 goldenを見てしまうと、AIが資料から抽出できたのか、正解を写しただけなのか分からなくなります。そのため、AIにはfixture本体ではなく、`expected/` を含まない「ブラインド実行ディレクトリ」を渡します。
 
 この運用では、プロンプトの禁止文は補助です。主対策は、AIの作業ディレクトリから `expected/` と `*.golden.json` を物理的に外すことです。
+このドキュメント中の `generated/` は、すべて `blind_runs_from_test_cases/<run_id>/generated/` を指します。fixture配下には置きません。
 
 ## 全体フロー
 
@@ -140,7 +141,7 @@ AIに渡してはいけないファイル:
 - fixture本体の `scenario.json`
 - `visa-eval/test_cases_from_raw/**/expected/**`
 - `*.golden.json`
-- 他runの `generated/**`
+- 他runの `blind_runs_from_test_cases/**/generated/**`
 - 実案件入りの `rasens-autofill/extension/application_data.json`
 - RASENS入力済み申請書PDF（`output/rasens_application/`、または `submitted_application_pdf` として扱う正解監査資料）
 
@@ -229,8 +230,8 @@ AI実行中:
 
 AI実行後:
 
-- `generated/` をrestricted dataとして扱う。
-- `generated/` をgitに入れない。
+- `<run_dir>/generated/` をrestricted dataとして扱う。
+- `<run_dir>/generated/` をgitに入れない。
 - Chrome確認に使ったら `chrome.storage.local` を削除する。
 - bug報告では実値をマスクする。
 

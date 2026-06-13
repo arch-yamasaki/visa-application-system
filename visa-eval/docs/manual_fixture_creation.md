@@ -28,7 +28,6 @@ visa-eval/test_cases_from_raw/<case_id>/<applicant_id>/
     rasens_application/
       ...RASENS入力済み申請書PDF...
   expected/
-  generated/
 ```
 
 ## 申請書PDFを分ける理由
@@ -115,3 +114,5 @@ fixture作成では、`expected/*.golden.json` を無理に作りません。
 
 golden 作成では、`output/rasens_application/` と入力資料を見ながら、人が `expected/case_data.golden.json` を作ります。
 詳しい進め方は `../../visa-app/docs/008_eval_workflow/README.md` を参照します。
+
+Gemini 実行結果は fixture の中に置きません。`visa-eval/eval_runs/<run_id>/<case_id>/` に出します。

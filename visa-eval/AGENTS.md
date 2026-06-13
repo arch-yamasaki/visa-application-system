@@ -13,7 +13,7 @@ visa-eval/
       input/document_manifest.json
       output/output_manifest.json
       expected/         # golden: case_dataが正本。golden作成前は空でもよい
-      generated/        # AI出力先
+  eval_runs/            # Gemini bytes eval の実行結果 — git管理外 (README.mdのみ管理)
   blind_runs_from_test_cases/  # ブラインド実行ワークスペース — git管理外
   eval_config/
     suites/            # 評価スイート定義 (git管理)
@@ -34,22 +34,22 @@ visa-eval/
 
 ## PII・gitルール
 
-- **git管理する**: `README.md`, `test_cases_from_raw/README.md`, `eval_config/suites/*.json`, `eval_config/prompts/`, `docs/`
-- **git管理しない**: `raw/`, `archived/`, `test_cases_from_raw/<case_id>/`, `blind_runs_from_test_cases/`, `**/generated/`
+- **git管理する**: `README.md`, `test_cases_from_raw/README.md`, `eval_runs/README.md`, `eval_config/suites/*.json`, `eval_config/prompts/`, `docs/`
+- **git管理しない**: `raw/`, `archived/`, `test_cases_from_raw/<case_id>/`, `eval_runs/<run_id>/`, `blind_runs_from_test_cases/`, `blind_runs_from_test_cases/**/generated/`
 - 実PIIを含むファイルはローカル管理のみ。バグ報告・チャットではPIIを伏せる。
 
 ## 評価実行の流れ
 
 1. `visa-eval/scripts/prepare_blind_eval_run.py` でCodex用ブラインド実行ディレクトリを作成
 2. Codex/AIエージェントで `blind_runs_from_test_cases/<run_id>/` 内の資料から `case_data.json`, `field_metadata.json`, `review.json` を抽出
-3. `visa-eval/scripts/build_application_data.py` で `application_data.json` を決定論的に生成
-4. `expected/*.golden.json` と比較して精度を検証
+3. `expected/case_data.golden.json` と比較して精度を検証
+4. 必要な場合だけ `application_data` を補助確認する
 
 Geminiを評価する場合は、自由操作させず `visa-eval/scripts/run_gemini_bytes_eval.py` で指定ファイルだけをbytesとして backend の scoped Gemini 抽出pipelineへ渡す。GCS/Firestoreは不要。通常フローは次の2コマンド。`application_data` は比較時に `case_data` から生成する。
 
 ```bash
-visa-app/backend/.venv/bin/python visa-eval/scripts/run_gemini_bytes_eval.py <fixture_dir> --output-dir <run_output>
-visa-app/backend/.venv/bin/python visa-eval/scripts/compare_with_golden.py --generated <run_output> --expected <fixture_dir>/expected --targets case_data,application_data
+visa-app/backend/.venv/bin/python visa-eval/scripts/run_gemini_bytes_eval.py <fixture_dir> --run-id <run_id>
+visa-app/backend/.venv/bin/python visa-eval/scripts/compare_with_golden.py --generated visa-eval/eval_runs/<run_id>/<case_id> --expected <fixture_dir>/expected --targets case_data
 ```
 
 ### codex exec によるローカル実行例
