@@ -58,9 +58,11 @@ DOCXはPDFのような厳密座標ではなく、レビューしやすい block 
 
 ## 推奨
 
-最初は Gemini に paragraph/table index を返させない。backend 側で `text_quote` が一意に見つかる場合だけ block anchor を補完する。
+最初は Gemini に paragraph/table index を返させない。backend 側で `field_path`、抽出値、paragraph/table構造、見出し、表ラベルを使って block anchor を補完する。
 
 理由は、Gemini に DOM/preview 上の index を正確に返させるには、preview側の構造を prompt に渡す必要があり、schema と prompt が重くなるため。
+
+`text_quote` は候補検索語として残すが、`text_quote` 一意一致だけで確定しない。複数候補や文書構造と矛盾する候補は anchor なしにする。
 
 ## 受け入れ条件
 

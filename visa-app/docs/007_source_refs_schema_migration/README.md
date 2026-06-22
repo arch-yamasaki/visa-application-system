@@ -1,10 +1,25 @@
-# Source Ref / Bbox Improvement Roadmap
+# Source Ref / Bbox / Anchor Roadmap
 
 ## 目的
 
-backend の証跡情報と bbox / highlight の精度を上げるための大枠作業計画。
+backend の証跡情報と bbox / highlight / anchor の精度を上げるための設計置き場。
 
 初期ゴールは、AI抽出結果を人間がレビューしやすい状態にすること。最初から厳密な精度スコアを作るのではなく、証跡構造、PDF bbox、Office anchor、scope分割を順に整理する。
+
+このディレクトリは、抽出値そのものよりも「その値が原本のどこにあるか」を扱う。
+
+```text
+AI抽出値
+  |
+  `-- source_ref
+        |
+        +-- document_id
+        +-- page
+        +-- text_quote
+        +-- PDF bbox
+        +-- XLSX sheet/cell
+        `-- DOCX paragraph/table cell
+```
 
 ## 基本方針
 
@@ -14,22 +29,53 @@ backend の証跡情報と bbox / highlight の精度を上げるための大枠
 - document routing は後回し。先に scope 分割と schema / prompt / merge 境界を安定させる。
 - bbox 失敗は抽出失敗にしない。レビュー画面で確認できる状態を優先する。
 - retry loop は最後に入れる。人手編集を自動上書きしない。
+- anchor resolver では `text_quote` 単独で場所を決めない。`field_path`、抽出値、文書構造、周辺ラベルも使う。
 
-## 優先順位
+## 読む順番
 
-| 順番 | 計画 | 詳細 |
+まずは次の順に読む。
+
+| 順番 | doc | 目的 |
 |---:|---|---|
-| 1 | `source_ref` dict 化 | [01_source_ref_dict.md](01_source_ref_dict.md) |
-| 2 | PDF bbox 改善 | [02_pdf_bbox.md](02_pdf_bbox.md) |
-| 3 | scope 別 Gemini 入力 | [03_scoped_gemini_input.md](03_scoped_gemini_input.md) |
-| 4 | XLSX cell anchor | [04_xlsx_cell_anchor.md](04_xlsx_cell_anchor.md) |
-| 5 | DOCX block anchor | [05_docx_block_anchor.md](05_docx_block_anchor.md) |
-| 6 | Eval workflow | [../008_eval_workflow/](../008_eval_workflow/) |
-| 7 | document routing 実装 | [07_document_routing.md](07_document_routing.md) |
-| 8 | bbox retry / scope retry loop | [08_retry_loop.md](08_retry_loop.md) |
-| 9 | 取次者 autofill bug | [09_intermediary_autofill_bug.md](09_intermediary_autofill_bug.md) |
-| 10 | Eval golden canonical v2 移行 | [../008_eval_workflow/](../008_eval_workflow/) |
-| 11 | Golden data 確認ワークフロー | [../008_eval_workflow/](../008_eval_workflow/) |
+| 1 | [09_bbox_display_current_behavior.md](09_bbox_display_current_behavior.md) | 現在、証跡クリック時に何が光るかを理解する |
+| 2 | [01_source_ref_dict.md](01_source_ref_dict.md) | `source_ref` の保存形式を理解する |
+| 3 | [02_pdf_bbox.md](02_pdf_bbox.md) | PDF bbox の付与と fallback を理解する |
+| 4 | [04_xlsx_cell_anchor.md](04_xlsx_cell_anchor.md) | XLSX cell anchor の実装計画を見る |
+| 5 | [05_docx_block_anchor.md](05_docx_block_anchor.md) | DOCX block/cell anchor の実装計画を見る |
+| 6 | [03_scoped_gemini_input.md](03_scoped_gemini_input.md) | scope別抽出の前提を見る |
+| 7 | [07_document_routing.md](07_document_routing.md) | scope別に渡す書類を絞る設計を見る |
+| 8 | [08_retry_loop.md](08_retry_loop.md) | bbox/scope retry と人手編集保護を見る |
+
+## docs分類
+
+source_ref / bbox / anchor の現役設計だけをこの階層に残す。
+
+### 現役設計
+
+| doc | 位置づけ |
+|---|---|
+| [01_source_ref_dict.md](01_source_ref_dict.md) | Gemini raw response を `{ value, source_ref }` にする設計。実装済み |
+| [02_pdf_bbox.md](02_pdf_bbox.md) | PDF source_ref に bbox を付ける設計。実装済み部分あり |
+| [03_scoped_gemini_input.md](03_scoped_gemini_input.md) | scope別 Gemini 入力の設計。実装済み部分あり |
+| [04_xlsx_cell_anchor.md](04_xlsx_cell_anchor.md) | XLSXを sheet/cell 単位で確認する計画 |
+| [05_docx_block_anchor.md](05_docx_block_anchor.md) | DOCXを paragraph/table cell 単位で確認する計画 |
+| [07_document_routing.md](07_document_routing.md) | scopeごとに必要書類を渡すrouting計画 |
+| [08_retry_loop.md](08_retry_loop.md) | bbox retry / scope retry の計画 |
+| [09_bbox_display_current_behavior.md](09_bbox_display_current_behavior.md) | 現状調査と anchor resolver 方針更新 |
+
+### 移動済み
+
+Eval 系は [../008_eval_workflow/](../008_eval_workflow/) に移動済み。このディレクトリには移動済みstubを残さない。
+
+## 将来の整理候補
+
+次に整理するなら、次の順が安全。
+
+| 優先 | 整理案 | 理由 |
+|---:|---|---|
+| 1 | `09_bbox_display_current_behavior.md` を「現状整理」と「anchor resolver方針」に分ける | 985行あり、読む負荷が高い |
+| 2 | `04_xlsx_cell_anchor.md` と `05_docx_block_anchor.md` を `Office anchor` として統合する | 実装者が同じ文脈で読むため |
+| 3 | `03_scoped_gemini_input.md` と `07_document_routing.md` を統合する | scope入力とroutingは実装境界が近い |
 
 ## 現状の重要ポイント
 
@@ -87,7 +133,15 @@ backend の証跡情報と bbox / highlight の精度を上げるための大枠
 
 01〜03は実装済み。実データ1件で Gemini schema error、PDF bbox、scope別抽出時間を確認した。
 
-その後、04 XLSX cell anchor に進む。
+次の実装検討は anchor resolver / Office anchor。
+
+特に重要な方針は次。
+
+- `text_quote` 単独で場所を決めない。
+- XLSX は最終的に `sheet_name + cell` へ解決する。
+- DOCX は最終的に `paragraph_index` または `table_index + row + col` へ解決する。
+- PDF は bbox / word bbox / Gemini bbox を使うが、bbox失敗で抽出失敗にしない。
+- 複数候補を最初の1件に自動確定しない。
 
 ## QA状況
 
@@ -99,9 +153,7 @@ backend の証跡情報と bbox / highlight の精度を上げるための大枠
 - 実データ1件での schema error / timeout / bbox確認
 - local frontend の案件一覧・レビュー画面・PDF bbox表示確認
 - `visa-app/frontend` で `npm run build`
-- 詳細: [QA_REAL_DATA_2026-05-31.md](QA_REAL_DATA_2026-05-31.md)
 
 未実行:
 
 - Cloud Run deploy後の動作確認
-- Chrome拡張の取次者入力バグ修正。詳細は [09_intermediary_autofill_bug.md](09_intermediary_autofill_bug.md)

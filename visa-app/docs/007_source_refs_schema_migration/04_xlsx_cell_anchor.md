@@ -45,13 +45,15 @@ XLSXは backend でテキスト化され、preview HTML では表として表示
 
 ## 推奨
 
-最初は backend で quote から cell を解決する方がよい。Gemini に cell address まで正確に出させると、promptとschemaが重くなる。
+最初は Gemini に cell address を直接返させず、backend resolver で cell を解決する方がよい。Gemini に cell address まで正確に出させると、promptとschemaが重くなる。
+
+ただし、`text_quote` だけで cell を決める設計にはしない。`09_bbox_display_current_behavior.md` の方針更新に合わせ、`field_path`、抽出値、sheet/cell構造、周辺ラベルも使って候補を絞る。
 
 処理順は次がよい。
 
 1. XLSX preview HTML に cell anchor を埋める
-2. backend 側で一意に一致する quote だけ `xlsx_cell` anchor を補完する
-3. 一意に決まらない場合は従来の `text_quote` fallback に落とす
+2. backend 側で `field_path` / 抽出値 / sheet / 周辺ラベルから `xlsx_cell` anchor を補完する
+3. 一意に決まらない場合は anchor を付けない。従来の `text_quote` fallback は補助表示として扱う
 4. それでも足りない場合だけ Gemini に cell情報を出させる案を検討する
 
 ## 受け入れ条件

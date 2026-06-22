@@ -150,4 +150,3 @@ backend 保存時はこの空 source_ref を `field_metadata.source_refs[]` に�
 - Firestore保存後、`case_data` は value-only のまま。
 - 証跡は `field_metadata.*.source_refs[]` に保存された。
 - 旧 `source` 文字列互換、旧 raw `source_refs[]` 互換、旧 `field_metadata` 別出しレスポンス互換を削除し、unit testを通過。
-- 詳細: [QA_REAL_DATA_2026-05-31.md](QA_REAL_DATA_2026-05-31.md)

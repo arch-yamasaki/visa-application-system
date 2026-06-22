@@ -193,7 +193,6 @@ scope分割後も、document routing は後工程。
 - failed scopes は0件。
 - local frontend の案件一覧・レビュー画面で抽出結果を確認。
 - `visa-app/frontend` で `npm run build` が通過。
-- 詳細: [QA_REAL_DATA_2026-05-31.md](QA_REAL_DATA_2026-05-31.md)
 
 ## 残課題
 

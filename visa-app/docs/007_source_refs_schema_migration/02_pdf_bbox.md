@@ -125,4 +125,3 @@ bbox がない場合だけ `text_quote` fallback を使う。ただし、fallbac
 - PDF source_ref に対して bbox locator が実行された。
 - `source_refs` 57件中、bbox付きは24件。
 - レビュー画面でPDF由来フィールドをクリックし、PDFタブ切り替えとbboxハイライト表示を確認した。
-- 詳細: [QA_REAL_DATA_2026-05-31.md](QA_REAL_DATA_2026-05-31.md)

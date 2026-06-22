@@ -2,6 +2,33 @@
 
 Status: 調査メモ
 
+- [このメモの目的](#このメモの目的)
+- [まず全体像](#まず全体像)
+- [現状: PDF](#現状-pdf)
+  - [PDF の bbox はどう付くか](#pdf-の-bbox-はどう付くか)
+  - [PDF でも bbox が付く条件](#pdf-でも-bbox-が付く条件)
+  - [PDF でも bbox が付かない主なケース](#pdf-でも-bbox-が付かない主なケース)
+  - [PDF bbox 条件を単純化する提案](#pdf-bbox-条件を単純化する提案)
+  - [PDF の表示分岐](#pdf-の表示分岐)
+  - [PDFにテキストがある場合](#pdfにテキストがある場合)
+- [現状: DOCX](#現状-docx)
+- [現状: XLSX](#現状-xlsx)
+- [現状まとめ](#現状まとめ)
+  - [形式別まとめ](#形式別まとめ)
+  - [表示される / 表示されないを決める分岐](#表示される--表示されないを決める分岐)
+  - [bbox が保存されていても表示されないケース](#bbox-が保存されていても表示されないケース)
+  - [現状の重要ポイント](#現状の重要ポイント)
+- [anchor resolver 方針](#anchor-resolver-方針)
+  - [anchor resolver につながる論点](#anchor-resolver-につながる論点)
+  - [方針更新: anchor resolver では text\_quote 単独に依存しない](#方針更新-anchor-resolver-では-text_quote-単独に依存しない)
+  - [text\_quote 検索の位置づけ](#text_quote-検索の位置づけ)
+  - [anchor resolver は text\_quote だけで解決しない](#anchor-resolver-は-text_quote-だけで解決しない)
+  - [精度改善方針の優先順位](#精度改善方針の優先順位)
+  - [推奨する場所特定の優先順位](#推奨する場所特定の優先順位)
+  - [MVPでの現実的な絞り込みルール](#mvpでの現実的な絞り込みルール)
+  - [UIでの見せ方](#uiでの見せ方)
+
+
 ## このメモの目的
 
 レビュー画面で「証跡をクリックしたときに、原本のどこが光るのか」を整理する。
@@ -94,7 +121,11 @@ DocumentViewer
 - `frontend/src/store/viewerStore.ts`
 - `frontend/src/components/viewer/DocumentViewer.tsx`
 
-## PDF の bbox はどう付くか
+## 現状: PDF
+
+PDF は、現在の仕組みで唯一 `bbox` が後付けされる可能性がある形式。
+
+### PDF の bbox はどう付くか
 
 PDF の bbox は、Gemini の通常抽出結果に最初から入っているわけではない。
 
@@ -148,7 +179,7 @@ field_metadata.source_refs[].bbox に後付けする
 - `backend/extractors/bbox_locator.py`
 - `backend/extractors/gemini.py`
 
-## PDF でも bbox が付く条件
+### PDF でも bbox が付く条件
 
 PDF で bbox が付くには、少なくとも次の条件を満たす必要がある。
 
@@ -209,7 +240,7 @@ BBOX_TARGET_FIELDS に入っている？
 
 つまり、PDFで正しい `source_ref` があっても、その項目が `BBOX_TARGET_FIELDS` に入っていなければ bbox は付かない。
 
-## PDF でも bbox が付かない主なケース
+### PDF でも bbox が付かない主なケース
 
 ```text
 PDFなのにbboxがない
@@ -239,7 +270,71 @@ PDFなのにbboxがない
 
 `bbox` がなくても、`document_id`, `page`, `text_quote` があれば、フロント側で文字検索ハイライトに落ちる可能性がある。
 
-## PDF の表示分岐
+### PDF bbox 条件を単純化する提案
+
+ここは実装変更ではなく、anchor resolver を入れる時の設計提案。
+
+現状の分かりにくさは、次の3つが同じ条件リストに混ざっていること。
+
+```text
+1. 証跡として最低限どの文書・ページを指せるか
+2. PDF上で正確な場所を解決できるか
+3. 高コストな Gemini bbox を呼ぶ対象か
+```
+
+特に `BBOX_TARGET_FIELDS` は分かりにくい。今は「bbox を付ける対象フィールド一覧」に見えるが、本来は「Gemini に画像座標を聞く高コスト処理の対象」を絞るための allowlist と考えた方がよい。
+
+単純化するなら、判断を2段に分ける。
+
+```text
+1. PDF anchor を解決できる最低条件
+   |
+   |-- document_id がある
+   |-- 対象文書がPDFである
+   |-- page がある
+   |-- text_quote / locator_text / 抽出値のどれかがある
+   `-- PDF index を作れる
+
+2. どの resolver を使うか
+   |
+   |-- テキスト層ありPDF -> PDF word bbox resolver
+   |-- スキャンPDF      -> OCR / Gemini bbox resolver
+   `-- 難しい主要項目   -> Gemini bbox fallback
+```
+
+非エンジニア向けには、次の説明で済む形にする。
+
+```text
+PDFならまず場所特定を試す。
+文字が取れるPDFは、PDF内の文字位置から探す。
+スキャンPDFや難しい項目だけ、画像を見て探す処理に回す。
+候補が複数あるなら、無理に光らせない。
+```
+
+この場合、`BBOX_TARGET_FIELDS` の意味は変えた方がよい。
+
+| 現在 | 提案 |
+|---|---|
+| bbox を付ける対象フィールド一覧 | Gemini bbox fallback を呼ぶ対象フィールド一覧 |
+| 対象外だとPDFでもbbox候補にならない | 対象外でもPDF text-layer bbox は試せる |
+| 「場所特定」と「高コストLLM対象」が混ざる | 「場所特定」と「LLM fallback」を分ける |
+
+名前も、将来的には `BBOX_TARGET_FIELDS` より `PDF_GEMINI_BBOX_FIELDS` の方が意味が明確。
+
+状態も明示すると、さらに分かりやすい。
+
+| 状態 | 意味 |
+|---|---|
+| `resolved` | 1箇所に特定できた |
+| `ambiguous` | 候補が複数あるので自動確定しない |
+| `not_found` | 候補が見つからない |
+| `skipped_unsupported` | 形式やデータ不足で試せない |
+
+この方針のメリットは、PDF bbox の説明が「条件を全部満たしたら付く」ではなく、「PDFならまず resolver に通し、解決できた時だけ anchor を保存する」になること。
+
+デメリットは、PDF text-layer 用の index / resolver が必要になること。今の Gemini bbox 後付けだけより実装範囲は増える。ただし、責務はかなり整理される。
+
+### PDF の表示分岐
 
 PDFビューア側の表示は、次の優先順位。
 
@@ -278,7 +373,7 @@ sourceRef.bbox がある？
 | bbox表示 | `source_ref.bbox` | スキャンPDFでも座標があれば表示できる | bboxが付いていないと使えない |
 | text検索表示 | `text_quote` | テキスト層があるPDFなら軽く表示できる | スキャン画像PDFでは検索できないことが多い |
 
-## PDFにテキストがある場合
+### PDFにテキストがある場合
 
 PDFには大きく2種類ある。
 
@@ -323,7 +418,7 @@ bbox がなければ表示できない
 
 注意点として、バックエンドには `pdf_text.py` があり、PyMuPDFでPDF内の単語とbboxを読む部品は存在する。ただし、現在の PDF direct + bbox 後付けの本線では、PDFテキスト層から直接 bbox を作る流れではなく、PDFページを画像化して Gemini bbox に聞く流れになっている。
 
-## DOCX の場合
+## 現状: DOCX
 
 DOCXには、現在 bbox は付かない。
 
@@ -418,7 +513,7 @@ source_ref.text_quote = "AMIT TAMANG"
 画面上で最初に見つかったものが光る
 ```
 
-## XLSX の場合
+## 現状: XLSX
 
 XLSXにも、現在 bbox は付かない。
 
@@ -530,7 +625,9 @@ source_ref には sheet_name がない
 どのシートの 260000 か分からない
 ```
 
-## 形式別まとめ
+## 現状まとめ
+
+### 形式別まとめ
 
 | 形式 | bboxは付くか | 表示の第一優先 | fallback | 主な弱点 |
 |---|---:|---|---|---|
@@ -541,7 +638,7 @@ source_ref には sheet_name がない
 | XLSX | 付かない | text_quote検索 | なし | セル番地・シート名を持たないので同じ値に弱い |
 | 画像 | 付かない | 画像表示のみ | なし | 現状は証跡ハイライト対象外 |
 
-## 表示される / 表示されないを決める分岐
+### 表示される / 表示されないを決める分岐
 
 ```text
 証跡クリック
@@ -593,7 +690,7 @@ source_refs[0] がある？
             画像表示のみ。ハイライトなし
 ```
 
-## bbox が保存されていても表示されないケース
+### bbox が保存されていても表示されないケース
 
 保存済みの `bbox` があっても、フロントで表示されないことがある。
 
@@ -628,7 +725,7 @@ source_refs
 bboxありの [1] は表示に使われない
 ```
 
-## 現状の重要ポイント
+### 現状の重要ポイント
 
 1. bbox は PDF にだけ後付けされる。
 2. PDFでも全項目にbboxが付くわけではない。
@@ -639,7 +736,11 @@ bboxありの [1] は表示に使われない
 7. DOCX / XLSX は段落番号・表セル・シート名・セル番地を証跡として持っていない。
 8. 同じ文字列が複数ある文書では、現在の `text_quote` 検索は誤った場所を光らせる可能性がある。
 
-## anchor resolver につながる論点
+## anchor resolver 方針
+
+ここから下は、現状整理を踏まえた改善方針。
+
+### anchor resolver につながる論点
 
 現在の仕組みは、`text_quote` にかなり依存している。
 
@@ -676,7 +777,7 @@ source_ref
         `-- DOCX -> paragraph_index / table_index + row + col
 ```
 
-## 方針更新: anchor resolver では text_quote 単独に依存しない
+### 方針更新: anchor resolver では text_quote 単独に依存しない
 
 ここから下は、上の現状整理に対する方針更新。既存の個別設計ドキュメントを直接書き換えるのではなく、anchor resolver を実装する時に採用したい新しい考え方として整理する。
 
@@ -762,7 +863,7 @@ source_ref
 | 基本保存しない | 正規化済みquote | resolver内で再計算できる |
 | 保存しない | CSS selector / XPath / DOM selector | preview HTMLの実装詳細に依存し、壊れやすい |
 
-## text_quote 検索の位置づけ
+### text_quote 検索の位置づけ
 
 `text_quote` 検索は残す。ただし、場所特定の主役にはしない。
 
@@ -817,7 +918,7 @@ anchor resolver が候補を絞り込む
 PDF bbox / XLSX cell / DOCX block に変換する
 ```
 
-## anchor resolver は text_quote だけで解決しない
+### anchor resolver は text_quote だけで解決しない
 
 anchor resolver の精度を上げるには、`text_quote` だけで候補を探さないことが重要。
 
@@ -869,7 +970,7 @@ value = 260000
 
 初期実装では、すべてをLLMに返させる必要はない。Geminiには従来どおり `source_ref` を返させ、resolver側が `field_path`、抽出値、文書構造index、周辺ラベルを使ってanchorを補完する。
 
-## 精度改善方針の優先順位
+### 精度改善方針の優先順位
 
 上の表を、実装順に並べると次になる。
 
@@ -884,7 +985,7 @@ value = 260000
 | 7 | fallback表示を弱く見せる | resolver未解決なのに確定位置のように見える問題を避ける |
 | 8 | 複数候補UIを検討する | MVP後に、人間の確認で補えるようにする |
 
-## 推奨する場所特定の優先順位
+### 推奨する場所特定の優先順位
 
 場所特定は、強い情報から順に使う。
 
@@ -917,7 +1018,7 @@ value = 260000
 | DOCX 段落 | `paragraph_index` | 段落候補検索語の1つ。field_path/見出し/周辺文脈と合わせる |
 | DOCX 表セル | `table_index + row + col` | 表セル候補検索語の1つ。行/列ラベルと合わせる |
 
-## MVPでの現実的な絞り込みルール
+### MVPでの現実的な絞り込みルール
 
 最初から複雑な推論を入れすぎない。まずは次の順で候補を絞る。
 
@@ -935,7 +1036,7 @@ value = 260000
 
 ここで重要なのは、複数候補を無理に1つへ決めないこと。`text_quote` だけで一意に見える場合でも、field_pathや文書構造と矛盾するならanchorを付けない。
 
-## UIでの見せ方
+### UIでの見せ方
 
 `text_quote` 検索結果は、bboxやセルanchorと同じ信頼度で見せない。
 

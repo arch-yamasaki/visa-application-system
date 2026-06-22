@@ -49,9 +49,7 @@ Chrome拡張QAでは、申請の最終送信を絶対に押さない。
 
 ### 3. 取次者がRASENSに入力されない
 
-取次者欄の修正タスクは、証跡・連携QAの残タスクとして `007_source_refs_schema_migration` 側に切り出した。
-
-詳細: [09_intermediary_autofill_bug.md](../007_source_refs_schema_migration/09_intermediary_autofill_bug.md)
+取次者欄の修正タスクは、以前は証跡・連携QAの残タスクとして `007_source_refs_schema_migration` 側に切り出していた。現在、そのメモは削除済み。
 
 ## 今回対応済み
 
