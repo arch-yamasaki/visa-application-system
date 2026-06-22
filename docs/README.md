@@ -6,6 +6,8 @@
 
 共通ドキュメントは `docs/shared/` に置き、プロジェクト固有のドキュメントは各プロジェクトの `docs/` に置く。
 
+- [local_experiment_onboarding.md](local_experiment_onboarding.md): ローカル実験の開始手順、必要データZIP、配置ルール
+
 ### docs/shared/ (共通ドキュメント)
 
 - `001_hearing_notes/`: ヒアリング原本と要約
