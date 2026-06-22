@@ -17,6 +17,8 @@ class PreparedDocuments:
     text_contents: list[tuple[str, str]] = field(default_factory=list)
     image_entries: list[tuple[str, str, bytes]] = field(default_factory=list)
     pdf_bytes_map: dict[str, bytes] = field(default_factory=dict)
+    xlsx_cell_indexes: dict[str, list[dict]] = field(default_factory=dict)
+    docx_block_indexes: dict[str, list[dict]] = field(default_factory=dict)
 
     @property
     def total_inline_bytes(self) -> int:

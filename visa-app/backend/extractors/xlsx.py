@@ -3,8 +3,35 @@
 import io
 
 import openpyxl
+from openpyxl.utils import get_column_letter
 
 from .types import OcrResult, PageResult
+
+
+def build_xlsx_cell_index(file_bytes: bytes, document_id: str) -> list[dict]:
+    """Build stable cell anchors for resolver and HTML preview."""
+    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
+    cells: list[dict] = []
+    for sheet_index, ws in enumerate(wb.worksheets, start=1):
+        for row in ws.iter_rows(values_only=False):
+            for cell in row:
+                if cell.value is None:
+                    continue
+                text = str(cell.value)
+                cell_ref = f"{get_column_letter(cell.column)}{cell.row}"
+                cells.append({
+                    "document_id": document_id,
+                    "type": "xlsx_cell",
+                    "sheet_name": ws.title,
+                    "sheet_index": sheet_index,
+                    "cell": cell_ref,
+                    "row": cell.row,
+                    "col": cell.column,
+                    "text": text,
+                    "anchor_id": f"{ws.title}!{cell_ref}",
+                })
+    wb.close()
+    return cells
 
 
 def extract_xlsx(file_bytes: bytes, document_id: str, sheet_name: str | None = None) -> OcrResult:

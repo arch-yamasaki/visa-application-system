@@ -255,6 +255,22 @@ export interface SourceRef {
   text_quote: string
   confidence: number
   bbox?: { y_min: number; x_min: number; y_max: number; x_max: number }
+  anchor?: SourceAnchor
+}
+
+export interface SourceAnchor {
+  type: 'pdf_bbox' | 'xlsx_cell' | 'docx_block' | string
+  status: 'resolved' | 'ambiguous' | 'not_found' | 'skipped_unsupported' | string
+  resolver_type?: string
+  anchor_id?: string
+  bbox?: { y_min: number; x_min: number; y_max: number; x_max: number }
+  match_count?: number
+  sheet_name?: string
+  cell?: string
+  paragraph_index?: number
+  table_index?: number
+  row?: number
+  col?: number
 }
 
 export interface FieldMeta {

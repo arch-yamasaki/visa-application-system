@@ -4,7 +4,7 @@ import { apiClient } from '../api/client'
 import FieldPanel from '../components/review/FieldPanel'
 import DocumentViewer from '../components/viewer/DocumentViewer'
 import ReviewBanner from '../components/review/ReviewBanner'
-import type { CaseData, CaseDocument, FieldMetadataMap, Settings } from '../types/caseData'
+import type { CaseData, CaseDocument, FieldMetadataMap, Settings, SourceRef } from '../types/caseData'
 import { useViewerStore } from '../store/viewerStore'
 
 /** APIが返すリスト形式の field_metadata を Record<string, FieldMeta> に変換 */
@@ -19,8 +19,10 @@ function normalizeFieldMetadata(raw: unknown): FieldMetadataMap {
       source_refs: (item.source_refs ?? []).map((ref: Record<string, unknown>) => ({
         document_id: ref.doc_id ?? ref.document_id ?? '',
         page: Number(ref.page) || 1,
-        text_quote: ref.text_quote ?? '',
+        text_quote: String(ref.text_quote ?? ''),
         confidence: Number(ref.confidence) || 0,
+        bbox: ref.bbox as SourceRef['bbox'],
+        anchor: ref.anchor as SourceRef['anchor'],
       })),
       human_reviewed: item.human_reviewed,
       human_edited: item.human_edited,

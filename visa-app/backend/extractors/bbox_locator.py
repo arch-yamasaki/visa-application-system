@@ -94,6 +94,8 @@ def locate_bboxes(
             doc_id = ref.get("document_id", "")
             page_num = ref.get("page", 1)
             text_quote = ref.get("text_quote", "")
+            if ref.get("bbox") or ref.get("anchor", {}).get("status") == "resolved":
+                continue
             if not text_quote or not doc_id:
                 continue
             # PDFのみ対象

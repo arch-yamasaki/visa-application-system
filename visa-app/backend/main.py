@@ -690,16 +690,19 @@ def _docx_to_html(file_bytes: bytes) -> str:
     from html import escape
     doc = docx.Document(io.BytesIO(file_bytes))
     parts = ['<div style="font-family:sans-serif;padding:20px;max-width:800px;margin:auto">']
+    paragraph_index = 0
     for para in doc.paragraphs:
         if para.text.strip():
             style = 'font-weight:bold;font-size:1.2em;margin-top:1em' if para.style.name.startswith('Heading') else ''
-            parts.append(f'<p style="{style}">{escape(para.text)}</p>')
-    for table in doc.tables:
+            parts.append(f'<p data-anchor="p-{paragraph_index}" style="{style}">{escape(para.text)}</p>')
+            paragraph_index += 1
+    for table_index, table in enumerate(doc.tables):
         parts.append('<table style="border-collapse:collapse;width:100%;margin:1em 0">')
-        for row in table.rows:
+        for row_index, row in enumerate(table.rows):
             parts.append('<tr>')
-            for cell in row.cells:
-                parts.append(f'<td style="border:1px solid #ddd;padding:6px 8px;font-size:13px">{escape(cell.text)}</td>')
+            for col_index, cell in enumerate(row.cells):
+                anchor_id = f"t-{table_index}-r-{row_index}-c-{col_index}"
+                parts.append(f'<td data-anchor="{anchor_id}" style="border:1px solid #ddd;padding:6px 8px;font-size:13px">{escape(cell.text)}</td>')
             parts.append('</tr>')
         parts.append('</table>')
     parts.append('</div>')
@@ -759,7 +762,8 @@ def _xlsx_to_html(file_bytes: bytes, sheet_name: str | None = None) -> str:
                     if cs > 1:
                         span_attr += f' colspan="{cs}"'
 
-                cells.append(f'<td style="{style}"{span_attr}>{val_escaped}</td>')
+                anchor_id = escape(f"{ws.title}!{cell.coordinate}")
+                cells.append(f'<td data-anchor="{anchor_id}" style="{style}"{span_attr}>{val_escaped}</td>')
             if has_content:
                 parts.append(f'<tr>{"".join(cells)}</tr>')
                 row_idx += 1

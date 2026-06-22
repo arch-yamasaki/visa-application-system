@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import type { FieldMeta } from '../../types/caseData'
+import type { FieldMeta, SourceRef } from '../../types/caseData'
 import { getDisplayValue, type FieldInput } from '../../lib/fieldPaths'
 import { useViewerStore } from '../../store/viewerStore'
 
@@ -23,6 +23,16 @@ function normalizeEditorValue(value: string, type: FieldInput['type']): string {
   return value
 }
 
+function pickPrimarySourceRef(sourceRefs: SourceRef[] | undefined): SourceRef | undefined {
+  if (!sourceRefs?.length) return undefined
+  return (
+    sourceRefs.find((ref) => ref.anchor?.status === 'resolved')
+    ?? sourceRefs.find((ref) => ref.bbox)
+    ?? sourceRefs.find((ref) => !ref.anchor)
+    ?? sourceRefs[0]
+  )
+}
+
 export default function FieldRow({ label, fieldPath, value, input, meta, onUpdate }: Props) {
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState('')
@@ -33,7 +43,8 @@ export default function FieldRow({ label, fieldPath, value, input, meta, onUpdat
 
   const rawValue = value === null || value === undefined || value === '' ? '' : String(value)
   const displayValue = rawValue === '' ? '(未入力)' : getDisplayValue(rawValue) || rawValue
-  const hasSource = meta?.source_refs && meta.source_refs.length > 0
+  const primarySourceRef = pickPrimarySourceRef(meta?.source_refs)
+  const hasSource = Boolean(primarySourceRef)
   const isActive = activeFieldPath === fieldPath
   const inputOptions = input.options ?? []
   const selectOptions = input.type === 'select' && rawValue !== '' && !inputOptions.some((option) => option.value === rawValue)
@@ -42,8 +53,8 @@ export default function FieldRow({ label, fieldPath, value, input, meta, onUpdat
 
   const handleClick = () => {
     setActiveFieldPath(fieldPath)
-    if (hasSource && meta?.source_refs?.[0]) {
-      navigateToSource(meta.source_refs[0])
+    if (primarySourceRef) {
+      navigateToSource(primarySourceRef)
     }
   }
 
@@ -170,7 +181,7 @@ export default function FieldRow({ label, fieldPath, value, input, meta, onUpdat
 
       {hasSource && (
         <span className="text-xs text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">
-          p.{meta?.source_refs?.[0]?.page}
+          p.{primarySourceRef?.page}
         </span>
       )}
     </div>

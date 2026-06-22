@@ -78,8 +78,9 @@ export default function PdfViewer({ url, page, highlightText, sourceRef }: Props
     overlay.style.width = `${viewport.width}px`
     overlay.style.height = `${viewport.height}px`
 
-    if (sourceRef?.bbox) {
-      const { y_min, x_min, y_max, x_max } = sourceRef.bbox
+    const bbox = sourceRef?.bbox ?? sourceRef?.anchor?.bbox
+    if (bbox) {
+      const { y_min, x_min, y_max, x_max } = bbox
       const div = document.createElement('div')
       div.style.position = 'absolute'
       div.style.left = `${(x_min / 1000) * viewport.width}px`

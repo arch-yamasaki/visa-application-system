@@ -34,11 +34,15 @@ export const useViewerStore = create<ViewerState>((set) => ({
     set((s) => ({ signedUrls: { ...s.signedUrls, [docId]: url } })),
 
   navigateToSource: (ref) =>
-    set({
-      currentDocumentId: ref.document_id,
-      currentPage: ref.page || 1,
-      highlightText: ref.text_quote || null,
-      highlightSourceRef: ref,
+    set(() => {
+      const anchorStatus = ref.anchor?.status
+      const canUseTextFallback = !anchorStatus
+      return {
+        currentDocumentId: ref.document_id,
+        currentPage: ref.page || 1,
+        highlightText: canUseTextFallback ? ref.text_quote || null : null,
+        highlightSourceRef: ref,
+      }
     }),
 
   setPage: (page) => set({ currentPage: page, highlightText: null, highlightSourceRef: null }),

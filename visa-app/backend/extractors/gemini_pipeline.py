@@ -7,6 +7,7 @@ from collections.abc import Callable
 
 from google.genai import types as genai_types
 
+from .anchor_resolver import resolve_anchors, sync_bbox_anchors
 from .bbox_locator import locate_bboxes
 from .document_models import LoadedDocument, PreparedDocuments
 from .gemini import (
@@ -76,20 +77,27 @@ def attach_bboxes(
         return result
 
     logger.info(
-        "Bbox locator started case_id=%s pdfs=%d metadata_fields=%d",
+        "Anchor resolver started case_id=%s pdfs=%d metadata_fields=%d",
         case_id,
         len(prepared.pdf_contents),
         len(result.field_metadata),
     )
     started_at = time.monotonic()
     try:
+        result.field_metadata = resolve_anchors(
+            result.field_metadata,
+            prepared.pdf_bytes_map,
+            prepared.xlsx_cell_indexes,
+            prepared.docx_block_indexes,
+        )
         result.field_metadata = locate_bboxes(
             result.field_metadata,
             prepared.pdf_bytes_map,
         )
+        result.field_metadata = sync_bbox_anchors(result.field_metadata)
     except Exception as exc:
         logger.warning(
-            "Bbox locator failed case_id=%s error_type=%s",
+            "Anchor resolver failed case_id=%s error_type=%s",
             case_id,
             type(exc).__name__,
             exc_info=True,
@@ -112,6 +120,12 @@ def attach_bboxes(
         for ref in meta.get("source_refs", [])
         if ref.get("bbox")
     )
+    resolved_anchors = sum(
+        1
+        for meta in result.field_metadata.values()
+        for ref in meta.get("source_refs", [])
+        if ref.get("anchor", {}).get("status") == "resolved"
+    )
     _log_event(
         event_logger,
         "bbox_complete",
@@ -120,9 +134,10 @@ def attach_bboxes(
         pdfs=len(prepared.pdf_contents),
         metadata_fields=len(result.field_metadata),
         bbox_refs=bbox_refs,
+        resolved_anchors=resolved_anchors,
         elapsed_ms=round((time.monotonic() - started_at) * 1000),
     )
-    logger.info("Bbox locator completed case_id=%s", case_id)
+    logger.info("Anchor resolver completed case_id=%s", case_id)
     return result
 
 

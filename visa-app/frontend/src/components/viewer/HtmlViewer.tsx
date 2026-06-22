@@ -1,20 +1,44 @@
 import { useEffect, useRef, useState } from 'react'
+import type { SourceRef } from '../../types/caseData'
 
 interface Props {
   url: string
   highlightText?: string | null
+  sourceRef?: SourceRef | null
   sheets?: string[]
   onSheetChange?: (sheet: string) => void
 }
 
-export default function HtmlViewer({ url, highlightText, sheets, onSheetChange }: Props) {
+function anchorSelectorValue(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
+
+function anchorId(sourceRef: SourceRef | null | undefined): string | null {
+  const anchor = sourceRef?.anchor
+  if (anchor?.status !== 'resolved') return null
+  if (anchor.anchor_id) return anchor.anchor_id
+  if (anchor.type === 'xlsx_cell' && anchor.sheet_name && anchor.cell) {
+    return `${anchor.sheet_name}!${anchor.cell}`
+  }
+  return null
+}
+
+export default function HtmlViewer({ url, highlightText, sourceRef, sheets, onSheetChange }: Props) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const [activeSheet, setActiveSheet] = useState(sheets?.[0] ?? '')
 
   // sheets が非同期で届いた場合に初期選択
   useEffect(() => {
     if (sheets?.length && !activeSheet) setActiveSheet(sheets[0])
-  }, [sheets])
+  }, [activeSheet, sheets])
+
+  useEffect(() => {
+    const sheetName = sourceRef?.anchor?.status === 'resolved' ? sourceRef.anchor.sheet_name : undefined
+    if (sheetName && sheetName !== activeSheet) {
+      setActiveSheet(sheetName)
+      onSheetChange?.(sheetName)
+    }
+  }, [activeSheet, onSheetChange, sourceRef])
 
   // iframe ロード後にハイライトテキストを検索
   useEffect(() => {
@@ -30,6 +54,12 @@ export default function HtmlViewer({ url, highlightText, sheets, onSheetChange }
           parent.removeChild(mark)
         }
       })
+      doc.querySelectorAll<HTMLElement>('[data-anchor-highlight="true"]').forEach((el) => {
+        el.style.backgroundColor = ''
+        el.style.outline = ''
+        el.style.borderRadius = ''
+        delete el.dataset.anchorHighlight
+      })
     }
 
     const handleLoad = () => {
@@ -39,6 +69,19 @@ export default function HtmlViewer({ url, highlightText, sheets, onSheetChange }
 
         // 前回のハイライトをクリア
         clearHighlights(doc)
+
+        const resolvedAnchorId = anchorId(sourceRef)
+        if (resolvedAnchorId) {
+          const target = doc.querySelector<HTMLElement>(`[data-anchor="${anchorSelectorValue(resolvedAnchorId)}"]`)
+          if (target) {
+            target.dataset.anchorHighlight = 'true'
+            target.style.backgroundColor = 'rgba(255, 160, 0, 0.35)'
+            target.style.outline = '2px solid rgba(255, 140, 0, 0.8)'
+            target.style.borderRadius = '2px'
+            target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          }
+          return
+        }
 
         const text = highlightText?.trim()
         if (!text) return
@@ -76,7 +119,7 @@ export default function HtmlViewer({ url, highlightText, sheets, onSheetChange }
       handleLoad()
     }
     return () => iframe.removeEventListener('load', handleLoad)
-  }, [url, highlightText])
+  }, [url, highlightText, sourceRef])
 
   const handleSheetClick = (sheet: string) => {
     setActiveSheet(sheet)

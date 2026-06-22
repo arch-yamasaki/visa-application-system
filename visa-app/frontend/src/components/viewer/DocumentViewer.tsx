@@ -116,6 +116,7 @@ export default function DocumentViewer({ caseId }: Props) {
           <HtmlViewer
             url={url}
             highlightText={highlightText}
+            sourceRef={highlightSourceRef}
             sheets={isXlsx ? sheets : undefined}
             onSheetChange={isXlsx ? handleSheetChange : undefined}
           />

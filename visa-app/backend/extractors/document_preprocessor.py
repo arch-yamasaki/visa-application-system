@@ -40,11 +40,15 @@ def prepare_documents(
                     },
                 )
         elif ext in ("xlsx", "xls"):
-            from .xlsx import extract_xlsx
+            from .xlsx import build_xlsx_cell_index, extract_xlsx
 
             ocr = extract_xlsx(document.content, document.document_id)
             text = "\n".join(page.text for page in ocr.pages)
             prepared.text_contents.append((document.document_id, text))
+            prepared.xlsx_cell_indexes[document.document_id] = build_xlsx_cell_index(
+                document.content,
+                document.document_id,
+            )
             if event_logger:
                 event_logger(
                     "document_text_extracted",
@@ -57,11 +61,15 @@ def prepare_documents(
                     },
                 )
         elif ext in ("docx", "doc"):
-            from .docx_text import extract_docx
+            from .docx_text import build_docx_block_index, extract_docx
 
             ocr = extract_docx(document.content, document.document_id)
             text = "\n".join(page.text for page in ocr.pages)
             prepared.text_contents.append((document.document_id, text))
+            prepared.docx_block_indexes[document.document_id] = build_docx_block_index(
+                document.content,
+                document.document_id,
+            )
             if event_logger:
                 event_logger(
                     "document_text_extracted",
