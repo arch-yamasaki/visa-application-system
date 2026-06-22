@@ -510,6 +510,20 @@ class TestExtractAllScopes:
         else:
             raise AssertionError("extract_all_scopes should fail when all scopes fail")
 
+    @patch("extractors.gemini.extract_scoped")
+    def test_preserves_leaked_api_key_error_when_all_scopes_fail(self, mock_extract_scoped):
+        mock_extract_scoped.side_effect = RuntimeError(
+            "403 PERMISSION_DENIED. Your API key was reported as leaked. Please use another API key."
+        )
+
+        try:
+            extract_all_scopes(MagicMock(), [], _CASE_META, _DOCUMENTS)
+        except RuntimeError as exc:
+            assert "Gemini API key was reported as leaked" in str(exc)
+            assert "Replace GOOGLE_API_KEY" in str(exc)
+        else:
+            raise AssertionError("extract_all_scopes should fail when all scopes fail")
+
 
 # ---------- _extract_field_metadata ------------------------------------
 

@@ -947,6 +947,17 @@ def _extract_with_gemini(
     return result
 
 
+def _format_extraction_error(exc: Exception) -> str:
+    error_msg = str(exc)
+    if "API key was reported as leaked" in error_msg:
+        return "Gemini APIキーが漏洩報告済みのため無効です。GOOGLE_API_KEYを新しいキーに差し替えてください。"
+    if "PERMISSION_DENIED" in error_msg or "API_KEY_INVALID" in error_msg:
+        return "Gemini APIキーが無効、または権限不足です。GOOGLE_API_KEYを確認してください。"
+    if "RESOURCE_EXHAUSTED" in error_msg or "429" in error_msg:
+        return "API利用上限に達しました。しばらく待ってから再度お試しください。"
+    return error_msg
+
+
 @app.post("/cases/{case_id}/extract-stream")
 def start_extraction_stream(case_id: str, body: ExtractRequest = ExtractRequest()):
     """SSE streaming extraction endpoint."""
@@ -1044,6 +1055,7 @@ def start_extraction_stream(case_id: str, body: ExtractRequest = ExtractRequest(
         except Exception as exc:
             logger.error("Stream extraction failed for case %s: %s", case_id, exc)
             final_state = "failed"
+            error_msg = _format_extraction_error(exc)
             try:
                 ref.update({
                     "extraction": {
@@ -1053,6 +1065,7 @@ def start_extraction_stream(case_id: str, body: ExtractRequest = ExtractRequest(
                         "scoped": body.scoped,
                         "failed_at": _now_iso(),
                         "error_type": type(exc).__name__,
+                        "error": error_msg,
                     },
                     "workflow_state": "failed",
                     "updated_at": _now_iso(),
@@ -1065,9 +1078,6 @@ def start_extraction_stream(case_id: str, body: ExtractRequest = ExtractRequest(
                 )
             except Exception:
                 pass
-            error_msg = str(exc)
-            if "RESOURCE_EXHAUSTED" in error_msg or "429" in error_msg:
-                error_msg = "API利用上限に達しました。しばらく待ってから再度お試しください。"
             _log_extract_metric(
                 "stream_failed",
                 run_id=run_id,
@@ -1169,16 +1179,21 @@ def _start_gemini_extraction(
 
     except Exception as exc:
         logger.error("Gemini extraction failed for case %s: %s", case_id, exc)
-        error_msg = str(exc)
+        error_msg = _format_extraction_error(exc)
 
     finally:
         if final_state != "extracted":
             # Extraction did not complete successfully — ensure Firestore
             # reflects the failure so the case is never stuck in 'extracting'.
             try:
-                case_ref.update(
-                    {"workflow_state": "failed", "updated_at": _now_iso()}
-                )
+                updates = {"workflow_state": "failed", "updated_at": _now_iso()}
+                if error_msg:
+                    updates["extraction"] = {
+                        "backend": "gemini",
+                        "failed_at": _now_iso(),
+                        "error": error_msg,
+                    }
+                case_ref.update(updates)
             except Exception as update_exc:
                 logger.error(
                     "Failed to update workflow_state to failed for case %s: %s",

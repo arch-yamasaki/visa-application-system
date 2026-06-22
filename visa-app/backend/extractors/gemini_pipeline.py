@@ -70,16 +70,16 @@ def attach_bboxes(
     enabled: bool = True,
     event_logger: PipelineEventLogger | None = None,
 ) -> ExtractionResult:
-    if not prepared.pdf_contents:
-        return result
-    if not enabled or os.environ.get("ENABLE_BBOX_LOCATOR", "true").lower() != "true":
-        logger.info("Bbox locator skipped case_id=%s reason=disabled", case_id)
+    if not enabled:
+        logger.info("Anchor resolver skipped case_id=%s reason=disabled", case_id)
         return result
 
     logger.info(
-        "Anchor resolver started case_id=%s pdfs=%d metadata_fields=%d",
+        "Anchor resolver started case_id=%s pdfs=%d xlsx_indexes=%d docx_indexes=%d metadata_fields=%d",
         case_id,
         len(prepared.pdf_contents),
+        len(prepared.xlsx_cell_indexes),
+        len(prepared.docx_block_indexes),
         len(result.field_metadata),
     )
     started_at = time.monotonic()
@@ -90,11 +90,14 @@ def attach_bboxes(
             prepared.xlsx_cell_indexes,
             prepared.docx_block_indexes,
         )
-        result.field_metadata = locate_bboxes(
-            result.field_metadata,
-            prepared.pdf_bytes_map,
-        )
-        result.field_metadata = sync_bbox_anchors(result.field_metadata)
+        if prepared.pdf_contents and os.environ.get("ENABLE_BBOX_LOCATOR", "true").lower() == "true":
+            result.field_metadata = locate_bboxes(
+                result.field_metadata,
+                prepared.pdf_bytes_map,
+            )
+            result.field_metadata = sync_bbox_anchors(result.field_metadata)
+        elif prepared.pdf_contents:
+            logger.info("Bbox locator skipped case_id=%s reason=disabled", case_id)
     except Exception as exc:
         logger.warning(
             "Anchor resolver failed case_id=%s error_type=%s",

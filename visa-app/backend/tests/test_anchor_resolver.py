@@ -156,7 +156,7 @@ def test_resolve_anchors_marks_duplicate_docx_blocks_as_ambiguous():
     docx_index = {
         "doc_docx": [
             {"type": "docx_block", "paragraph_index": 0, "text": "AMIT TAMANG", "anchor_id": "p-0"},
-            {"type": "docx_block", "paragraph_index": 1, "text": "Applicant AMIT TAMANG", "anchor_id": "p-1"},
+            {"type": "docx_block", "paragraph_index": 1, "text": "AMIT TAMANG", "anchor_id": "p-1"},
         ]
     }
 

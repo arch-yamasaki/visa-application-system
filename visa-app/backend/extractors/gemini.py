@@ -657,6 +657,16 @@ def extract_all_scopes(
     """
     extraction_scopes = EXTRACTION_SCOPES
 
+    def all_failed_message(failures: dict[str, str]) -> str:
+        first_error = next(iter(failures.values()), "")
+        if "API key was reported as leaked" in first_error:
+            return "Gemini API key was reported as leaked. Replace GOOGLE_API_KEY."
+        if "PERMISSION_DENIED" in first_error or "API_KEY_INVALID" in first_error:
+            return "Gemini API key is invalid or not permitted. Check GOOGLE_API_KEY."
+        if "RESOURCE_EXHAUSTED" in first_error or "429" in first_error:
+            return "Gemini API quota was exhausted."
+        return f"All extraction scopes failed: {', '.join(failures)}"
+
     def contents_for(scope: str) -> list:
         if isinstance(contents, dict):
             return contents.get(scope) or contents.get("default") or []
@@ -701,9 +711,7 @@ def extract_all_scopes(
                     sort_keys=True,
                 ),
             )
-            raise RuntimeError(
-                f"All extraction scopes failed: {', '.join(failed_scopes)}"
-            )
+            raise RuntimeError(all_failed_message(failed_scopes))
         logger.info(
             "gemini_metric event=scopes_complete %s",
             json.dumps(

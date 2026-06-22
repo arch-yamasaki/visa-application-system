@@ -41,6 +41,12 @@ curl -N -X POST http://localhost:8080/cases/{case_id}/extract-stream \
 
 `extract-stream` はSSEで進捗を返す。抽出結果は既存の `case_data` に merge され、`case.*`, `proxy`, `receiving_method` など抽出対象外の保存データを残す。
 
+## 抽出失敗時の確認
+
+Gemini API key が無効、権限不足、漏洩報告済みの場合は、抽出品質の問題ではなく環境設定の問題として扱う。画面には失敗した進捗行と、`GOOGLE_API_KEY` の差し替えや権限確認が必要だと分かるメッセージが表示されることを確認する。
+
+SSE が完了イベントを受け取る前に切断された場合は、frontend が最新のケース状態を再取得する。backend 側で `workflow_state=extracted` になっていればレビュー画面へ進み、`failed` の場合だけ失敗として表示する。
+
 ## 確認ポイント
 
 - [ ] バッジ: 問題なしフィールドはバッジなし、要対応のみオレンジ表示
@@ -54,6 +60,8 @@ curl -N -X POST http://localhost:8080/cases/{case_id}/extract-stream \
 - [ ] source_ref: Gemini raw response は `{ value, source_ref }`、保存後は `field_metadata.*.source_refs[]`
 - [ ] source_ref: `case_data` に `source`, `source_ref`, `source_refs` が混入しない
 - [ ] scope: `applicant_identity`, `entry_plan`, `immigration_history`, `education`, `employment_history`, `employer`, `employment`, `review` がエラーなく完了
+- [ ] Gemini auth error: API key 無効、権限不足、漏洩報告済みは一般的な「再試行してください」ではなく、環境設定エラーとして表示される
+- [ ] extract-stream: 完了イベント前にSSEが閉じても、ケース状態を再取得して `extracted` / `failed` の表示がbackendと一致する
 - [ ] application-data: `/cases/{case_id}/application-data` が `rows`, `fillable`, `warnings` を返す
 - [ ] Chrome DevTools MCP: 実画面でレビュー画面、PDF bbox、Network/Consoleを確認する
 

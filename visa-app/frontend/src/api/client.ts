@@ -220,6 +220,15 @@ export const apiClient = {
             caseId,
             elapsed_ms: Math.round(performance.now() - startedAt),
           })
+          const latest = await request<CaseDocument>(`/cases/${caseId}`).catch(() => null)
+          if (latest?.workflow_state === 'extracted') {
+            callbacks.onComplete({ workflow_state: latest.workflow_state })
+            return
+          }
+          if (latest?.workflow_state === 'failed') {
+            callbacks.onError(latest.extraction?.error ?? '抽出に失敗しました。サーバー側の状態を確認してください。')
+            return
+          }
           callbacks.onError('抽出ストリームが完了前に切断されました')
         }
       } catch (err) {

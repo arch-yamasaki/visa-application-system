@@ -36,7 +36,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
   navigateToSource: (ref) =>
     set(() => {
       const anchorStatus = ref.anchor?.status
-      const canUseTextFallback = !anchorStatus
+      const canUseTextFallback = anchorStatus !== 'resolved'
       return {
         currentDocumentId: ref.document_id,
         currentPage: ref.page || 1,

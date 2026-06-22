@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import re
+import unicodedata
 from dataclasses import dataclass
 
 import pymupdf
@@ -25,7 +26,10 @@ class _PdfTextMatch:
 
 
 def _normalize_text(text: str) -> str:
-    return re.sub(r"\s+", "", text or "").lower()
+    normalized = unicodedata.normalize("NFKC", text or "")
+    normalized = re.sub(r"[\s\u3000]+", "", normalized)
+    normalized = re.sub(r"[、。,.，．]", "", normalized)
+    return normalized.lower()
 
 
 def _page_number(value) -> int:
@@ -171,7 +175,12 @@ def _resolve_from_text_index(
     target = _normalize_text(str(ref.get("text_quote") or ""))
     if not target:
         return "skipped"
-    matches = [
+    exact_matches = [
+        item
+        for item in items
+        if target == _normalize_text(str(item.get("text") or ""))
+    ]
+    matches = exact_matches or [
         item
         for item in items
         if target in _normalize_text(str(item.get("text") or ""))

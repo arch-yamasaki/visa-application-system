@@ -322,6 +322,16 @@ export interface CaseDocument {
   created_at: string
   updated_at: string
   settings?: Settings
+  extraction?: {
+    backend?: string
+    run_id?: string
+    pattern?: string
+    scoped?: boolean
+    completed_at?: string
+    failed_at?: string
+    error_type?: string
+    error?: string
+  }
   case_data: CaseData
   canonical_case_data?: CaseData
   field_metadata: FieldMetadataMap
