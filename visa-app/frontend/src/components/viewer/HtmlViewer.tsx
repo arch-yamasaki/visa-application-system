@@ -79,8 +79,8 @@ export default function HtmlViewer({ url, highlightText, sourceRef, sheets, onSh
             target.style.outline = '2px solid rgba(255, 140, 0, 0.8)'
             target.style.borderRadius = '2px'
             target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            return
           }
-          return
         }
 
         const text = highlightText?.trim()

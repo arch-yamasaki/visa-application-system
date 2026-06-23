@@ -17,7 +17,7 @@ export default function DocumentViewer({ caseId }: Props) {
   const highlightSourceRef = useViewerStore((s) => s.highlightSourceRef)
   const signedUrls = useViewerStore((s) => s.signedUrls)
   const setSignedUrl = useViewerStore((s) => s.setSignedUrl)
-  const setCurrentDoc = useViewerStore((s) => s.navigateToSource)
+  const selectDocument = useViewerStore((s) => s.selectDocument)
 
   const [sheets, setSheets] = useState<string[]>([])
   const [selectedSheet, setSelectedSheet] = useState<string | undefined>()
@@ -25,10 +25,10 @@ export default function DocumentViewer({ caseId }: Props) {
   const currentDoc = documents.find((d) => d.document_id === currentDocumentId)
 
   const ext = currentDoc?.file_name?.split('.').pop()?.toLowerCase()
-  const isOfficeDoc = ['docx', 'xlsx', 'xls', 'doc'].includes(ext ?? '')
+  const isOfficeDoc = ['docx', 'xlsx'].includes(ext ?? '')
   const isXlsx = ext === 'xlsx'
   const isPdf = ext === 'pdf'
-  const isImage = ['png', 'jpg', 'jpeg', 'tiff', 'tif'].includes(ext ?? '')
+  const isImage = ['png', 'jpg', 'jpeg'].includes(ext ?? '')
 
   // Fetch signed URL for current document (skip for office docs)
   useEffect(() => {
@@ -83,14 +83,7 @@ export default function DocumentViewer({ caseId }: Props) {
         {documents.map((doc) => (
           <button
             key={doc.document_id}
-            onClick={() =>
-              setCurrentDoc({
-                document_id: doc.document_id,
-                page: 1,
-                text_quote: '',
-                confidence: 0,
-              })
-            }
+            onClick={() => selectDocument(doc.document_id)}
             className={`px-3 py-2 text-xs whitespace-nowrap border-b-2 transition-colors ${
               doc.document_id === currentDocumentId
                 ? 'border-blue-500 text-blue-700 bg-white'

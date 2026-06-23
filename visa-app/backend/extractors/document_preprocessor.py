@@ -39,7 +39,7 @@ def prepare_documents(
                         "elapsed_ms": round((time.monotonic() - started_at) * 1000),
                     },
                 )
-        elif ext in ("xlsx", "xls"):
+        elif ext == "xlsx":
             from .xlsx import build_xlsx_cell_index, extract_xlsx
 
             ocr = extract_xlsx(document.content, document.document_id)
@@ -60,7 +60,7 @@ def prepare_documents(
                         "elapsed_ms": round((time.monotonic() - started_at) * 1000),
                     },
                 )
-        elif ext in ("docx", "doc"):
+        elif ext == "docx":
             from .docx_text import build_docx_block_index, extract_docx
 
             ocr = extract_docx(document.content, document.document_id)

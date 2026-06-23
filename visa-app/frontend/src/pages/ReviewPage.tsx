@@ -72,6 +72,8 @@ export default function ReviewPage() {
   const [caseDoc, setCaseDoc] = useState<CaseDocument | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [saveMessage, setSaveMessage] = useState<string | null>(null)
+  const [saveFailed, setSaveFailed] = useState(false)
   const [splitRatio, setSplitRatio] = useState(0.45)
   const [dragging, setDragging] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -91,6 +93,8 @@ export default function ReviewPage() {
 
   const handleFieldUpdate = (fieldPath: string, value: string) => {
     if (!caseDoc) return
+    setSaveMessage(null)
+    setSaveFailed(false)
     setCaseDoc((prev) => {
       if (!prev) return prev
       const updated = { ...prev }
@@ -114,6 +118,8 @@ export default function ReviewPage() {
   const handleSave = async () => {
     if (!caseId || !caseDoc) return
     setSaving(true)
+    setSaveMessage(null)
+    setSaveFailed(false)
     try {
       const updates = splitCaseDataSettings(caseDoc.canonical_case_data ?? caseDoc.case_data)
       await apiClient.updateCase(caseId, {
@@ -121,6 +127,10 @@ export default function ReviewPage() {
         settings: updates.settings,
         field_metadata: caseDoc.field_metadata,
       })
+      setSaveMessage('保存しました')
+    } catch {
+      setSaveFailed(true)
+      setSaveMessage('保存に失敗しました。通信状態を確認して再度お試しください。')
     } finally {
       setSaving(false)
     }
@@ -211,8 +221,8 @@ export default function ReviewPage() {
 
       {/* Bottom: Save Bar */}
       <div className="border-t border-gray-200 bg-white px-6 py-3 flex items-center justify-between">
-        <span className="text-sm text-gray-500">
-          編集内容を保存できます
+        <span className={`text-sm ${saveFailed ? 'text-red-600' : saveMessage ? 'text-green-700' : 'text-gray-500'}`}>
+          {saveMessage ?? '編集内容を保存できます'}
         </span>
         <button
           onClick={handleSave}

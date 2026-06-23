@@ -13,6 +13,7 @@ interface ViewerState {
   setDocuments: (docs: DocumentEntry[]) => void
   setSignedUrl: (docId: string, url: string) => void
   navigateToSource: (ref: SourceRef) => void
+  selectDocument: (docId: string) => void
   setPage: (page: number) => void
   clearHighlight: () => void
   setActiveFieldPath: (path: string | null) => void
@@ -35,14 +36,21 @@ export const useViewerStore = create<ViewerState>((set) => ({
 
   navigateToSource: (ref) =>
     set(() => {
-      const anchorStatus = ref.anchor?.status
-      const canUseTextFallback = anchorStatus !== 'resolved'
       return {
         currentDocumentId: ref.document_id,
         currentPage: ref.page || 1,
-        highlightText: canUseTextFallback ? ref.text_quote || null : null,
+        highlightText: ref.text_quote || null,
         highlightSourceRef: ref,
       }
+    }),
+
+  selectDocument: (docId) =>
+    set({
+      currentDocumentId: docId,
+      currentPage: 1,
+      highlightText: null,
+      highlightSourceRef: null,
+      activeFieldPath: null,
     }),
 
   setPage: (page) => set({ currentPage: page, highlightText: null, highlightSourceRef: null }),

@@ -62,6 +62,7 @@ GCS_BUCKET = os.environ.get("GCS_BUCKET", "visa-codex-mvp-data")
 GCP_PROJECT = os.environ.get("GCP_PROJECT", "visa-codex-mvp")
 GCP_REGION = os.environ.get("GCP_REGION", "asia-northeast1")
 CLOUD_RUN_JOB_NAME = os.environ.get("CLOUD_RUN_JOB_NAME", "codex-runner-job")
+SUPPORTED_DOCUMENT_EXTENSIONS = {"pdf", "docx", "xlsx", "png", "jpg", "jpeg"}
 
 # ---------------------------------------------------------------------------
 # Clients (initialized lazily on first request via module-level singletons)
@@ -184,6 +185,10 @@ def _merge_extracted_case_data(existing_case_data: dict | None, extracted_case_d
 # ---------------------------------------------------------------------------
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _file_extension(file_name: str) -> str:
+    return file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
 
 
 def _make_session_id() -> str:
@@ -544,6 +549,13 @@ async def upload_case_document(
 
     document_id = f"doc_{uuid.uuid4().hex[:8]}"
     original_filename = file.filename or "upload"
+    ext = _file_extension(original_filename)
+    if ext not in SUPPORTED_DOCUMENT_EXTENSIONS:
+        allowed = ", ".join(f".{value}" for value in sorted(SUPPORTED_DOCUMENT_EXTENSIONS))
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type: .{ext or 'none'}. Supported: {allowed}",
+        )
     gcs_path = f"cases/{case_id}/documents/{document_id}_{original_filename}"
 
     bucket = gcs.bucket(GCS_BUCKET)
@@ -657,7 +669,7 @@ def _download_document_bytes(gcs_path: str) -> bytes:
 
 def _content_type_for_filename(filename: str) -> str:
     """Return appropriate Content-Type for a filename."""
-    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    ext = _file_extension(filename)
     content_types = {
         "pdf": "application/pdf",
         "png": "image/png",
@@ -713,6 +725,9 @@ def _xlsx_to_html(file_bytes: bytes, sheet_name: str | None = None) -> str:
     import openpyxl
     from html import escape
     wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+    if sheet_name and sheet_name not in wb.sheetnames:
+        wb.close()
+        raise HTTPException(status_code=400, detail=f"Sheet not found: {sheet_name}")
     sheets = [wb[sheet_name]] if sheet_name else wb.worksheets
     parts = ['<div style="font-family:sans-serif;padding:20px;max-width:1200px;margin:auto">']
     for ws in sheets:
@@ -778,7 +793,7 @@ def get_document_sheets(case_id: str, document_id: str):
     """xlsxのシート名一覧を返す。"""
     _, doc_entry = _find_document_in_manifest(case_id, document_id)
     file_name = doc_entry.get("file_name", "")
-    ext = file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
+    ext = _file_extension(file_name)
     if ext != "xlsx":
         return {"sheets": []}
     import openpyxl
@@ -799,7 +814,7 @@ def get_document_preview(
     _, doc_entry = _find_document_in_manifest(case_id, document_id)
     gcs_path = doc_entry["gcs_path"]
     file_name = doc_entry.get("file_name", "download")
-    ext = file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
+    ext = _file_extension(file_name)
 
     file_bytes = _download_document_bytes(gcs_path)
 
@@ -1089,30 +1104,12 @@ def start_extraction_stream(case_id: str, body: ExtractRequest = ExtractRequest(
         finally:
             if final_state == "extracting":
                 logger.warning("Stream extraction interrupted for case %s", case_id)
-                try:
-                    ref.update({
-                        "extraction": {
-                            "backend": "gemini",
-                            "run_id": run_id,
-                            "pattern": body.pattern,
-                            "scoped": body.scoped,
-                            "interrupted_at": _now_iso(),
-                        },
-                        "workflow_state": "failed",
-                        "updated_at": _now_iso(),
-                    })
-                    _log_extract_metric(
-                        "stream_interrupted",
-                        run_id=run_id,
-                        case_id=case_id,
-                        elapsed_ms=round((time.monotonic() - stream_started_at) * 1000),
-                    )
-                except Exception as update_exc:
-                    logger.error(
-                        "Failed to mark interrupted extraction as failed for case %s: %s",
-                        case_id,
-                        update_exc,
-                    )
+                _log_extract_metric(
+                    "stream_interrupted",
+                    run_id=run_id,
+                    case_id=case_id,
+                    elapsed_ms=round((time.monotonic() - stream_started_at) * 1000),
+                )
 
     return StreamingResponse(
         event_stream(),

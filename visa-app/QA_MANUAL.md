@@ -23,6 +23,8 @@ cd visa-app/backend
 | `会社書類.pdf` | PDF | 会社登記書類 |
 | `中央ビジネスグループ御中_株式会社フジタ様内定者8名のCOE書類.xlsx` | XLSX | 申請人情報一覧 |
 
+対応形式は `.pdf`, `.docx`, `.xlsx`, `.png`, `.jpg`, `.jpeg`。旧Office形式（`.doc`, `.xls`）やTIFFなどはアップロード時点で拒否またはスキップされることを確認する。
+
 ## 手動QAフロー
 
 1. http://localhost:5173 を開く
@@ -62,6 +64,8 @@ SSE が完了イベントを受け取る前に切断された場合は、fronten
 - [ ] scope: `applicant_identity`, `entry_plan`, `immigration_history`, `education`, `employment_history`, `employer`, `employment`, `review` がエラーなく完了
 - [ ] Gemini auth error: API key 無効、権限不足、漏洩報告済みは一般的な「再試行してください」ではなく、環境設定エラーとして表示される
 - [ ] extract-stream: 完了イベント前にSSEが閉じても、ケース状態を再取得して `extracted` / `failed` の表示がbackendと一致する
+- [ ] unsupported files: `.doc`, `.xls`, `.tif`, `.txt` など未対応形式は保存されず、画面またはAPIで理由が分かる
+- [ ] xlsx preview: 存在しない `sheet` パラメータは 500 ではなく 400 を返す
 - [ ] application-data: `/cases/{case_id}/application-data` が `rows`, `fillable`, `warnings` を返す
 - [ ] Chrome DevTools MCP: 実画面でレビュー画面、PDF bbox、Network/Consoleを確認する
 
