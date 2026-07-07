@@ -1,15 +1,27 @@
 {
   "manifest_version": 3,
   "name": "Visa Application Autofill",
-  "version": "0.1.0",
-  "description": "申請情報を在留申請オンラインシステムのフォームへ自動入力します。",
+  "version": "0.1.2",
+  "description": "社内visa-appの申請情報を在留申請オンラインシステムのフォームへ入力補助します。",
   "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": [
     "https://www.rasens-immi.moj.go.jp/*",
     "https://visa-app-913363513517.asia-northeast1.run.app/*"
   ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "action": {
     "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    },
     "default_title": "Visa Autofill"
   },
   "content_scripts": [

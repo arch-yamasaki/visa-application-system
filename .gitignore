@@ -57,6 +57,8 @@ rasens-autofill/extension/application_data.json
 *.heif
 *.tif
 *.tiff
+# Chrome拡張のアイコンは設計資産としてgit管理する
+!rasens-autofill/extension/icons/*.png
 
 # Archives and binary exports
 *.zip
