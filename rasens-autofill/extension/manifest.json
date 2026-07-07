@@ -6,7 +6,9 @@
   "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": [
     "https://www.rasens-immi.moj.go.jp/*",
-    "https://visa-app-913363513517.asia-northeast1.run.app/*"
+    "https://visa-app-913363513517.asia-northeast1.run.app/*",
+    "https://identitytoolkit.googleapis.com/*",
+    "https://securetoken.googleapis.com/*"
   ],
   "icons": {
     "16": "icons/icon16.png",

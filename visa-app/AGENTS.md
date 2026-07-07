@@ -52,6 +52,28 @@ cd backend
 
 Chrome拡張（rasens-autofill）はバックエンドAPIに直接 `/cases/...` でアクセスするため、ミドルウェアを経由しない。
 
+## 認証・データ分離
+
+Firebase Authentication（Identity Platform, プロジェクト visa-codex-mvp）でログインし、
+API は全ルート認証必須（`backend/auth.py` の `require_user`）。
+
+- 認証: Bearer トークン（Firebase ID token）を検証し、Firestore `users/{uid}` に登録済みのユーザーだけ通す。自由サインアップは不可（管理者発行制）
+- 認可: `cases` / `sessions` は `org_id` 単位で分離。作成時に `org_id` / `owner_uid` を付与し、一覧は org でフィルタ、個別取得は org 不一致を 404 にする（`_get_case` / `_get_session`）
+- フロント: `src/auth/firebase.ts`（設定+authHeaders）、`src/store/authStore.ts`、`/login` ページ。API 呼び出しは `client.ts` が自動で Authorization を付与
+- 書類表示: PDF/画像は認証付き `/content` を blob 取得して objectURL で表示、DOCX/XLSX preview は fetch + srcDoc（iframe src 直読みは不可）
+- Chrome拡張: popup でメール/パスワードログイン（Identity Toolkit REST）。トークンは `chrome.storage.local`
+
+ユーザー発行:
+
+```bash
+cd backend
+# メール/パスワードのユーザー発行
+.venv/bin/python scripts/manage_users.py create --email staff@example.com --password '...' --org aicx
+# Googleログインするユーザーの登録（パスワード不要）
+.venv/bin/python scripts/manage_users.py create --email someone@gmail.com --org aicx
+.venv/bin/python scripts/manage_users.py list
+```
+
 ## 抽出エンジン
 
 | エンジン | 方式 | 用途 |

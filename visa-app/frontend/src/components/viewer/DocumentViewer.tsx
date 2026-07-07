@@ -15,10 +15,9 @@ export default function DocumentViewer({ caseId }: Props) {
   const currentPage = useViewerStore((s) => s.currentPage)
   const highlightText = useViewerStore((s) => s.highlightText)
   const highlightSourceRef = useViewerStore((s) => s.highlightSourceRef)
-  const signedUrls = useViewerStore((s) => s.signedUrls)
-  const setSignedUrl = useViewerStore((s) => s.setSignedUrl)
   const selectDocument = useViewerStore((s) => s.selectDocument)
 
+  const [documentUrl, setDocumentUrl] = useState<string | null>(null)
   const [sheets, setSheets] = useState<string[]>([])
   const [selectedSheet, setSelectedSheet] = useState<string | undefined>()
 
@@ -30,19 +29,27 @@ export default function DocumentViewer({ caseId }: Props) {
   const isPdf = ext === 'pdf'
   const isImage = ['png', 'jpg', 'jpeg'].includes(ext ?? '')
 
-  // Fetch signed URL for current document (skip for office docs)
+  // PDF/画像は認証必須の /content から blob で取得し、objectURL で viewer に渡す
+  // (office docs は preview API を HtmlViewer 側で認証付き取得する)
   useEffect(() => {
-    if (!currentDocumentId || signedUrls[currentDocumentId] || isOfficeDoc) return
-    apiClient
-      .getDocumentUrl(caseId, currentDocumentId)
-      .then((r) => {
-        const url = r.signed_url?.trim() || apiClient.getDocumentContentUrl(caseId, currentDocumentId)
-        setSignedUrl(currentDocumentId, url)
-      })
-      .catch(() => {
-        setSignedUrl(currentDocumentId, apiClient.getDocumentContentUrl(caseId, currentDocumentId))
-      })
-  }, [caseId, currentDocumentId, signedUrls, setSignedUrl, isOfficeDoc])
+    setDocumentUrl(null)
+    if (!currentDocumentId || isOfficeDoc) return
+
+    let objectUrl: string | null = null
+    let cancelled = false
+    apiClient.getDocumentBlobUrl(caseId, currentDocumentId).then((url) => {
+      if (cancelled) {
+        URL.revokeObjectURL(url)
+        return
+      }
+      objectUrl = url
+      setDocumentUrl(url)
+    })
+    return () => {
+      cancelled = true
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [caseId, currentDocumentId, isOfficeDoc])
 
   // Fetch sheet names for xlsx
   useEffect(() => {
@@ -66,7 +73,7 @@ export default function DocumentViewer({ caseId }: Props) {
   const previewUrl = isOfficeDoc && currentDocumentId
     ? apiClient.getDocumentPreviewUrl(caseId, currentDocumentId, selectedSheet)
     : null
-  const url = previewUrl ?? (currentDocumentId ? signedUrls[currentDocumentId] : null)
+  const url = previewUrl ?? documentUrl
 
   if (documents.length === 0) {
     return (

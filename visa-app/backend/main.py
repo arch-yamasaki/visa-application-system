@@ -11,7 +11,7 @@ import tempfile
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 load_dotenv()
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO").upper())
 
-from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -29,6 +29,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud import run_v2
 from pydantic import BaseModel
 
+from auth import AuthUser, require_user
 from extractors.document_models import LoadedDocument
 from extractors.document_preprocessor import prepare_documents
 from extractors.gemini_pipeline import extract_documents
@@ -80,8 +81,11 @@ app.add_middleware(
     allow_origins=["*"],
     allow_credentials=False,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["authorization", "content-type"],
 )
+
+# API ルートは全て認証必須。静的ファイル配信(SPA)だけ app に直接ぶら下げる。
+api = APIRouter(dependencies=[Depends(require_user)])
 
 
 # ---------------------------------------------------------------------------
@@ -236,8 +240,26 @@ def _launch_job(session_id: str, run_id: str, prompt_gcs_uri: str, firestore_doc
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
-@app.post("/sessions")
-def create_session(body: PromptRequest):
+def _get_case(case_id: str, user: AuthUser) -> dict:
+    """ケースを取得する。存在しない・他 org のケースはどちらも 404。"""
+    doc = db.collection("cases").document(case_id).get()
+    data = doc.to_dict() if doc.exists else None
+    if data is None or data.get("org_id") != user.org_id:
+        raise HTTPException(status_code=404, detail="Case not found")
+    return data
+
+
+def _get_session(session_id: str, user: AuthUser) -> dict:
+    """セッションを取得する。存在しない・他 org のセッションはどちらも 404。"""
+    doc = db.collection("sessions").document(session_id).get()
+    data = doc.to_dict() if doc.exists else None
+    if data is None or data.get("org_id") != user.org_id:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return data
+
+
+@api.post("/sessions")
+def create_session(body: PromptRequest, user: AuthUser = Depends(require_user)):
     if not body.prompt_stripped:
         raise HTTPException(status_code=400, detail="Prompt must not be empty")
 
@@ -262,6 +284,8 @@ def create_session(body: PromptRequest):
             "updated_at": now,
             "latest_run_id": run_id,
             "prompt_preview": body.prompt_stripped[:200],
+            "org_id": user.org_id,
+            "owner_uid": user.uid,
         }
     )
 
@@ -293,23 +317,20 @@ def create_session(body: PromptRequest):
     return {"session_id": session_id, "run_id": run_id, "status": "running"}
 
 
-@app.get("/sessions")
-def list_sessions():
-    query = (
-        db.collection("sessions")
-        .order_by("created_at", direction=firestore.Query.DESCENDING)
-        .limit(20)
-    )
-    return [doc.to_dict() for doc in query.stream()]
+@api.get("/sessions")
+def list_sessions(user: AuthUser = Depends(require_user)):
+    query = db.collection("sessions").where(filter=FieldFilter("org_id", "==", user.org_id))
+    sessions = [doc.to_dict() for doc in query.stream()]
+    return sorted(
+        sessions,
+        key=lambda session: session.get("created_at", ""),
+        reverse=True,
+    )[:20]
 
 
-@app.get("/sessions/{session_id}")
-def get_session(session_id: str):
-    session_doc = db.collection("sessions").document(session_id).get()
-    if not session_doc.exists:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    data = session_doc.to_dict()
+@api.get("/sessions/{session_id}")
+def get_session(session_id: str, user: AuthUser = Depends(require_user)):
+    data = _get_session(session_id, user)
 
     # Attach latest run status
     latest_run_id = data.get("latest_run_id")
@@ -327,13 +348,9 @@ def get_session(session_id: str):
     return data
 
 
-@app.get("/sessions/{session_id}/result")
-def get_result(session_id: str):
-    session_doc = db.collection("sessions").document(session_id).get()
-    if not session_doc.exists:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    data = session_doc.to_dict()
+@api.get("/sessions/{session_id}/result")
+def get_result(session_id: str, user: AuthUser = Depends(require_user)):
+    data = _get_session(session_id, user)
     latest_run_id = data.get("latest_run_id")
     if not latest_run_id:
         raise HTTPException(status_code=404, detail="No run found")
@@ -350,14 +367,10 @@ def get_result(session_id: str):
     return {"session_id": session_id, "run_id": latest_run_id, "result": content}
 
 
-@app.get("/sessions/{session_id}/files")
-def list_files(session_id: str):
+@api.get("/sessions/{session_id}/files")
+def list_files(session_id: str, user: AuthUser = Depends(require_user)):
     """List files in the workspace tarball for the latest run."""
-    session_doc = db.collection("sessions").document(session_id).get()
-    if not session_doc.exists:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    data = session_doc.to_dict()
+    data = _get_session(session_id, user)
     latest_run_id = data.get("latest_run_id")
     if not latest_run_id:
         raise HTTPException(status_code=404, detail="No run found")
@@ -390,14 +403,10 @@ def list_files(session_id: str):
     return {"files": files}
 
 
-@app.get("/sessions/{session_id}/files/{file_path:path}")
-def download_file(session_id: str, file_path: str):
+@api.get("/sessions/{session_id}/files/{file_path:path}")
+def download_file(session_id: str, file_path: str, user: AuthUser = Depends(require_user)):
     """Download a specific file from the workspace tarball."""
-    session_doc = db.collection("sessions").document(session_id).get()
-    if not session_doc.exists:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    data = session_doc.to_dict()
+    data = _get_session(session_id, user)
     latest_run_id = data.get("latest_run_id")
     if not latest_run_id:
         raise HTTPException(status_code=404, detail="No run found")
@@ -437,8 +446,8 @@ def download_file(session_id: str, file_path: str):
 # ---------------------------------------------------------------------------
 # Case Endpoints
 # ---------------------------------------------------------------------------
-@app.post("/cases")
-def create_case(body: CreateCaseRequest):
+@api.post("/cases")
+def create_case(body: CreateCaseRequest, user: AuthUser = Depends(require_user)):
     case_id = f"case_{uuid.uuid4().hex[:12]}"
     now = _now_iso()
 
@@ -460,6 +469,8 @@ def create_case(body: CreateCaseRequest):
 
     doc = {
         "case_id": case_id,
+        "org_id": user.org_id,
+        "owner_uid": user.uid,
         "workflow_state": "draft",
         "created_at": now,
         "updated_at": now,
@@ -476,20 +487,15 @@ def create_case(body: CreateCaseRequest):
     return {"case_id": case_id, "workflow_state": "draft", "created_at": now}
 
 
-@app.get("/cases")
+@api.get("/cases")
 def list_cases(
+    user: AuthUser = Depends(require_user),
     limit: int = Query(default=20, ge=1, le=100),
     workflow_state: Optional[str] = Query(default=None),
 ):
-    query = db.collection("cases")
+    query = db.collection("cases").where(filter=FieldFilter("org_id", "==", user.org_id))
     if workflow_state:
         query = query.where(filter=FieldFilter("workflow_state", "==", workflow_state))
-        cases = [_case_summary(doc.to_dict()) for doc in query.stream()]
-        return sorted(
-            cases,
-            key=lambda case: case.get("created_at", ""),
-            reverse=True,
-        )[:limit]
     cases = [_case_summary(doc.to_dict()) for doc in query.stream()]
     return sorted(
         cases,
@@ -498,12 +504,9 @@ def list_cases(
     )[:limit]
 
 
-@app.get("/cases/{case_id}")
-def get_case(case_id: str):
-    doc = db.collection("cases").document(case_id).get()
-    if not doc.exists:
-        raise HTTPException(status_code=404, detail="Case not found")
-    data = doc.to_dict()
+@api.get("/cases/{case_id}")
+def get_case(case_id: str, user: AuthUser = Depends(require_user)):
+    data = _get_case(case_id, user)
     if data.get("case_data"):
         data["canonical_case_data"] = copy.deepcopy(data["case_data"])
         data["case_data"] = build_display_case_data(
@@ -513,12 +516,10 @@ def get_case(case_id: str):
     return data
 
 
-@app.patch("/cases/{case_id}")
-def update_case(case_id: str, body: UpdateCaseRequest):
+@api.patch("/cases/{case_id}")
+def update_case(case_id: str, body: UpdateCaseRequest, user: AuthUser = Depends(require_user)):
+    _get_case(case_id, user)
     ref = db.collection("cases").document(case_id)
-    doc = ref.get()
-    if not doc.exists:
-        raise HTTPException(status_code=404, detail="Case not found")
 
     updates: dict = {"updated_at": _now_iso()}
 
@@ -536,16 +537,15 @@ def update_case(case_id: str, body: UpdateCaseRequest):
     return ref.get().to_dict()
 
 
-@app.post("/cases/{case_id}/documents")
+@api.post("/cases/{case_id}/documents")
 async def upload_case_document(
     case_id: str,
     file: UploadFile = File(...),
     document_role: str = Form(default="applicant_document_bundle"),
+    user: AuthUser = Depends(require_user),
 ):
+    _get_case(case_id, user)
     ref = db.collection("cases").document(case_id)
-    doc = ref.get()
-    if not doc.exists:
-        raise HTTPException(status_code=404, detail="Case not found")
 
     document_id = f"doc_{uuid.uuid4().hex[:8]}"
     original_filename = file.filename or "upload"
@@ -590,64 +590,15 @@ async def upload_case_document(
     }
 
 
-@app.get("/cases/{case_id}/documents")
-def list_case_documents(case_id: str):
-    doc = db.collection("cases").document(case_id).get()
-    if not doc.exists:
-        raise HTTPException(status_code=404, detail="Case not found")
-    data = doc.to_dict()
+@api.get("/cases/{case_id}/documents")
+def list_case_documents(case_id: str, user: AuthUser = Depends(require_user)):
+    data = _get_case(case_id, user)
     return data.get("document_manifest", {"documents": []})
 
 
-@app.get("/cases/{case_id}/documents/{document_id}/url")
-def get_document_url(case_id: str, document_id: str):
-    doc = db.collection("cases").document(case_id).get()
-    if not doc.exists:
-        raise HTTPException(status_code=404, detail="Case not found")
-
-    data = doc.to_dict()
-    manifest = data.get("document_manifest", {})
-    documents = manifest.get("documents", [])
-
-    target_doc = None
-    for d in documents:
-        if d.get("document_id") == document_id:
-            target_doc = d
-            break
-
-    if not target_doc:
-        raise HTTPException(status_code=404, detail="Document not found in manifest")
-
-    gcs_path = target_doc["gcs_path"]
-    bucket = gcs.bucket(GCS_BUCKET)
-    blob = bucket.blob(gcs_path)
-
-    try:
-        signed_url = blob.generate_signed_url(
-            expiration=timedelta(minutes=15), method="GET"
-        )
-        return {
-            "signed_url": signed_url,
-            "document_id": document_id,
-            "file_name": target_doc.get("file_name"),
-        }
-    except Exception:
-        return {
-            "signed_url": None,
-            "gcs_path": gcs_path,
-            "document_id": document_id,
-            "file_name": target_doc.get("file_name"),
-            "note": "Signed URL generation failed. Use gcs_path to access the file directly.",
-        }
-
-
-def _find_document_in_manifest(case_id: str, document_id: str) -> tuple[dict, dict]:
+def _find_document_in_manifest(case_id: str, document_id: str, user: AuthUser) -> tuple[dict, dict]:
     """Lookup a document entry from a case's manifest. Returns (case_data, doc_entry)."""
-    doc = db.collection("cases").document(case_id).get()
-    if not doc.exists:
-        raise HTTPException(status_code=404, detail="Case not found")
-
-    data = doc.to_dict()
+    data = _get_case(case_id, user)
     manifest = data.get("document_manifest", {})
     documents = manifest.get("documents", [])
 
@@ -681,10 +632,10 @@ def _content_type_for_filename(filename: str) -> str:
     return content_types.get(ext, "application/octet-stream")
 
 
-@app.get("/cases/{case_id}/documents/{document_id}/content")
-def get_document_content(case_id: str, document_id: str):
+@api.get("/cases/{case_id}/documents/{document_id}/content")
+def get_document_content(case_id: str, document_id: str, user: AuthUser = Depends(require_user)):
     """GCSからファイルをダウンロードして直接配信（signed URL不要）"""
-    _, doc_entry = _find_document_in_manifest(case_id, document_id)
+    _, doc_entry = _find_document_in_manifest(case_id, document_id, user)
     gcs_path = doc_entry["gcs_path"]
     file_name = doc_entry.get("file_name", "download")
 
@@ -788,10 +739,10 @@ def _xlsx_to_html(file_bytes: bytes, sheet_name: str | None = None) -> str:
     return '\n'.join(parts)
 
 
-@app.get("/cases/{case_id}/documents/{document_id}/sheets")
-def get_document_sheets(case_id: str, document_id: str):
+@api.get("/cases/{case_id}/documents/{document_id}/sheets")
+def get_document_sheets(case_id: str, document_id: str, user: AuthUser = Depends(require_user)):
     """xlsxのシート名一覧を返す。"""
-    _, doc_entry = _find_document_in_manifest(case_id, document_id)
+    _, doc_entry = _find_document_in_manifest(case_id, document_id, user)
     file_name = doc_entry.get("file_name", "")
     ext = _file_extension(file_name)
     if ext != "xlsx":
@@ -804,14 +755,15 @@ def get_document_sheets(case_id: str, document_id: str):
     return {"sheets": names}
 
 
-@app.get("/cases/{case_id}/documents/{document_id}/preview")
+@api.get("/cases/{case_id}/documents/{document_id}/preview")
 def get_document_preview(
     case_id: str,
     document_id: str,
     sheet: Optional[str] = Query(None, description="シート名（xlsx用）"),
+    user: AuthUser = Depends(require_user),
 ):
     """docx/xlsxをHTML変換して返す。PDF/画像はそのまま返す。"""
-    _, doc_entry = _find_document_in_manifest(case_id, document_id)
+    _, doc_entry = _find_document_in_manifest(case_id, document_id, user)
     gcs_path = doc_entry["gcs_path"]
     file_name = doc_entry.get("file_name", "download")
     ext = _file_extension(file_name)
@@ -973,14 +925,15 @@ def _format_extraction_error(exc: Exception) -> str:
     return error_msg
 
 
-@app.post("/cases/{case_id}/extract-stream")
-def start_extraction_stream(case_id: str, body: ExtractRequest = ExtractRequest()):
+@api.post("/cases/{case_id}/extract-stream")
+def start_extraction_stream(
+    case_id: str,
+    body: ExtractRequest = ExtractRequest(),
+    user: AuthUser = Depends(require_user),
+):
     """SSE streaming extraction endpoint."""
+    data = _get_case(case_id, user)
     ref = db.collection("cases").document(case_id)
-    doc = ref.get()
-    if not doc.exists:
-        raise HTTPException(status_code=404, detail="Case not found")
-    data = doc.to_dict()
     data.setdefault("case_id", case_id)
     if not data.get("document_manifest", {}).get("documents"):
         raise HTTPException(status_code=400, detail="No documents uploaded")
@@ -1118,14 +1071,14 @@ def start_extraction_stream(case_id: str, body: ExtractRequest = ExtractRequest(
     )
 
 
-@app.post("/cases/{case_id}/extract")
-def start_extraction(case_id: str, body: ExtractRequest = ExtractRequest()):
+@api.post("/cases/{case_id}/extract")
+def start_extraction(
+    case_id: str,
+    body: ExtractRequest = ExtractRequest(),
+    user: AuthUser = Depends(require_user),
+):
+    data = _get_case(case_id, user)
     ref = db.collection("cases").document(case_id)
-    doc = ref.get()
-    if not doc.exists:
-        raise HTTPException(status_code=404, detail="Case not found")
-
-    data = doc.to_dict()
     manifest = data.get("document_manifest", {})
     documents = manifest.get("documents", [])
 
@@ -1283,14 +1236,10 @@ def _start_codex_extraction(
     return {"session_id": session_id, "status": "running"}
 
 
-@app.get("/cases/{case_id}/extraction-status")
-def get_extraction_status(case_id: str):
+@api.get("/cases/{case_id}/extraction-status")
+def get_extraction_status(case_id: str, user: AuthUser = Depends(require_user)):
+    data = _get_case(case_id, user)
     ref = db.collection("cases").document(case_id)
-    doc = ref.get()
-    if not doc.exists:
-        raise HTTPException(status_code=404, detail="Case not found")
-
-    data = doc.to_dict()
     session_id = data.get("extraction_session_id")
     if not session_id:
         raise HTTPException(
@@ -1314,14 +1263,10 @@ def get_extraction_status(case_id: str):
     return {"status": status, "session_id": session_id}
 
 
-@app.get("/cases/{case_id}/application-data")
-def get_application_data(case_id: str):
+@api.get("/cases/{case_id}/application-data")
+def get_application_data(case_id: str, user: AuthUser = Depends(require_user)):
     """Return generated RASENS input rows for the Chrome extension."""
-    doc = db.collection("cases").document(case_id).get()
-    if not doc.exists:
-        raise HTTPException(status_code=404, detail="Case not found")
-
-    data = doc.to_dict()
+    data = _get_case(case_id, user)
     if not data.get("case_data"):
         raise HTTPException(status_code=400, detail="case_data not found in case document")
 
@@ -1389,6 +1334,9 @@ def _harvest_extraction_results(
             )
 
         case_ref.update(updates)
+
+
+app.include_router(api)
 
 
 # ---------------------------------------------------------------------------

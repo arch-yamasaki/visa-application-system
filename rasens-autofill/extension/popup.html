@@ -9,6 +9,23 @@
   <body>
     <main>
       <h1>Visa Autofill</h1>
+      <section id="authSection" hidden>
+        <div class="fieldGroup">
+          <label for="authEmail">メールアドレス</label>
+          <input id="authEmail" type="email" autocomplete="username">
+        </div>
+        <div class="fieldGroup">
+          <label for="authPassword">パスワード</label>
+          <input id="authPassword" type="password" autocomplete="current-password">
+        </div>
+        <button id="signInButton" type="button">ログイン</button>
+        <p id="authStatus" class="subtleStatus" aria-live="polite">visa-appのアカウントでログインしてください</p>
+      </section>
+      <div id="appSection" hidden>
+      <div class="userBar">
+        <span id="userEmail"></span>
+        <button id="signOutButton" type="button" class="secondaryButton">ログアウト</button>
+      </div>
       <section id="firestoreSection">
         <div class="fieldGroup">
           <label for="caseSelect">案件一覧</label>
@@ -35,6 +52,7 @@
         <button id="fillProgressive" type="button">ゆっくり入力</button>
       </details>
       <pre id="status" aria-live="polite">データ未読込</pre>
+      </div>
     </main>
     <script src="api_client.js"></script>
     <script src="popup.js"></script>

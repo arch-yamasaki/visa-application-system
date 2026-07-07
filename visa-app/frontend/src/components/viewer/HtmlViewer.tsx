@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { authHeaders } from '../../auth/firebase'
 import type { SourceRef } from '../../types/caseData'
 
 interface Props {
@@ -26,6 +27,21 @@ function anchorId(sourceRef: SourceRef | null | undefined): string | null {
 export default function HtmlViewer({ url, highlightText, sourceRef, sheets, onSheetChange }: Props) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const [activeSheet, setActiveSheet] = useState(sheets?.[0] ?? '')
+  const [html, setHtml] = useState('')
+
+  // preview API は認証必須のため、iframe src ではなく fetch + srcDoc で読み込む
+  useEffect(() => {
+    let cancelled = false
+    setHtml('')
+    ;(async () => {
+      const res = await fetch(url, { headers: await authHeaders() })
+      const text = await res.text()
+      if (!cancelled) setHtml(text)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [url])
 
   // sheets が非同期で届いた場合に初期選択
   useEffect(() => {
@@ -147,7 +163,7 @@ export default function HtmlViewer({ url, highlightText, sourceRef, sheets, onSh
       )}
       <iframe
         ref={iframeRef}
-        src={url}
+        srcDoc={html}
         className="w-full flex-1 border-0"
         title="書類プレビュー"
       />

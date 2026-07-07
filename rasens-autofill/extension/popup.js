@@ -9,6 +9,14 @@ const elements = {
   workflowWarning: document.querySelector("#workflowWarning"),
   workflowReady: document.querySelector("#workflowReady"),
   workflowState: document.querySelector("#wfState"),
+  authSection: document.querySelector("#authSection"),
+  appSection: document.querySelector("#appSection"),
+  authEmail: document.querySelector("#authEmail"),
+  authPassword: document.querySelector("#authPassword"),
+  authStatus: document.querySelector("#authStatus"),
+  signInButton: document.querySelector("#signInButton"),
+  signOutButton: document.querySelector("#signOutButton"),
+  userEmail: document.querySelector("#userEmail"),
 };
 const RASENS_URL_PATTERNS = ["https://www.rasens-immi.moj.go.jp/*"];
 let availableCases = [];
@@ -234,6 +242,34 @@ function getCaseSourceLabel(caseId, caseSummary) {
   return `visa-app: ${caseId}`;
 }
 
+async function showSection(auth) {
+  elements.authSection.hidden = Boolean(auth);
+  elements.appSection.hidden = !auth;
+  elements.userEmail.textContent = auth?.email || "";
+}
+
+elements.signInButton.addEventListener("click", async () => {
+  elements.signInButton.disabled = true;
+  elements.authStatus.textContent = "ログイン中...";
+  try {
+    await window.apiClient.signIn(elements.authEmail.value.trim(), elements.authPassword.value);
+    elements.authPassword.value = "";
+    await showSection(await window.apiClient.getAuthState());
+    await loadCases();
+  } catch (error) {
+    elements.authStatus.textContent = error.message;
+  } finally {
+    elements.signInButton.disabled = false;
+  }
+});
+
+elements.signOutButton.addEventListener("click", async () => {
+  await window.apiClient.signOut();
+  await clearRows();
+  elements.authStatus.textContent = "visa-appのアカウントでログインしてください";
+  await showSection(null);
+});
+
 elements.fill.addEventListener("click", () => sendToTab("VISA_AUTOFILL_FILL"));
 elements.fillProgressive.addEventListener("click", () => sendToTab("VISA_AUTOFILL_FILL_PROGRESSIVE"));
 
@@ -288,6 +324,10 @@ elements.loadFromApi.addEventListener("click", async () => {
 });
 
 async function initializePopup() {
+  const auth = await window.apiClient.getAuthState();
+  await showSection(auth);
+  if (!auth) return;
+
   const { visaRows, visaDataSource, visaFillable } = await chrome.storage.local.get([
     "visaRows",
     "visaDataSource",

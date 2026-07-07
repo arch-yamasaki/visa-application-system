@@ -1,9 +1,10 @@
 import type { CaseDocument, CaseSummary, DocumentEntry } from '../types/caseData'
+import { authHeaders } from '../auth/firebase'
 import { mockApi } from './mockData'
 
 const BASE = '/api'
 
-function isDemoMode(): boolean {
+export function isDemoMode(): boolean {
   if (import.meta.env.VITE_DEMO === 'true') return true
   if (typeof window !== 'undefined') {
     const params = new URLSearchParams(window.location.search)
@@ -22,6 +23,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     headers: {
+      ...(await authHeaders()),
       ...(init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
       ...init?.headers,
     },
@@ -83,13 +85,17 @@ export const apiClient = {
     )
   },
 
-  getDocumentUrl(caseId: string, documentId: string): Promise<{ signed_url: string }> {
-    if (isDemoMode()) return mockApi.getDocumentUrl(caseId, documentId)
-    return request(`/cases/${caseId}/documents/${documentId}/url`)
-  },
-
-  getDocumentContentUrl(caseId: string, documentId: string): string {
-    return `${BASE}/cases/${caseId}/documents/${documentId}/content`
+  /** 認証付きで書類を取得し、viewer に渡せる objectURL を返す。呼び出し側で revoke する。 */
+  async getDocumentBlobUrl(caseId: string, documentId: string): Promise<string> {
+    if (isDemoMode()) return (await mockApi.getDocumentUrl(caseId, documentId)).signed_url
+    const res = await fetch(`${BASE}/cases/${caseId}/documents/${documentId}/content`, {
+      headers: await authHeaders(),
+    })
+    if (!res.ok) {
+      const text = await res.text().catch(() => res.statusText)
+      throw new Error(`API error ${res.status}: ${text}`)
+    }
+    return URL.createObjectURL(await res.blob())
   },
 
   getDocumentPreviewUrl(caseId: string, documentId: string, sheet?: string): string {
@@ -137,7 +143,7 @@ export const apiClient = {
         console.info('ui.extract.fetch_started', { caseId })
         const res = await fetch(`${BASE}/cases/${caseId}/extract-stream`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
           body: JSON.stringify({
             backend: options.backend ?? 'gemini',
             pattern: options.pattern ?? 'auto',

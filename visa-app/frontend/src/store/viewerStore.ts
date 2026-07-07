@@ -7,11 +7,9 @@ interface ViewerState {
   currentPage: number
   highlightText: string | null
   highlightSourceRef: SourceRef | null
-  signedUrls: Record<string, string>
   activeFieldPath: string | null
 
   setDocuments: (docs: DocumentEntry[]) => void
-  setSignedUrl: (docId: string, url: string) => void
   navigateToSource: (ref: SourceRef) => void
   selectDocument: (docId: string) => void
   setPage: (page: number) => void
@@ -25,14 +23,10 @@ export const useViewerStore = create<ViewerState>((set) => ({
   currentPage: 1,
   highlightText: null,
   highlightSourceRef: null,
-  signedUrls: {},
   activeFieldPath: null,
 
   setDocuments: (docs) =>
     set({ documents: docs, currentDocumentId: docs[0]?.document_id ?? null }),
-
-  setSignedUrl: (docId, url) =>
-    set((s) => ({ signedUrls: { ...s.signedUrls, [docId]: url } })),
 
   navigateToSource: (ref) =>
     set(() => {
