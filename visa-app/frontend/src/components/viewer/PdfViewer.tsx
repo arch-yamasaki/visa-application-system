@@ -78,7 +78,15 @@ export default function PdfViewer({ url, page, highlightText, sourceRef }: Props
     overlay.style.width = `${viewport.width}px`
     overlay.style.height = `${viewport.height}px`
 
-    const bbox = sourceRef?.bbox ?? sourceRef?.anchor?.bbox
+    // ambiguous は確定ハイライトにしない。not_found や status なしの場合、
+    // legacy top-level bbox は別経路(Gemini bbox)由来の根拠なので表示してよい。
+    const anchorStatus = sourceRef?.anchor?.status
+    const bbox =
+      anchorStatus === 'resolved'
+        ? sourceRef?.anchor?.bbox ?? sourceRef?.bbox
+        : anchorStatus === 'ambiguous'
+          ? null
+          : sourceRef?.bbox
     if (bbox) {
       const { y_min, x_min, y_max, x_max } = bbox
       const div = document.createElement('div')

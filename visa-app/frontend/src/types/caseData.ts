@@ -263,6 +263,7 @@ export interface SourceAnchor {
   status: 'resolved' | 'ambiguous' | 'not_found' | 'skipped_unsupported' | string
   resolver_type?: string
   anchor_id?: string
+  page?: number
   bbox?: { y_min: number; x_min: number; y_max: number; x_max: number }
   match_count?: number
   sheet_name?: string

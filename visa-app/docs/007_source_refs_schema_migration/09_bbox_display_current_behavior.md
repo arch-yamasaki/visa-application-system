@@ -20,6 +20,7 @@ Status: 調査メモ
   - [現状の重要ポイント](#現状の重要ポイント)
 - [anchor resolver 方針](#anchor-resolver-方針)
   - [anchor resolver につながる論点](#anchor-resolver-につながる論点)
+  - [2026-07 設計更新: bbox対象とanchor.page](#2026-07-設計更新-bbox対象とanchorpage)
   - [方針更新: anchor resolver では text\_quote 単独に依存しない](#方針更新-anchor-resolver-では-text_quote-単独に依存しない)
   - [text\_quote 検索の位置づけ](#text_quote-検索の位置づけ)
   - [anchor resolver は text\_quote だけで解決しない](#anchor-resolver-は-text_quote-だけで解決しない)
@@ -776,6 +777,56 @@ source_ref
         |
         `-- DOCX -> paragraph_index / table_index + row + col
 ```
+
+### 2026-07 設計更新: bbox対象とanchor.page
+
+詳細な実装方針は [02_pdf_bbox.md](02_pdf_bbox.md) に集約する。ここでは現状整理として、今回の調査で見えた重要点だけ残す。
+
+現在のPDF bboxは、`BBOX_TARGET_FIELDS` に入っているfieldだけが Gemini bbox 候補になる。そのため、`source_ref` があっても field が対象外なら画像PDFではハイライトされない。
+
+```text
+source_ref はある
+  |
+  v
+field_path が BBOX_TARGET_FIELDS にない
+  |
+  v
+Gemini bbox candidate にならない
+  |
+  v
+画像PDFでは text fallback も効かない
+  |
+  v
+画面上は何も光らない
+```
+
+例として、`employer.employment_insurance_office_number` は抽出schemaにはあるが、bbox対象リストから漏れていると、雇用保険番号の値が取れていてもPDF上で光らない。
+
+また、`source_ref.page` は「抽出時にGeminiが示したページ」であり、表示用の正解ページとは限らない。`151-8570` のように、実物は別ページにあるのに `source_ref.page` がずれると、現在の bbox locator は指定ページだけを探して失敗する。
+
+```text
+source_ref.page = 22
+  |
+  v
+bbox_locator は page 22 だけ画像化して探す
+  |
+  v
+実際の値が page 20 にある
+  |
+  v
+not_found
+```
+
+そのため、今後は `source_ref.page` と `anchor.page` を分ける。
+
+| 情報 | 意味 | 誰が使うか |
+|---|---|---|
+| `source_ref.page` | Gemini抽出が根拠として示したページ | 監査・デバッグ・resolverの初期ヒント |
+| `anchor.page` | resolverが実際に場所を特定できたページ | viewerのジャンプ先 |
+| `source_ref.text_quote` | 人間に見せる根拠引用 | reviewer / resolverの検索ヒント |
+| `anchor.bbox` | 実際に光らせる座標 | PDF viewer |
+
+つまり、`source_ref` は「抽出根拠」、`anchor` は「表示用に解決済みの場所」として分ける。
 
 ### 方針更新: anchor resolver では text_quote 単独に依存しない
 

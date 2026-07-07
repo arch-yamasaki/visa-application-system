@@ -7,11 +7,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pymupdf
 
+from .anchor_resolver import _page_number
 from .gemini import get_bboxes_for_page, _map_field_metadata
 
 logger = logging.getLogger(__name__)
 
-BBOX_TARGET_FIELDS = [
+PDF_GEMINI_BBOX_FIELDS = [
     "applicant.birth_date",
     "applicant.home_country_address",
     "applicant.marital_status",
@@ -41,6 +42,7 @@ BBOX_TARGET_FIELDS = [
     "employer.capital_jpy",
     "employer.corporate_number",
     "employer.employee_count",
+    "employer.employment_insurance_office_number",
     "employer.has_corporate_number",
     "employer.industry_primary",
     "employer.name",
@@ -59,6 +61,8 @@ BBOX_TARGET_FIELDS = [
     "employment.position_title",
     "employment.activity_details",
 ]
+
+BBOX_TARGET_FIELDS = PDF_GEMINI_BBOX_FIELDS
 
 
 def _locator_text(text_quote: str) -> str:
@@ -82,19 +86,23 @@ def locate_bboxes(
     """
     field_metadata = _map_field_metadata(field_metadata)
 
-    # bbox対象フィールドのsource_refsを (document_id, page) でグループ化
+    # PDF Gemini bbox対象のsource_refsを (document_id, page) でグループ化
     page_groups: dict[tuple[str, int], dict[str, dict]] = {}
     candidate_map: dict[str, dict] = {}
     candidate_count = 0
-    for field_path in BBOX_TARGET_FIELDS:
-        meta = field_metadata.get(field_path)
-        if not meta:
+    for field_path, meta in field_metadata.items():
+        if field_path not in PDF_GEMINI_BBOX_FIELDS:
+            continue
+        if not isinstance(meta, dict):
             continue
         for ref_index, ref in enumerate(meta.get("source_refs", [])):
+            if not isinstance(ref, dict):
+                continue
             doc_id = ref.get("document_id", "")
-            page_num = ref.get("page", 1)
+            page_num = _page_number(ref.get("page"))
             text_quote = ref.get("text_quote", "")
-            if ref.get("bbox") or ref.get("anchor", {}).get("status") == "resolved":
+            anchor_status = ref.get("anchor", {}).get("status")
+            if ref.get("bbox") or anchor_status in ("resolved", "ambiguous"):
                 continue
             if not text_quote or not doc_id:
                 continue
