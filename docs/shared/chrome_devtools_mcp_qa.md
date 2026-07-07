@@ -76,7 +76,8 @@ PDF由来で bbox が付きやすい項目をクリックする。
 正常な許容差:
 
 - bboxなしは常に不具合ではない。backendのallowlist対象外やGemini bbox失敗でも、抽出結果は有効な場合がある。
-- 現行UIは `source_refs[0]` を primary evidence として使う。
+- 現行UIは `source_refs` から primary ref を1つ選ぶ（resolved優先 → bboxあり → anchorなし → 先頭）。
+- `anchor.status` が `ambiguous` の項目は、破線の候補ハイライト（最大3件）とビューア上部の候補ナビが出るのが正常。
 - PDF fallback は部分一致のため、誤ハイライトの余地がある。
 - DOCX / XLSX は最初に見つかった一致箇所を `<mark>` する。
 

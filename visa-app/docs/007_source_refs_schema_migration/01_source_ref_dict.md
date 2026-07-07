@@ -45,7 +45,7 @@ Gemini raw response の証跡表現を、文字列から意味のある dict に
 
 ## なぜ array にしないか
 
-現行 UI は primary evidence として `source_refs[0]` だけを使っている。Gemini に複数証跡を直接返させても、今のレビュー画面では実益が薄い。
+現行 UI は `source_refs` から primary ref を1つ選んで表示する（resolved優先。実装は `FieldRow.pickPrimarySourceRef`）。Gemini に複数証跡を直接返させても、今のレビュー画面では実益が薄い。なお「書類間で値が食い違う場合の複数候補」は別の仕組み（alternatives、`../009_evidence_candidates/README.md`）として設計している。
 
 また、Gemini response schema は複雑化すると `too many states` 系の制約に当たりやすい。配列の `source_refs[]` より、単一 `source_ref` dict の方が schema が軽い。
 

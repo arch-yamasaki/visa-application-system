@@ -266,16 +266,14 @@ config = types.GenerateContentConfig(
 
 ## 10. Bbox推定（bbox_locator.py）
 
-フロントエンドで PDF 上にハイライト表示するために、特定フィールドの値がPDF上のどこにあるかを Gemini で推定する。
+フロントエンドで PDF 上にハイライト表示するために、値がPDF上のどこにあるかを Gemini で推定する。
+anchor resolver（PDFテキスト層等の決定的解決）で解決できなかった source_ref だけが対象の **fallback**。
 
-### 対象フィールド（BBOX_TARGET_FIELDS）
+### 対象フィールド（PDF_GEMINI_BBOX_FIELDS / PDF_GEMINI_BBOX_FIELD_PREFIXES）
 
-合計約20フィールド。主なものは:
-
-- `applicant.name_roman`, `applicant.nationality_region`, `applicant.birth_date`, `applicant.passport.number`
-- `employment.job_title`, `employment.monthly_salary`, `employment.work_location`
-- `applicant.education.0.school_name`, `applicant.education.0.major_field`
-- `employer.name`, `employer.capital_jpy`, `employer.representative_name`, `employer.industry_primary`, `employer.corporate_number`
+固定の field path 列挙（約50フィールド）に加えて、prefix一致
+（`applicant.employment_history.` / `applicant.education.`）で繰り返し配列を丸ごと対象にする。
+正確なリストは `bbox_locator.py` を正とする。
 
 ### 処理フロー（locate_bboxes）
 
@@ -283,16 +281,16 @@ config = types.GenerateContentConfig(
 def locate_bboxes(field_metadata: dict | list, pdf_bytes_map: dict[str, bytes]) -> dict:
 ```
 
-1. `field_metadata` から対象フィールドの `source_refs` を走査
-2. `(document_id, page)` のペアでグループ化し、各グループに `{field_path: text_quote}` を集約
-3. 各ページを PyMuPDF で 300dpi PNG 画像に変換
-4. `get_bboxes_for_page()` でページ画像と `field_quotes` を Gemini に送信
-5. Gemini は `[y_min, x_min, y_max, x_max]`（0-1000 正規化座標）を返す
-6. 結果を `field_metadata` の対応する `source_ref` に `bbox` として付与
+1. `field_metadata` から対象フィールドの未解決 `source_refs` を走査（値エコー・短すぎるquoteは除外）
+2. 同一 `(document_id, page, locator_text)` の候補は1つに集約し、`(document_id, page)` でグループ化
+3. 各ページを PyMuPDF で PNG 画像化（`BBOX_RENDER_DPI`、デフォルト200dpi）
+4. `get_bboxes_for_page()` でページ画像と candidate リストを Gemini に送信
+5. Gemini は `{candidate_id: [y_min, x_min, y_max, x_max]}`（0-1000 正規化座標）を返す
+6. 結果を candidate の `targets`（同一locatorを共有する全 `(field_path, ref_index)`）に `bbox` として付与
 
 ### get_bboxes_for_page（gemini.py 内）
 
-Gemini にページ画像を渡し、指定テキストの位置を特定させる。プロンプトは各テキストの field_path と text_quote を列挙し、JSON形式で `{field_path: [y_min, x_min, y_max, x_max]}` を返すよう指示する。
+Gemini にページ画像を渡し、指定テキストの位置を特定させる。プロンプトは candidate_id / field_path / locator_text を列挙し、JSON形式で `{candidate_id: [y_min, x_min, y_max, x_max]}` を返すよう指示する。
 
 ---
 

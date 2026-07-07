@@ -1,6 +1,13 @@
 # 09 bbox / highlight の現状整理
 
-Status: 調査メモ
+Status: 調査メモ（2026-06〜07時点のスナップショット。以後は更新しない）
+
+> **注意**: このメモの「現状」は書いた時点のもので、その後の実装で変わった点がある。
+> 主な差分: bbox対象は `PDF_GEMINI_BBOX_FIELDS` + prefix（employment_history / education 配列全体）、
+> 候補には品質フィルタと重複集約あり、`BBOX_TARGET_FIELDS` alias は削除済み、
+> ambiguous は `anchor.candidates`（最大3件）を保存してビューアで全候補表示・候補間移動できる。
+> 最新の挙動はコード（`bbox_locator.py` / `anchor_resolver.py` / `PdfViewer.tsx`）と
+> `../009_evidence_candidates/README.md` を正とする。
 
 - [このメモの目的](#このメモの目的)
 - [まず全体像](#まず全体像)

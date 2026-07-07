@@ -31,7 +31,7 @@
 
 レビューUIは、RASENSフォーム順に近い順序で `case_data` を表示します。順序の正本は `reviewFieldOrder.ts` です。設計上の対応表は `visa-app/docs/005_case_navigation_and_review_order/form_order_detail_design.md` を参照します。
 
-フィールドをクリックすると、対応する `field_metadata.source_refs[0]` へ移動します。PDFの場合は bbox があれば座標ハイライト、なければ text quote の検索ハイライトを使います。DOCX/XLSXはHTMLプレビュー上でテキスト検索します。
+フィールドをクリックすると、`source_refs` から primary ref（`anchor.status === "resolved"` → `bbox` あり → anchor なし → 先頭、の優先順）を選んで証跡へ移動します。PDFの場合は `anchor.bbox`（なければ legacy `bbox`）で座標ハイライト、`anchor.status` が `ambiguous` なら保存済みの候補位置（`anchor.candidates`、最大3件）を破線で全件表示し、ビューア上部のナビで候補間を移動できます。どちらも無ければ text quote の検索ハイライトにフォールバックします。DOCX/XLSXはHTMLプレビュー上でテキスト検索します。詳細は `../009_evidence_candidates/README.md` を参照。
 
 ## 入力UI
 

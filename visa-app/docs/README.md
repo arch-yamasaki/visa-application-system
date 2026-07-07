@@ -10,3 +10,4 @@
 | 006 | [current_architecture](006_current_architecture/) | 現行実装の全体構成、backend/API、frontend review UI |
 | 007 | [source_refs_schema_migration](007_source_refs_schema_migration/) | source_ref dict 化、bbox改善、Office anchor、retry loop の作業計画 |
 | 008 | [eval_workflow](008_eval_workflow/) | 実資料fixture、golden、Gemini bytes eval、比較結果の解釈 |
+| 009 | [evidence_candidates](009_evidence_candidates/) | 証跡候補の複数表示。位置候補ナビ（実装済み）と値候補 alternatives（実装仕様） |
