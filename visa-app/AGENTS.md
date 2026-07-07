@@ -68,9 +68,9 @@ API は全ルート認証必須（`backend/auth.py` の `require_user`）。
 ```bash
 cd backend
 # メール/パスワードのユーザー発行
-.venv/bin/python scripts/manage_users.py create --email staff@example.com --password '...' --org aicx
+.venv/bin/python scripts/manage_users.py create --email staff@example.com --password '...' --org genbaai
 # Googleログインするユーザーの登録（パスワード不要）
-.venv/bin/python scripts/manage_users.py create --email someone@gmail.com --org aicx
+.venv/bin/python scripts/manage_users.py create --email someone@gmail.com --org genbaai
 .venv/bin/python scripts/manage_users.py list
 ```
 
