@@ -29,10 +29,6 @@ PDF_GEMINI_BBOX_FIELDS = [
     "applicant.immigration_history.has_entries",
     "applicant.immigration_history.prior_coe_applications.has_history",
     "applicant.immigration_history.prior_coe_applications.count",
-    "applicant.education.0.graduation_date",
-    "applicant.education.0.level",
-    "applicant.education.0.school_name",
-    "applicant.education.0.major_field",
     "entry_plan.planned_entry_date",
     "entry_plan.planned_period_months",
     "entry_plan.planned_period_years",
@@ -62,7 +58,28 @@ PDF_GEMINI_BBOX_FIELDS = [
     "employment.activity_details",
 ]
 
-BBOX_TARGET_FIELDS = PDF_GEMINI_BBOX_FIELDS
+# 繰り返し配列はindex列挙だとスキーマ変更や件数増で漏れるため、prefixで丸ごと対象にする。
+PDF_GEMINI_BBOX_FIELD_PREFIXES = (
+    "applicant.education.",
+    "applicant.employment_history.",
+)
+
+# 抽出値のエコー(実文書に存在しないquote)はbboxを引けないので候補にしない。
+_VALUE_ECHO_QUOTES = {"true", "false", "null", "none"}
+_MIN_LOCATOR_CHARS = 2
+
+
+def _is_bbox_target(field_path: str) -> bool:
+    if field_path in PDF_GEMINI_BBOX_FIELDS:
+        return True
+    return field_path.startswith(PDF_GEMINI_BBOX_FIELD_PREFIXES)
+
+
+def _is_low_quality_locator(locator_text: str) -> bool:
+    normalized = locator_text.strip().lower()
+    if len(normalized) < _MIN_LOCATOR_CHARS:
+        return True
+    return normalized in _VALUE_ECHO_QUOTES
 
 
 def _locator_text(text_quote: str) -> str:
@@ -89,10 +106,13 @@ def locate_bboxes(
     # PDF Gemini bbox対象のsource_refsを (document_id, page) でグループ化
     page_groups: dict[tuple[str, int], dict[str, dict]] = {}
     candidate_map: dict[str, dict] = {}
+    # 同一ページの同一locatorはGeminiに1回だけ聞き、結果を全refへ配る
+    dedup_index: dict[tuple[str, int, str], dict] = {}
     candidate_count = 0
+    skipped_not_target = 0
+    skipped_low_quality = 0
+    deduped_refs = 0
     for field_path, meta in field_metadata.items():
-        if field_path not in PDF_GEMINI_BBOX_FIELDS:
-            continue
         if not isinstance(meta, dict):
             continue
         for ref_index, ref in enumerate(meta.get("source_refs", [])):
@@ -109,21 +129,40 @@ def locate_bboxes(
             # PDFのみ対象
             if doc_id not in pdf_bytes_map:
                 continue
-            key = (doc_id, page_num)
-            if key not in page_groups:
-                page_groups[key] = {}
+            if not _is_bbox_target(field_path):
+                skipped_not_target += 1
+                continue
+            locator_text = _locator_text(text_quote)
+            if _is_low_quality_locator(locator_text):
+                skipped_low_quality += 1
+                continue
+            dedup_key = (doc_id, page_num, locator_text.lower())
+            existing = dedup_index.get(dedup_key)
+            if existing is not None:
+                existing["targets"].append((field_path, ref_index))
+                deduped_refs += 1
+                continue
             candidate_id = f"candidate_{candidate_count:04d}"
             candidate_count += 1
             candidate = {
                 "field_path": field_path,
-                "ref_index": ref_index,
+                "targets": [(field_path, ref_index)],
                 "document_id": doc_id,
                 "page": page_num,
                 "text_quote": text_quote,
-                "locator_text": _locator_text(text_quote),
+                "locator_text": locator_text,
             }
-            page_groups[key][candidate_id] = candidate
+            page_groups.setdefault((doc_id, page_num), {})[candidate_id] = candidate
             candidate_map[candidate_id] = candidate
+            dedup_index[dedup_key] = candidate
+
+    if skipped_not_target or skipped_low_quality or deduped_refs:
+        logger.info(
+            "bbox_locator_metric event=candidates_filtered not_target=%d low_quality=%d deduped=%d",
+            skipped_not_target,
+            skipped_low_quality,
+            deduped_refs,
+        )
 
     if not page_groups:
         logger.info("bbox_locator_metric event=no_candidates fields=%d", len(field_metadata))
@@ -210,18 +249,17 @@ def locate_bboxes(
                     continue
                 if candidate.get("document_id") != doc_id or candidate.get("page") != page_num:
                     continue
-                field_path = candidate["field_path"]
-                ref_index = candidate["ref_index"]
-                refs = field_metadata.get(field_path, {}).get("source_refs", [])
-                if ref_index >= len(refs):
-                    continue
-                refs[ref_index]["bbox"] = {
-                    "y_min": bbox_coords[0],
-                    "x_min": bbox_coords[1],
-                    "y_max": bbox_coords[2],
-                    "x_max": bbox_coords[3],
-                }
-                applied += 1
+                for field_path, ref_index in candidate["targets"]:
+                    refs = field_metadata.get(field_path, {}).get("source_refs", [])
+                    if ref_index >= len(refs):
+                        continue
+                    refs[ref_index]["bbox"] = {
+                        "y_min": bbox_coords[0],
+                        "x_min": bbox_coords[1],
+                        "y_max": bbox_coords[2],
+                        "x_max": bbox_coords[3],
+                    }
+                    applied += 1
 
     logger.info(
         "bbox_locator_metric event=completed page_groups=%d candidates=%d rendered_pages=%d applied_refs=%d elapsed_ms=%d",

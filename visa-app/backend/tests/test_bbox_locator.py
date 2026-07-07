@@ -90,6 +90,121 @@ def test_locate_bboxes_includes_employment_insurance_office_number():
     }
 
 
+def test_locate_bboxes_includes_employment_history_and_education_by_prefix():
+    field_metadata = {
+        "applicant.employment_history.1.company_name_en": {
+            "source_refs": [
+                {
+                    "document_id": "doc_pdf",
+                    "page": 1,
+                    "text_quote": "KATHMANDU RESTAURANT (CHENGDU)",
+                    "confidence": 0.9,
+                    "anchor": {
+                        "type": "pdf_bbox",
+                        "status": "not_found",
+                        "resolver_type": "pdf_text_layer",
+                        "match_count": 0,
+                    },
+                }
+            ]
+        },
+        "applicant.education.1.school_name": {
+            "source_refs": [
+                {
+                    "document_id": "doc_pdf",
+                    "page": 1,
+                    "text_quote": "SICHUAN UNIVERSITY",
+                    "confidence": 0.9,
+                }
+            ]
+        },
+    }
+
+    def fake_get_bboxes(_image_bytes, candidates):
+        assert {candidate["field_path"] for candidate in candidates.values()} == {
+            "applicant.employment_history.1.company_name_en",
+            "applicant.education.1.school_name",
+        }
+        return {candidate_id: [100, 200, 130, 260] for candidate_id in candidates}
+
+    with patch("extractors.bbox_locator.pymupdf.open", return_value=_fake_pdf_doc()):
+        with patch("extractors.bbox_locator.get_bboxes_for_page", side_effect=fake_get_bboxes):
+            result = locate_bboxes(field_metadata, {"doc_pdf": b"pdf"})
+
+    expected = {"y_min": 100, "x_min": 200, "y_max": 130, "x_max": 260}
+    assert result["applicant.employment_history.1.company_name_en"]["source_refs"][0]["bbox"] == expected
+    assert result["applicant.education.1.school_name"]["source_refs"][0]["bbox"] == expected
+
+
+def test_locate_bboxes_skips_low_quality_quotes():
+    field_metadata = {
+        "applicant.employment_history.0.start_month_unknown": {
+            "source_refs": [
+                {
+                    "document_id": "doc_pdf",
+                    "page": 1,
+                    "text_quote": "true",
+                    "confidence": 0.9,
+                }
+            ]
+        },
+        "applicant.employment_history.0.country_region": {
+            "source_refs": [
+                {
+                    "document_id": "doc_pdf",
+                    "page": 1,
+                    "text_quote": "X",
+                    "confidence": 0.9,
+                }
+            ]
+        },
+    }
+
+    with patch("extractors.bbox_locator.get_bboxes_for_page") as mock_get_bboxes:
+        result = locate_bboxes(field_metadata, {"doc_pdf": b"pdf"})
+
+    mock_get_bboxes.assert_not_called()
+    for meta in result.values():
+        assert "bbox" not in meta["source_refs"][0]
+
+
+def test_locate_bboxes_dedupes_same_locator_and_applies_to_all_refs():
+    field_metadata = {
+        "applicant.employment_history.0.company_name_en": {
+            "source_refs": [
+                {
+                    "document_id": "doc_pdf",
+                    "page": 1,
+                    "text_quote": "KATHMANDU RESTAURANT (CHENGDU)",
+                    "confidence": 0.9,
+                }
+            ]
+        },
+        "applicant.employment_history.0.company_name_local": {
+            "source_refs": [
+                {
+                    "document_id": "doc_pdf",
+                    "page": 1,
+                    "text_quote": "KATHMANDU RESTAURANT (CHENGDU)",
+                    "confidence": 0.9,
+                }
+            ]
+        },
+    }
+
+    def fake_get_bboxes(_image_bytes, candidates):
+        assert len(candidates) == 1
+        return {next(iter(candidates)): [100, 200, 130, 260]}
+
+    with patch("extractors.bbox_locator.pymupdf.open", return_value=_fake_pdf_doc()):
+        with patch("extractors.bbox_locator.get_bboxes_for_page", side_effect=fake_get_bboxes):
+            result = locate_bboxes(field_metadata, {"doc_pdf": b"pdf"})
+
+    expected = {"y_min": 100, "x_min": 200, "y_max": 130, "x_max": 260}
+    assert result["applicant.employment_history.0.company_name_en"]["source_refs"][0]["bbox"] == expected
+    assert result["applicant.employment_history.0.company_name_local"]["source_refs"][0]["bbox"] == expected
+
+
 def test_locate_bboxes_skips_ambiguous_anchor():
     field_metadata = {
         "employment.monthly_salary": {
