@@ -154,8 +154,8 @@ export default function PdfViewer({ url, page, highlightText, sourceRef }: Props
     overlay.style.width = `${viewport.width}px`
     overlay.style.height = `${viewport.height}px`
 
-    // ambiguous は確定ハイライトにしない。not_found や status なしの場合、
-    // legacy top-level bbox は別経路(Gemini bbox)由来の根拠なので表示してよい。
+    // ambiguous は単一確定にせず、保存された候補位置を「候補」スタイルで全て見せる。
+    // not_found や status なしの場合、legacy top-level bbox は別経路(Gemini bbox)由来の根拠なので表示してよい。
     const anchorStatus = sourceRef?.anchor?.status
     const bbox =
       anchorStatus === 'resolved'
@@ -163,24 +163,25 @@ export default function PdfViewer({ url, page, highlightText, sourceRef }: Props
         : anchorStatus === 'ambiguous'
           ? null
           : sourceRef?.bbox
-    const scrollKey = `${pageNum}:${bbox ? JSON.stringify(bbox) : highlightText ?? ''}`
+    const candidates =
+      anchorStatus === 'ambiguous'
+        ? (sourceRef?.anchor?.candidates ?? []).filter(
+            (candidate) => (candidate.page ?? sourceRef?.page ?? pageNum) === pageNum,
+          )
+        : []
+    const scrollKey = `${pageNum}:${
+      bbox ? JSON.stringify(bbox) : candidates.length ? JSON.stringify(candidates) : highlightText ?? ''
+    }`
     // ズームによる再描画では highlight へ再スクロールしない
     const shouldScroll = scrollKey !== lastScrollKeyRef.current
     lastScrollKeyRef.current = scrollKey
 
     if (bbox) {
-      const { y_min, x_min, y_max, x_max } = bbox
-      const div = document.createElement('div')
-      div.style.position = 'absolute'
-      div.style.left = `${(x_min / 1000) * viewport.width}px`
-      div.style.top = `${(y_min / 1000) * viewport.height}px`
-      div.style.width = `${((x_max - x_min) / 1000) * viewport.width}px`
-      div.style.height = `${((y_max - y_min) / 1000) * viewport.height}px`
-      div.style.backgroundColor = 'rgba(255, 160, 0, 0.45)'
-      div.style.border = '1px solid rgba(255, 140, 0, 0.7)'
-      div.style.borderRadius = '2px'
-      overlay.appendChild(div)
+      const div = appendBboxDiv(overlay, viewport, bbox, 'resolved')
       if (shouldScroll) div.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    } else if (candidates.length > 0) {
+      const divs = candidates.map((candidate) => appendBboxDiv(overlay, viewport, candidate.bbox, 'candidate'))
+      if (shouldScroll) divs[0]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     } else if (highlightText?.trim()) {
       const textContent = await pdfPage.getTextContent()
       highlightTextOnCanvas(overlay, textContent.items as TextItem[], viewport, highlightText.trim(), shouldScroll)
@@ -286,11 +287,36 @@ export default function PdfViewer({ url, page, highlightText, sourceRef }: Props
   )
 }
 
+function appendBboxDiv(
+  overlay: HTMLElement,
+  viewport: pdfjsLib.PageViewport,
+  bbox: { y_min: number; x_min: number; y_max: number; x_max: number },
+  variant: 'resolved' | 'candidate',
+): HTMLElement {
+  const { y_min, x_min, y_max, x_max } = bbox
+  const div = document.createElement('div')
+  div.style.position = 'absolute'
+  div.style.left = `${(x_min / 1000) * viewport.width}px`
+  div.style.top = `${(y_min / 1000) * viewport.height}px`
+  div.style.width = `${((x_max - x_min) / 1000) * viewport.width}px`
+  div.style.height = `${((y_max - y_min) / 1000) * viewport.height}px`
+  if (variant === 'candidate') {
+    div.style.backgroundColor = 'rgba(255, 160, 0, 0.2)'
+    div.style.border = '2px dashed rgba(255, 140, 0, 0.9)'
+  } else {
+    div.style.backgroundColor = 'rgba(255, 160, 0, 0.45)'
+    div.style.border = '1px solid rgba(255, 140, 0, 0.7)'
+  }
+  div.style.borderRadius = '2px'
+  overlay.appendChild(div)
+  return div
+}
+
 function normalizeText(s: string): string {
   return s
     .normalize('NFKC')
     .replace(/[\s　]+/g, '')
-    .replace(/[、。,.，．]/g, '')
+    .replace(/[、。,.，．()（）]/g, '')
     .toLowerCase()
 }
 

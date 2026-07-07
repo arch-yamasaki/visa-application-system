@@ -266,6 +266,10 @@ export interface SourceAnchor {
   page?: number
   bbox?: { y_min: number; x_min: number; y_max: number; x_max: number }
   match_count?: number
+  candidates?: {
+    page?: number
+    bbox: { y_min: number; x_min: number; y_max: number; x_max: number }
+  }[]
   sheet_name?: string
   cell?: string
   paragraph_index?: number

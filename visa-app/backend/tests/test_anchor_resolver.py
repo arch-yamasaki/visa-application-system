@@ -103,12 +103,66 @@ def test_resolve_anchors_marks_duplicate_pdf_text_as_ambiguous():
     ref = result["employment.monthly_salary"]["source_refs"][0]
 
     assert "bbox" not in ref
-    assert ref["anchor"] == {
-        "type": "pdf_bbox",
-        "status": "ambiguous",
-        "resolver_type": "pdf_text_layer",
-        "match_count": 2,
+    anchor = ref["anchor"]
+    assert anchor["type"] == "pdf_bbox"
+    assert anchor["status"] == "ambiguous"
+    assert anchor["resolver_type"] == "pdf_text_layer"
+    assert anchor["match_count"] == 2
+    candidates = anchor["candidates"]
+    assert len(candidates) == 2
+    for candidate in candidates:
+        assert candidate["page"] == 1
+        assert set(candidate["bbox"]) == {"y_min", "x_min", "y_max", "x_max"}
+    assert candidates[0]["bbox"] != candidates[1]["bbox"]
+
+
+def test_resolve_anchors_matches_quote_across_parentheses():
+    field_metadata = {
+        "applicant.employment_history.0.end_date": {
+            "source_refs": [
+                {
+                    "document_id": "doc_pdf",
+                    "page": 1,
+                    "text_quote": "October 2024",
+                    "confidence": 0.9,
+                }
+            ]
+        }
     }
+
+    result = resolve_anchors(
+        field_metadata,
+        {"doc_pdf": _pdf_with_text(["Engineer (May 2024 - October 2024)"])},
+    )
+    ref = result["applicant.employment_history.0.end_date"]["source_refs"][0]
+
+    assert ref["anchor"]["status"] == "resolved"
+    assert ref["anchor"]["resolver_type"] == "pdf_text_layer"
+
+
+def test_resolve_anchors_caps_ambiguous_candidates_at_three():
+    field_metadata = {
+        "employment.monthly_salary": {
+            "source_refs": [
+                {
+                    "document_id": "doc_pdf",
+                    "page": 1,
+                    "text_quote": "260000",
+                    "confidence": 0.9,
+                }
+            ]
+        }
+    }
+
+    result = resolve_anchors(
+        field_metadata,
+        {"doc_pdf": _pdf_with_text([f"項目{i} 260000" for i in range(5)])},
+    )
+    anchor = result["employment.monthly_salary"]["source_refs"][0]["anchor"]
+
+    assert anchor["status"] == "ambiguous"
+    assert anchor["match_count"] == 5
+    assert len(anchor["candidates"]) == 3
 
 
 def test_sync_bbox_anchors_preserves_legacy_bbox():

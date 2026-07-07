@@ -21,6 +21,9 @@ logger = logging.getLogger(__name__)
 
 MIN_SUBSTRING_MATCH_CHARS = 4
 
+# ambiguous時に保持する候補位置の上限。頻出文字列(年号など)の全件表示は無意味なので絞る。
+MAX_AMBIGUOUS_CANDIDATES = 3
+
 
 @dataclass(frozen=True)
 class _PdfTextMatch:
@@ -39,7 +42,7 @@ class _PdfPageWords:
 def _normalize_text(text: str) -> str:
     normalized = unicodedata.normalize("NFKC", text or "")
     normalized = re.sub(r"[\s\u3000]+", "", normalized)
-    normalized = re.sub(r"[、。,.，．]", "", normalized)
+    normalized = re.sub(r"[、。,.，．()（）]", "", normalized)
     return normalized.lower()
 
 
@@ -232,6 +235,26 @@ def _set_unresolved_pdf_anchor(ref: dict, status: str, resolver_type: str, match
     }
 
 
+def _set_ambiguous_pdf_anchor(
+    ref: dict,
+    resolver_type: str,
+    matches: list[_PdfTextMatch],
+) -> None:
+    """複数一致は候補位置ごと保存し、ビューアで全候補を提示できるようにする。"""
+    if ref.get("anchor", {}).get("status") == "resolved":
+        return
+    ref["anchor"] = {
+        "type": "pdf_bbox",
+        "status": "ambiguous",
+        "resolver_type": resolver_type,
+        "match_count": len(matches),
+        "candidates": [
+            {"page": match.page, "bbox": match.bbox}
+            for match in matches[:MAX_AMBIGUOUS_CANDIDATES]
+        ],
+    }
+
+
 def _set_resolved_structural_anchor(ref: dict, item: dict, resolver_type: str) -> None:
     anchor = {
         "type": item["type"],
@@ -403,7 +426,7 @@ def resolve_anchors(
                     _set_resolved_pdf_anchor(ref, matches[0].bbox, "pdf_text_layer", matches[0].page)
                     resolved += 1
                 elif len(matches) > 1:
-                    _set_unresolved_pdf_anchor(ref, "ambiguous", "pdf_text_layer", len(matches))
+                    _set_ambiguous_pdf_anchor(ref, "pdf_text_layer", matches)
                     ambiguous += 1
                 else:
                     _set_unresolved_pdf_anchor(ref, "not_found", "pdf_text_layer", 0)

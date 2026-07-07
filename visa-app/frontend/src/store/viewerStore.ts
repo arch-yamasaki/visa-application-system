@@ -38,7 +38,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
     set(() => {
       return {
         currentDocumentId: ref.document_id,
-        currentPage: ref.anchor?.page || ref.page || 1,
+        currentPage: ref.anchor?.page || ref.anchor?.candidates?.[0]?.page || ref.page || 1,
         highlightText: ref.text_quote || null,
         highlightSourceRef: ref,
       }
