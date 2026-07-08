@@ -8,6 +8,7 @@ interface ViewerState {
   highlightText: string | null
   highlightSourceRef: SourceRef | null
   activeFieldPath: string | null
+  activeCandidateIndex: number
 
   setDocuments: (docs: DocumentEntry[]) => void
   navigateToSource: (ref: SourceRef) => void
@@ -15,6 +16,7 @@ interface ViewerState {
   setPage: (page: number) => void
   clearHighlight: () => void
   setActiveFieldPath: (path: string | null) => void
+  goToCandidate: (index: number) => void
 }
 
 export const useViewerStore = create<ViewerState>((set) => ({
@@ -24,6 +26,7 @@ export const useViewerStore = create<ViewerState>((set) => ({
   highlightText: null,
   highlightSourceRef: null,
   activeFieldPath: null,
+  activeCandidateIndex: 0,
 
   setDocuments: (docs) =>
     set({ documents: docs, currentDocumentId: docs[0]?.document_id ?? null }),
@@ -35,6 +38,19 @@ export const useViewerStore = create<ViewerState>((set) => ({
         currentPage: ref.anchor?.page || ref.anchor?.candidates?.[0]?.page || ref.page || 1,
         highlightText: ref.text_quote || null,
         highlightSourceRef: ref,
+        activeCandidateIndex: 0,
+      }
+    }),
+
+  // 候補間の移動ではハイライト対象を保ったままページだけ追従させる
+  goToCandidate: (index) =>
+    set((s) => {
+      const candidates = s.highlightSourceRef?.anchor?.candidates ?? []
+      const candidate = candidates[index]
+      if (!candidate) return {}
+      return {
+        activeCandidateIndex: index,
+        currentPage: candidate.page ?? s.currentPage,
       }
     }),
 

@@ -44,6 +44,11 @@ export default function PdfViewer({ url, page, highlightText, sourceRef }: Props
   const [loadError, setLoadError] = useState<string | null>(null)
   const [scale, setScale] = useState<number | null>(null)
   const setPage = useViewerStore((s) => s.setPage)
+  const activeCandidateIndex = useViewerStore((s) => s.activeCandidateIndex)
+  const goToCandidate = useViewerStore((s) => s.goToCandidate)
+
+  const candidates = sourceRef?.anchor?.status === 'ambiguous' ? sourceRef.anchor.candidates ?? [] : []
+  const candidateCount = candidates.length
 
   // Load PDF document
   useEffect(() => {
@@ -163,14 +168,18 @@ export default function PdfViewer({ url, page, highlightText, sourceRef }: Props
         : anchorStatus === 'ambiguous'
           ? null
           : sourceRef?.bbox
-    const candidates =
+    const candidateEntries =
       anchorStatus === 'ambiguous'
-        ? (sourceRef?.anchor?.candidates ?? []).filter(
-            (candidate) => (candidate.page ?? sourceRef?.page ?? pageNum) === pageNum,
-          )
+        ? (sourceRef?.anchor?.candidates ?? [])
+            .map((candidate, index) => ({ candidate, index }))
+            .filter(({ candidate }) => (candidate.page ?? sourceRef?.page ?? pageNum) === pageNum)
         : []
     const scrollKey = `${pageNum}:${
-      bbox ? JSON.stringify(bbox) : candidates.length ? JSON.stringify(candidates) : highlightText ?? ''
+      bbox
+        ? JSON.stringify(bbox)
+        : candidateEntries.length
+          ? `${JSON.stringify(candidateEntries)}:${activeCandidateIndex}`
+          : highlightText ?? ''
     }`
     // ズームによる再描画では highlight へ再スクロールしない
     const shouldScroll = scrollKey !== lastScrollKeyRef.current
@@ -179,14 +188,26 @@ export default function PdfViewer({ url, page, highlightText, sourceRef }: Props
     if (bbox) {
       const div = appendBboxDiv(overlay, viewport, bbox, 'resolved')
       if (shouldScroll) div.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    } else if (candidates.length > 0) {
-      const divs = candidates.map((candidate) => appendBboxDiv(overlay, viewport, candidate.bbox, 'candidate'))
-      if (shouldScroll) divs[0]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    } else if (candidateEntries.length > 0) {
+      let activeDiv: HTMLElement | null = null
+      for (const { candidate, index } of candidateEntries) {
+        const div = appendBboxDiv(
+          overlay,
+          viewport,
+          candidate.bbox,
+          index === activeCandidateIndex ? 'candidate-active' : 'candidate',
+        )
+        if (index === activeCandidateIndex) activeDiv = div
+      }
+      if (shouldScroll) {
+        const target = activeDiv ?? (overlay.firstElementChild as HTMLElement | null)
+        target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
     } else if (highlightText?.trim()) {
       const textContent = await pdfPage.getTextContent()
       highlightTextOnCanvas(overlay, textContent.items as TextItem[], viewport, highlightText.trim(), shouldScroll)
     }
-  }, [highlightText, sourceRef])
+  }, [highlightText, sourceRef, activeCandidateIndex])
 
   useEffect(() => {
     if (!pdfDoc || scale === null) return
@@ -260,7 +281,29 @@ export default function PdfViewer({ url, page, highlightText, sourceRef }: Props
         onPrevPage={() => setPage(Math.max(1, page - 1))}
         onNextPage={() => setPage(Math.min(numPages, page + 1))}
       />
-      <div ref={containerRef} className="flex-1 overflow-auto bg-gray-100 cursor-grab">
+      <div className="relative flex-1 min-h-0">
+        {candidateCount > 1 && (
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1 bg-white/95 border border-amber-300 rounded-full shadow px-2 py-1 text-xs text-amber-800">
+            <button
+              onClick={() => goToCandidate((activeCandidateIndex - 1 + candidateCount) % candidateCount)}
+              className="px-1.5 py-0.5 rounded-full hover:bg-amber-100"
+              title="前の候補へ"
+            >
+              ←
+            </button>
+            <span className="whitespace-nowrap">
+              候補 {Math.min(activeCandidateIndex + 1, candidateCount)}/{candidateCount}
+            </span>
+            <button
+              onClick={() => goToCandidate((activeCandidateIndex + 1) % candidateCount)}
+              className="px-1.5 py-0.5 rounded-full hover:bg-amber-100"
+              title="次の候補へ"
+            >
+              →
+            </button>
+          </div>
+        )}
+      <div ref={containerRef} className="h-full overflow-auto bg-gray-100 cursor-grab">
         {loadError ? (
           <div className="flex items-center justify-center h-64 text-red-500 text-sm">
             {loadError}
@@ -283,6 +326,7 @@ export default function PdfViewer({ url, page, highlightText, sourceRef }: Props
           />
         </div>
       </div>
+      </div>
     </div>
   )
 }
@@ -291,7 +335,7 @@ function appendBboxDiv(
   overlay: HTMLElement,
   viewport: pdfjsLib.PageViewport,
   bbox: { y_min: number; x_min: number; y_max: number; x_max: number },
-  variant: 'resolved' | 'candidate',
+  variant: 'resolved' | 'candidate' | 'candidate-active',
 ): HTMLElement {
   const { y_min, x_min, y_max, x_max } = bbox
   const div = document.createElement('div')
@@ -303,6 +347,10 @@ function appendBboxDiv(
   if (variant === 'candidate') {
     div.style.backgroundColor = 'rgba(255, 160, 0, 0.2)'
     div.style.border = '2px dashed rgba(255, 140, 0, 0.9)'
+  } else if (variant === 'candidate-active') {
+    div.style.backgroundColor = 'rgba(255, 160, 0, 0.35)'
+    div.style.border = '2px dashed rgba(234, 88, 12, 1)'
+    div.style.boxShadow = '0 0 0 2px rgba(234, 88, 12, 0.25)'
   } else {
     div.style.backgroundColor = 'rgba(255, 160, 0, 0.45)'
     div.style.border = '1px solid rgba(255, 140, 0, 0.7)'
