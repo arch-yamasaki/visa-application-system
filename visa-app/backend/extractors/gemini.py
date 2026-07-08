@@ -6,6 +6,7 @@ import os
 import re
 import time
 import copy
+import unicodedata
 from concurrent.futures import ThreadPoolExecutor
 
 from google import genai
@@ -320,7 +321,7 @@ def _extract_field_metadata(case_data: dict) -> dict:
     def walk(obj, prefix=""):
         if isinstance(obj, dict):
             if "value" in obj and "source_refs" in obj:
-                metadata[prefix] = {
+                entry = {
                     "source_refs": obj.get("source_refs", []),
                     "confidence": max(
                         (r.get("confidence", 0) for r in obj.get("source_refs", [])),
@@ -328,6 +329,10 @@ def _extract_field_metadata(case_data: dict) -> dict:
                     ),
                     "human_edited": False,
                 }
+                alternatives = obj.get("alternatives")
+                if alternatives:
+                    entry["alternatives"] = alternatives
+                metadata[prefix] = entry
                 return
             for k, v in obj.items():
                 path = f"{prefix}.{k}" if prefix else k
@@ -439,18 +444,83 @@ def _normalize_source_ref(source_ref) -> dict | None:
     }
 
 
-def _unflatten_field_values(obj):
+def _normalize_alternative_value(value) -> str:
+    return unicodedata.normalize("NFKC", str(value or "")).strip().lower()
+
+
+def _log_alternative_filter_counts(counts: dict[str, int]) -> None:
+    if not any(counts.values()):
+        return
+    logger.info(
+        "gemini_metric event=alternatives_filtered same_value=%d empty_value=%d empty_quote=%d truncated=%d",
+        counts["same_value"],
+        counts["empty_value"],
+        counts["empty_quote"],
+        counts["truncated"],
+    )
+
+
+def _normalize_alternatives(primary_value, alternatives, counts: dict[str, int]) -> list[dict]:
+    if not isinstance(alternatives, list):
+        return []
+
+    normalized_primary = _normalize_alternative_value(primary_value)
+    normalized_alternatives = []
+    seen_values: set[str] = set()
+
+    for alternative in alternatives:
+        if not isinstance(alternative, dict):
+            continue
+        value = alternative.get("value")
+        normalized_value = _normalize_alternative_value(value)
+        if not normalized_value:
+            counts["empty_value"] += 1
+            continue
+        if normalized_value == normalized_primary or normalized_value in seen_values:
+            counts["same_value"] += 1
+            continue
+        ref = _normalize_source_ref(alternative.get("source_ref"))
+        if not ref:
+            source_ref = alternative.get("source_ref")
+            if not isinstance(source_ref, dict) or not str(source_ref.get("text_quote") or "").strip():
+                counts["empty_quote"] += 1
+            continue
+        normalized_alternatives.append({"value": value, "source_refs": [ref]})
+        seen_values.add(normalized_value)
+
+    if len(normalized_alternatives) > 2:
+        counts["truncated"] += len(normalized_alternatives) - 2
+        normalized_alternatives = normalized_alternatives[:2]
+    return normalized_alternatives
+
+
+def _unflatten_field_values(obj, alternative_counts: dict[str, int] | None = None):
     """Convert Gemini FieldValue into standard
     {value, source_refs: [{document_id, page, text_quote, confidence}]} format.
     """
+    if alternative_counts is None:
+        alternative_counts = {
+            "same_value": 0,
+            "empty_value": 0,
+            "empty_quote": 0,
+            "truncated": 0,
+        }
     if isinstance(obj, dict):
         if "value" in obj and "source_ref" in obj and "source_refs" not in obj:
             ref = _normalize_source_ref(obj.get("source_ref"))
             source_refs = [ref] if ref else []
-            return {"value": obj.get("value"), "source_refs": source_refs}
-        return {k: _unflatten_field_values(v) for k, v in obj.items()}
+            result = {"value": obj.get("value"), "source_refs": source_refs}
+            alternatives = _normalize_alternatives(
+                obj.get("value"),
+                obj.get("alternatives"),
+                alternative_counts,
+            )
+            if alternatives:
+                result["alternatives"] = alternatives
+            return result
+        return {k: _unflatten_field_values(v, alternative_counts) for k, v in obj.items()}
     elif isinstance(obj, list):
-        return [_unflatten_field_values(item) for item in obj]
+        return [_unflatten_field_values(item, alternative_counts) for item in obj]
     return obj
 
 
@@ -474,7 +544,14 @@ def _build_extraction_result(parsed: dict) -> ExtractionResult:
     raw_case_data = parsed.get("case_data", {})
     if _uses_raw_source_refs(raw_case_data):
         raise ValueError("Gemini response must use source_ref, not source_refs")
-    raw_case_data = _unflatten_field_values(raw_case_data)
+    alternative_filter_counts = {
+        "same_value": 0,
+        "empty_value": 0,
+        "empty_quote": 0,
+        "truncated": 0,
+    }
+    raw_case_data = _unflatten_field_values(raw_case_data, alternative_filter_counts)
+    _log_alternative_filter_counts(alternative_filter_counts)
     parsed["case_data"] = raw_case_data
 
     # 法人番号の正規化（ハイフン・スペース除去）
@@ -505,26 +582,33 @@ def _normalize_source_refs_in_metadata(fm: dict) -> None:
 
 def _normalize_source_refs_in_entry(meta: dict) -> None:
     """source_refs の各 ref を正規化する。"""
-    refs = meta.get("source_refs", [])
-    if not isinstance(refs, list):
-        return
-    for ref in refs:
-        # doc_id → document_id に統一
-        if "doc_id" in ref and "document_id" not in ref:
-            ref["document_id"] = ref.pop("doc_id")
-        # page: デフォルト1、文字列→整数
-        if "page" not in ref:
-            ref["page"] = 1
-        elif isinstance(ref["page"], str):
-            try:
-                ref["page"] = int(ref["page"])
-            except (ValueError, TypeError):
+    def normalize_refs(refs: list) -> None:
+        if not isinstance(refs, list):
+            return
+        for ref in refs:
+            if not isinstance(ref, dict):
+                continue
+            # doc_id → document_id に統一
+            if "doc_id" in ref and "document_id" not in ref:
+                ref["document_id"] = ref.pop("doc_id")
+            # page: デフォルト1、文字列→整数
+            if "page" not in ref:
                 ref["page"] = 1
-        if "confidence" in ref and isinstance(ref["confidence"], str):
-            try:
-                ref["confidence"] = float(ref["confidence"])
-            except (ValueError, TypeError):
-                ref["confidence"] = 0.0
+            elif isinstance(ref["page"], str):
+                try:
+                    ref["page"] = int(ref["page"])
+                except (ValueError, TypeError):
+                    ref["page"] = 1
+            if "confidence" in ref and isinstance(ref["confidence"], str):
+                try:
+                    ref["confidence"] = float(ref["confidence"])
+                except (ValueError, TypeError):
+                    ref["confidence"] = 0.0
+
+    normalize_refs(meta.get("source_refs", []))
+    for alternative in meta.get("alternatives", []):
+        if isinstance(alternative, dict):
+            normalize_refs(alternative.get("source_refs", []))
 
 
 def _log_source_coverage(field_metadata: dict, display_values: dict) -> None:

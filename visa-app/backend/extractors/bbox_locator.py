@@ -67,6 +67,7 @@ PDF_GEMINI_BBOX_FIELD_PREFIXES = (
 # 抽出値のエコー(実文書に存在しないquote)はbboxを引けないので候補にしない。
 _VALUE_ECHO_QUOTES = {"true", "false", "null", "none"}
 _MIN_LOCATOR_CHARS = 2
+_BboxTarget = tuple[str, int | None, int]
 
 
 def _is_bbox_target(field_path: str) -> bool:
@@ -86,6 +87,46 @@ def _locator_text(text_quote: str) -> str:
     """Return a short locator text for bbox detection."""
     quote = " ".join((text_quote or "").split())
     return quote[:80]
+
+
+def _iter_refs_for_bbox(meta: dict):
+    refs = meta.get("source_refs", [])
+    if isinstance(refs, list):
+        for ref_index, ref in enumerate(refs):
+            if isinstance(ref, dict):
+                yield None, ref_index, ref
+    alternatives = meta.get("alternatives", [])
+    if isinstance(alternatives, list):
+        for alt_index, alternative in enumerate(alternatives):
+            if not isinstance(alternative, dict):
+                continue
+            alt_refs = alternative.get("source_refs", [])
+            if not isinstance(alt_refs, list):
+                continue
+            for ref_index, ref in enumerate(alt_refs):
+                if isinstance(ref, dict):
+                    yield alt_index, ref_index, ref
+
+
+def _get_target_ref(field_metadata: dict, target: _BboxTarget) -> dict | None:
+    field_path, alt_index, ref_index = target
+    meta = field_metadata.get(field_path, {})
+    if not isinstance(meta, dict):
+        return None
+    if alt_index is None:
+        refs = meta.get("source_refs", [])
+    else:
+        alternatives = meta.get("alternatives", [])
+        if not isinstance(alternatives, list) or alt_index >= len(alternatives):
+            return None
+        alternative = alternatives[alt_index]
+        if not isinstance(alternative, dict):
+            return None
+        refs = alternative.get("source_refs", [])
+    if not isinstance(refs, list) or ref_index >= len(refs):
+        return None
+    ref = refs[ref_index]
+    return ref if isinstance(ref, dict) else None
 
 
 def locate_bboxes(
@@ -115,9 +156,7 @@ def locate_bboxes(
     for field_path, meta in field_metadata.items():
         if not isinstance(meta, dict):
             continue
-        for ref_index, ref in enumerate(meta.get("source_refs", [])):
-            if not isinstance(ref, dict):
-                continue
+        for alt_index, ref_index, ref in _iter_refs_for_bbox(meta):
             doc_id = ref.get("document_id", "")
             page_num = _page_number(ref.get("page"))
             text_quote = ref.get("text_quote", "")
@@ -137,16 +176,17 @@ def locate_bboxes(
                 skipped_low_quality += 1
                 continue
             dedup_key = (doc_id, page_num, locator_text.lower())
+            target: _BboxTarget = (field_path, alt_index, ref_index)
             existing = dedup_index.get(dedup_key)
             if existing is not None:
-                existing["targets"].append((field_path, ref_index))
+                existing["targets"].append(target)
                 deduped_refs += 1
                 continue
             candidate_id = f"candidate_{candidate_count:04d}"
             candidate_count += 1
             candidate = {
                 "field_path": field_path,
-                "targets": [(field_path, ref_index)],
+                "targets": [target],
                 "document_id": doc_id,
                 "page": page_num,
                 "text_quote": text_quote,
@@ -249,11 +289,11 @@ def locate_bboxes(
                     continue
                 if candidate.get("document_id") != doc_id or candidate.get("page") != page_num:
                     continue
-                for field_path, ref_index in candidate["targets"]:
-                    refs = field_metadata.get(field_path, {}).get("source_refs", [])
-                    if ref_index >= len(refs):
+                for target in candidate["targets"]:
+                    ref = _get_target_ref(field_metadata, target)
+                    if ref is None:
                         continue
-                    refs[ref_index]["bbox"] = {
+                    ref["bbox"] = {
                         "y_min": bbox_coords[0],
                         "x_min": bbox_coords[1],
                         "y_max": bbox_coords[2],

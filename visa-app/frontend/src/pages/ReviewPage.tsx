@@ -7,6 +7,17 @@ import ReviewBanner from '../components/review/ReviewBanner'
 import type { CaseData, CaseDocument, FieldMetadataMap, Settings, SourceRef } from '../types/caseData'
 import { useViewerStore } from '../store/viewerStore'
 
+function normalizeSourceRef(ref: Record<string, unknown>): SourceRef {
+  return {
+    document_id: String(ref.doc_id ?? ref.document_id ?? ''),
+    page: Number(ref.page) || 1,
+    text_quote: String(ref.text_quote ?? ''),
+    confidence: Number(ref.confidence) || 0,
+    bbox: ref.bbox as SourceRef['bbox'],
+    anchor: ref.anchor as SourceRef['anchor'],
+  }
+}
+
 /** APIが返すリスト形式の field_metadata を Record<string, FieldMeta> に変換 */
 function normalizeFieldMetadata(raw: unknown): FieldMetadataMap {
   if (!raw) return {}
@@ -16,13 +27,10 @@ function normalizeFieldMetadata(raw: unknown): FieldMetadataMap {
     const path = item.field_path ?? item.path
     if (!path) continue
     map[path] = {
-      source_refs: (item.source_refs ?? []).map((ref: Record<string, unknown>) => ({
-        document_id: ref.doc_id ?? ref.document_id ?? '',
-        page: Number(ref.page) || 1,
-        text_quote: String(ref.text_quote ?? ''),
-        confidence: Number(ref.confidence) || 0,
-        bbox: ref.bbox as SourceRef['bbox'],
-        anchor: ref.anchor as SourceRef['anchor'],
+      source_refs: (item.source_refs ?? []).map(normalizeSourceRef),
+      alternatives: (item.alternatives ?? []).map((alternative: Record<string, unknown>) => ({
+        value: alternative.value as string | number | boolean,
+        source_refs: ((alternative.source_refs as Record<string, unknown>[] | undefined) ?? []).map(normalizeSourceRef),
       })),
       human_reviewed: item.human_reviewed,
       human_edited: item.human_edited,

@@ -294,6 +294,82 @@ def _set_unresolved_structural_anchor(
     }
 
 
+def _iter_all_refs(meta: dict):
+    refs = meta.get("source_refs", [])
+    if isinstance(refs, list):
+        for ref in refs:
+            if isinstance(ref, dict):
+                yield ref
+    alternatives = meta.get("alternatives", [])
+    if isinstance(alternatives, list):
+        for alternative in alternatives:
+            if not isinstance(alternative, dict):
+                continue
+            alt_refs = alternative.get("source_refs", [])
+            if isinstance(alt_refs, list):
+                for ref in alt_refs:
+                    if isinstance(ref, dict):
+                        yield ref
+
+
+def _match_text_index_items(items: list[dict], target: str) -> list[dict]:
+    exact_matches = [
+        item
+        for item in items
+        if target == _normalize_text(str(item.get("text") or ""))
+    ]
+    if exact_matches:
+        return exact_matches
+    if len(target) >= MIN_SUBSTRING_MATCH_CHARS:
+        return [
+            item
+            for item in items
+            if target in _normalize_text(str(item.get("text") or ""))
+        ]
+    return []
+
+
+def _match_multi_cell_quote(items: list[dict], text_quote: str) -> list[dict]:
+    """タブ/改行でセルをまたいだquote(質問セル+回答セル連結)を解決する。
+
+    末尾セグメント(回答セル)で照合し、複数一致なら同一シート同一行に
+    質問セグメントが載っている行へ絞り込む。
+    """
+    segments = [seg for seg in re.split(r"[\t\n]+", text_quote or "") if seg.strip()]
+    if len(segments) <= 1:
+        return []
+    answer_target = _normalize_text(segments[-1])
+    if not answer_target:
+        return []
+    matches = _match_text_index_items(items, answer_target)
+    if len(matches) <= 1:
+        return matches
+
+    question_targets = [
+        _normalize_text(segment)
+        for segment in segments[:-1]
+        if _normalize_text(segment)
+    ]
+    if not question_targets:
+        return matches
+
+    def _row_has_question(match: dict) -> bool:
+        if match.get("row") is None:
+            # 行の概念がないindex(docx等)では絞り込まない
+            return True
+        return any(
+            question_target in _normalize_text(str(item.get("text") or ""))
+            for item in items
+            if item.get("sheet_name") == match.get("sheet_name")
+            and item.get("row") == match.get("row")
+            and item is not match
+            for question_target in question_targets
+        )
+
+    narrowed = [match for match in matches if _row_has_question(match)]
+    return narrowed or matches
+
+
 def _resolve_from_text_index(
     ref: dict,
     items: list[dict],
@@ -301,21 +377,13 @@ def _resolve_from_text_index(
     anchor_type: str,
     resolver_type: str,
 ) -> str:
-    target = _normalize_text(str(ref.get("text_quote") or ""))
+    text_quote = str(ref.get("text_quote") or "")
+    target = _normalize_text(text_quote)
     if not target:
         return "skipped"
-    exact_matches = [
-        item
-        for item in items
-        if target == _normalize_text(str(item.get("text") or ""))
-    ]
-    matches = exact_matches
-    if not matches and len(target) >= MIN_SUBSTRING_MATCH_CHARS:
-        matches = [
-            item
-            for item in items
-            if target in _normalize_text(str(item.get("text") or ""))
-        ]
+    matches = _match_text_index_items(items, target)
+    if not matches:
+        matches = _match_multi_cell_quote(items, text_quote)
     if len(matches) == 1:
         _set_resolved_structural_anchor(ref, matches[0], resolver_type)
         return "resolved"
@@ -332,9 +400,7 @@ def sync_bbox_anchors(field_metadata: dict | list) -> dict:
     for meta in field_metadata.values():
         if not isinstance(meta, dict):
             continue
-        for ref in meta.get("source_refs", []):
-            if not isinstance(ref, dict):
-                continue
+        for ref in _iter_all_refs(meta):
             bbox = ref.get("bbox")
             anchor_status = ref.get("anchor", {}).get("status")
             if bbox and anchor_status not in ("resolved", "ambiguous"):
@@ -359,9 +425,7 @@ def resolve_anchors(
         for meta in field_metadata.values():
             if not isinstance(meta, dict):
                 continue
-            for ref in meta.get("source_refs", []):
-                if not isinstance(ref, dict):
-                    continue
+            for ref in _iter_all_refs(meta):
                 bbox = ref.get("bbox")
                 if bbox:
                     anchor_status = ref.get("anchor", {}).get("status")

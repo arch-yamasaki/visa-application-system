@@ -33,6 +33,8 @@
 
 フィールドをクリックすると、`source_refs` から primary ref（`anchor.status === "resolved"` → `bbox` あり → anchor なし → 先頭、の優先順）を選んで証跡へ移動します。PDFの場合は `anchor.bbox`（なければ legacy `bbox`）で座標ハイライト、`anchor.status` が `ambiguous` なら保存済みの候補位置（`anchor.candidates`、最大3件）を破線で全件表示し、ビューア上部のナビで候補間を移動できます。どちらも無ければ text quote の検索ハイライトにフォールバックします。DOCX/XLSXはHTMLプレビュー上でテキスト検索します。詳細は `../009_evidence_candidates/README.md` を参照。
 
+`field_metadata[path].alternatives` があるフィールドは、赤系の `別候補N` バッジを表示します。これは同じ値の位置候補ではなく、書類間・箇所間で値そのものが食い違う候補です。バッジを開くと現在値と別候補を比較でき、候補行クリックでその証跡へ移動し、`採用` で既存の編集保存フロー (`onUpdate`) に乗せて値を置き換えます。採用後も alternatives は判断履歴として `field_metadata` に残します。
+
 ## 入力UI
 
 `FieldRow` は field path の型に応じて、テキスト、数値、日付、select、boolean などの入力UIを切り替えます。

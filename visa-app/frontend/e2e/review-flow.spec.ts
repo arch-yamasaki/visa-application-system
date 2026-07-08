@@ -62,7 +62,7 @@ test.describe('ReviewPage demo mode', () => {
   })
 
   test('inline edit: double-click to edit, save updates value', async ({ page }) => {
-    const firstRow = page.locator('[data-field-row]').first()
+    const firstRow = page.locator('[data-field-row]').filter({ hasText: '氏名（ローマ字）' })
     await expect(firstRow).toBeVisible()
 
     // Double-click to enter edit mode
@@ -86,7 +86,7 @@ test.describe('ReviewPage demo mode', () => {
   })
 
   test('keyboard: Enter to edit, Escape to cancel', async ({ page }) => {
-    const firstRow = page.locator('[data-field-row]').first()
+    const firstRow = page.locator('[data-field-row]').filter({ hasText: '氏名（ローマ字）' })
     await expect(firstRow).toBeVisible()
 
     // Focus the row
@@ -101,6 +101,23 @@ test.describe('ReviewPage demo mode', () => {
     await page.keyboard.press('Escape')
     await expect(input).not.toBeVisible()
   })
+
+  test('value alternatives expand and can be adopted', async ({ page }) => {
+    const salaryRow = page.locator('[data-field-row]').filter({ hasText: '月額給与' })
+    await expect(salaryRow).toBeVisible()
+
+    await salaryRow.getByRole('button', { name: '別候補1' }).click()
+
+    await expect(page.getByText('現在の値')).toBeVisible()
+    await expect(page.getByText('別候補 1')).toBeVisible()
+    await expect(page.getByText('resume.pdf / p.2')).toBeVisible()
+    await expect(page.getByText('希望給与 280000')).toBeVisible()
+
+    await page.getByRole('button', { name: '採用' }).click()
+
+    await expect(salaryRow.getByText('280000')).toBeVisible()
+    await expect(page.getByRole('button', { name: '採用中' })).toBeVisible()
+  })
 })
 
 test.describe('Demo mode navigation', () => {
@@ -109,7 +126,7 @@ test.describe('Demo mode navigation', () => {
     await expect(page.getByRole('heading', { name: '案件一覧' })).toBeVisible()
 
     // Click the demo case card outside the copyable case_id control
-    await page.getByText('NGUYEN VAN DEMO').click()
+    await page.getByText('NGUYEN VAN DEMO / デモテクノロジー株式会社').click()
 
     // Should navigate to review page with demo=true
     await expect(page).toHaveURL(/\/cases\/demo-gijinkoku-001\/review\?demo=true/)

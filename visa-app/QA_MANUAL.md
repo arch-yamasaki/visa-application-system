@@ -33,6 +33,8 @@ cd visa-app/backend
 4. 「Gemini」で抽出実行
 5. レビュー画面で確認
 
+スクリーンショットは `qa/screenshots/<YYYY-MM-DD>/` に保存する。ルート直下には画像ファイルを置かない。
+
 ## 再抽出（API）
 
 ```bash
@@ -59,8 +61,13 @@ SSE が完了イベントを受け取る前に切断された場合は、fronten
 - [ ] 入国目的: `entry_plan.purpose_of_entry` が表示される
 - [ ] 証跡: source_refs がある場合、ドキュメントビューアに証跡表示
 - [ ] PDFハイライト: bbox 座標でのハイライト表示
+- [ ] 位置候補: 同じ証跡文字列が複数位置にある場合、FieldRow に `位置候補N` が出て、PDFビューア側の候補ナビで移動できる
+- [ ] 値候補: 値が食い違うフィールドに `別候補N` が出る。展開すると現在値・別候補・書類名・ページ・quoteが表示される
+- [ ] 値候補: 別候補クリックで該当証跡へジャンプし、`採用` で表示値が置き換わる。保存後も `field_metadata.alternatives` は残る
 - [ ] source_ref: Gemini raw response は `{ value, source_ref }`、保存後は `field_metadata.*.source_refs[]`
+- [ ] alternatives: Gemini raw response は値が食い違う場合のみ `{ value, source_ref, alternatives: [{ value, source_ref }] }`。同値や表記ゆれだけの候補は入らない
 - [ ] source_ref: `case_data` に `source`, `source_ref`, `source_refs` が混入しない
+- [ ] alternatives: `case_data` に `alternatives` が混入せず、候補は `field_metadata.*.alternatives[]` にだけ保存される
 - [ ] scope: `applicant_identity`, `entry_plan`, `immigration_history`, `education`, `employment_history`, `employer`, `employment`, `review` がエラーなく完了
 - [ ] Gemini auth error: API key 無効、権限不足、漏洩報告済みは一般的な「再試行してください」ではなく、環境設定エラーとして表示される
 - [ ] extract-stream: 完了イベント前にSSEが閉じても、ケース状態を再取得して `extracted` / `failed` の表示がbackendと一致する

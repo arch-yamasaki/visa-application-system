@@ -35,6 +35,17 @@ FIELD_VALUE_SCHEMA = {
     "properties": {
         "value": STRING_VALUE_SCHEMA,
         "source_ref": SOURCE_REF_SCHEMA,
+        "alternatives": {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "value": STRING_VALUE_SCHEMA,
+                    "source_ref": SOURCE_REF_SCHEMA,
+                },
+                "required": ["value", "source_ref"],
+            },
+        },
     },
     "required": ["value", "source_ref"],
 }
@@ -45,7 +56,9 @@ def _fv(value_schema: dict | None = None) -> dict:
     import copy
 
     schema = copy.deepcopy(FIELD_VALUE_SCHEMA)
-    schema["properties"]["value"] = copy.deepcopy(value_schema or STRING_VALUE_SCHEMA)
+    copied_value_schema = copy.deepcopy(value_schema or STRING_VALUE_SCHEMA)
+    schema["properties"]["value"] = copied_value_schema
+    schema["properties"]["alternatives"]["items"]["properties"]["value"] = copy.deepcopy(copied_value_schema)
     return schema
 
 

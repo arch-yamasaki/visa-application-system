@@ -11,7 +11,7 @@
 | Gemini抽出 | `backend/extractors/gemini.py` |
 | Gemini schema | `backend/extractors/schema.py` |
 | Gemini prompt | `backend/extractors/prompt_template.py` |
-| PDF bbox | `backend/extractors/bbox_locator.py` |
+| anchor / PDF bbox | `backend/extractors/anchor_resolver.py`, `backend/extractors/bbox_locator.py` |
 | DOCX/XLSX/PDF処理 | `backend/extractors/docx_text.py`, `xlsx.py`, `pdf_text.py` |
 
 ## 主要API
@@ -36,12 +36,15 @@
 2. backend が GCS に保存し、Firestore の document_manifest を更新
 3. `POST /extract` で workflow_state を extracting にする
 4. PDFはGeminiへ直接送信、DOCX/XLSXはテキスト化してpromptへ入れる
-5. Geminiが case_data / field_metadata / review を返す
-6. bbox locator がPDF source_refsの座標を補完する
-7. Firestoreへ保存し、workflow_state を extracted にする
+5. Geminiが FieldValue (`value`, `source_ref`, optional `alternatives`) 形式で抽出する
+6. backend が表示用 value-only `case_data` と、証跡用 `field_metadata` (`source_refs`, optional `alternatives`) に正規化する
+7. anchor resolver / bbox locator が primary refs と alternatives refs の位置を補完する
+8. Firestoreへ保存し、workflow_state を extracted にする
 ```
 
 Gemini抽出は `case_data` を value-only の canonical data として保存します。フォーム入力用の `field_id` や select value は `case_data` には保存せず、`application-data` 生成時に mapping と form definitions から作ります。
+
+値が書類間で食い違う場合は、primary value 以外の候補を `field_metadata[path].alternatives[]` に保持します。各 alternative は `value` と `source_refs[]` を持ち、primary `source_refs[]` と同じ anchor / bbox 解決対象です。表示用 `case_data` には alternatives を混ぜません。
 
 抽出結果の保存時は、既存の `case_data` を土台にしてGemini結果を deep merge します。これにより、ケース作成時や人手編集で持っている `case.*`、`proxy`、`receiving_method` など、Geminiが責任を持たない領域を抽出結果で消さないようにします。`review` と `field_metadata` は最新抽出結果で置き換えます。
 

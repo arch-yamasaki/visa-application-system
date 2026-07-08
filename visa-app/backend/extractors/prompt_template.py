@@ -19,7 +19,7 @@ _TEMPLATE = """\
 
 提供された書類から以下の2つのJSONオブジェクトを含む単一のJSONを出力してください。
 
-1. **case_data**: 申請人の身元情報、出入国歴、家族、学歴、職歴、資格、雇用主情報、雇用条件、活動内容詳細を抽出。各フィールドは `{{"value": "...", "source_ref": {{"document_id": "...", "page": 1, "text_quote": "...", "confidence": 0.95}}}}` の形式で出力すること。
+1. **case_data**: 申請人の身元情報、出入国歴、家族、学歴、職歴、資格、雇用主情報、雇用条件、活動内容詳細を抽出。各フィールドは `{{"value": "...", "source_ref": {{"document_id": "...", "page": 1, "text_quote": "...", "confidence": 0.95}}}}` の形式で出力すること。値が食い違う別候補がある場合のみ `alternatives` を付けてよい。
 2. **review**: 欠損項目、根拠の弱い項目、矛盾点、人の判断が必要な理由を記録。reason/message/summaryは日本語で記述。
 
 ## 抽出の優先順位
@@ -58,7 +58,12 @@ _TEMPLATE = """\
 - DOCX書類からの抽出値にも必ず証跡を付与すること。DOCXにはページ概念がないため page は 1 とすること。
 - 雇用条件の詳細項目（昇給、賞与、勤務時間、休日、入社日等）にも必ず証跡を付与すること。
 - 値を出力する場合は、必ずどの書類（document_id）のどの箇所から取得したか記録すること。証跡なしで値だけ返すことは禁止。
-- 複数の根拠がある場合は、最も信頼度の高いものを1つ選んで記載すること。
+- text_quote は原文の**連続した一箇所**をそのまま引用すること。Excelでは値が書かれた**1セルの内容だけ**を引用し、質問セル（項目名）と回答セルをタブや空白で連結しないこと。複数の箇所の文字列を組み合わせたquoteや、原文に存在しない補完（国名の追加等）は禁止。
+- 複数の根拠があり値が一致している場合は、最も信頼度の高いものを1つ選んで記載すること。
+- 同一フィールドについて、複数の書類・箇所が互いに異なる値を示している場合のみ、最有力の値を `value` に、それ以外の候補を `alternatives` に入れること。
+- `alternatives` の各候補も `{{"value": "...", "source_ref": {{...}}}}` 形式で、証跡を必ず付けること。
+- 値が一致している場合や候補が1つしかない場合、`alternatives` は省略すること。空配列は出力しないこと。
+- `alternatives` は最大2件。同じ値の重複や、表記ゆれだけで実質同じ値の候補は入れないこと。
 
 source_ref のフィールド:
   - document_id (string): 書類一覧の document_id と一致
@@ -74,8 +79,11 @@ source_ref のフィールド:
 
 OK: `{{"value": "YAMADA TARO", "source_ref": {{"document_id": "doc_abc123", "page": 1, "text_quote": "YAMADA TARO", "confidence": 0.95}}}}`
 OK: `{{"value": "", "source_ref": {{"document_id": "", "page": 0, "text_quote": "", "confidence": 0}}}}` （STRING項目の値が見つからない場合）
+OK: `{{"value": "250000", "source_ref": {{"document_id": "doc_offer", "page": 1, "text_quote": "Monthly salary: JPY 250,000", "confidence": 0.92}}, "alternatives": [{{"value": "230000", "source_ref": {{"document_id": "doc_resume", "page": 2, "text_quote": "Salary 230,000 JPY", "confidence": 0.82}}}}]}}` （給与が書類間で異なる場合）
 NG: `{{"value": "YAMADA TARO", "source_ref": {{"document_id": "", "page": 0, "text_quote": "", "confidence": 0}}}}` （値があるのに証跡が空 — 禁止）
 NG: `{{"value": "無", "source_ref": {{"document_id": "", "page": 0, "text_quote": "", "confidence": 0}}}}` （否定的な値でも証跡は必須）
+NG: `{{"value": "Arghakhanchi", "source_ref": {{"document_id": "doc_xlsx", "page": 5, "text_quote": "Place of birth　出生地\tArghakhanchi", "confidence": 0.9}}}}` （質問セルと回答セルを連結したquote — 禁止。回答セルの `Arghakhanchi` のみ引用する）
+NG: `{{"value": "250000", "source_ref": {{"document_id": "doc_offer", "page": 1, "text_quote": "JPY 250,000", "confidence": 0.92}}, "alternatives": [{{"value": "250,000", "source_ref": {{"document_id": "doc_resume", "page": 2, "text_quote": "250,000 JPY", "confidence": 0.86}}}}]}}` （同じ値・表記ゆれを別候補にしている）
 
 ### case_data 出力例
 
@@ -239,20 +247,27 @@ _SCOPE_INSTRUCTIONS: dict[str, str] = {
 _SCOPED_COMMON_RULES = """\
 ## 出力形式
 
-各フィールドは `{"value": "...", "source_ref": {"document_id": "...", "page": 1, "text_quote": "...", "confidence": 0.95}}` の形式で出力すること。
+各フィールドは `{"value": "...", "source_ref": {"document_id": "...", "page": 1, "text_quote": "...", "confidence": 0.95}}` の形式で出力すること。値が食い違う別候補がある場合のみ `alternatives` を付けてよい。
 
 ### source_ref フォーマット
 - document_id: 書類一覧の document_id と一致
 - page: ページ番号（1始まり）
 - text_quote: 原文から直接引用、50文字以内
+- text_quote は原文の**連続した一箇所**をそのまま引用すること。Excelでは値が書かれた**1セルの内容だけ**を引用し、質問セル（項目名）と回答セルをタブや空白で連結しないこと。複数の箇所の文字列を組み合わせたquoteや、原文に存在しない補完（国名の追加等）は禁止。
 - confidence: 0.0〜1.0（0.9以上=明瞭、0.7-0.9=やや不明瞭、0.5-0.7=複数解釈可能、0.5未満=推測）
 - STRING項目の値が見つからない場合は value を空文字、source_ref を `{"document_id": "", "page": 0, "text_quote": "", "confidence": 0}` とすること
 - **source_ref が空のまま value が非空であることは禁止。** 値を出力するなら source_ref は必ず根拠書類を示すこと。
 - 例外: BOOLEAN / INTEGER項目で、明確な記載がないため既定値 `false` / `0` を出す場合は、source_ref を空にしてよい。ただし review の findings または missing_items に「記載なしのため既定値」と分かる内容を記録すること。
+- 同一フィールドについて、複数の書類・箇所が互いに異なる値を示している場合のみ、最有力の値を `value` に、それ以外の候補を `alternatives` に入れること。
+- `alternatives` の各候補も `{"value": "...", "source_ref": {...}}` 形式で、証跡を必ず付けること。
+- 値が一致している場合や候補が1つしかない場合、`alternatives` は省略すること。空配列は出力しないこと。
+- `alternatives` は最大2件。同じ値の重複や、表記ゆれだけで実質同じ値の候補は入れないこと。
 
 OK: `{"value": "YAMADA TARO", "source_ref": {"document_id": "doc_abc123", "page": 1, "text_quote": "YAMADA TARO", "confidence": 0.95}}`
 OK: `{"value": "", "source_ref": {"document_id": "", "page": 0, "text_quote": "", "confidence": 0}}` （STRING項目の値が見つからない場合）
+OK: `{"value": "250000", "source_ref": {"document_id": "doc_offer", "page": 1, "text_quote": "Monthly salary: JPY 250,000", "confidence": 0.92}, "alternatives": [{"value": "230000", "source_ref": {"document_id": "doc_resume", "page": 2, "text_quote": "Salary 230,000 JPY", "confidence": 0.82}}]}` （給与が書類間で異なる場合）
 NG: `{"value": "YAMADA TARO", "source_ref": {"document_id": "", "page": 0, "text_quote": "", "confidence": 0}}` （値があるのに証跡が空 — 禁止）
+NG: `{"value": "250000", "source_ref": {"document_id": "doc_offer", "page": 1, "text_quote": "JPY 250,000", "confidence": 0.92}, "alternatives": [{"value": "250,000", "source_ref": {"document_id": "doc_resume", "page": 2, "text_quote": "250,000 JPY", "confidence": 0.86}}]}` （同じ値・表記ゆれを別候補にしている）
 
 ### 正規化ルール
 - schemaでBOOLEANに指定されている `value` は JSON boolean（`true` / `false`）で出力すること。`"true"`、`"false"`、`"有"`、`"無"` のような文字列は禁止。

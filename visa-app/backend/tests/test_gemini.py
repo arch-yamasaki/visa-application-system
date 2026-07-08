@@ -10,6 +10,7 @@ from extractors.gemini import (
     _extract_display_values,
     _build_extraction_result,
     _unflatten_field_values,
+    _uses_raw_source_refs,
     _map_field_metadata,
     EXTRACTION_SCOPES,
     extract_all_scopes,
@@ -576,6 +577,37 @@ class TestExtractFieldMetadata:
         result = _extract_field_metadata(case_data)
         assert result["applicant.name"]["confidence"] is None
 
+    def test_carries_alternatives(self):
+        case_data = {
+            "employment": {
+                "monthly_salary": {
+                    "value": "250000",
+                    "source_refs": [
+                        {"document_id": "doc_offer", "page": 1, "text_quote": "250000", "confidence": 0.9}
+                    ],
+                    "alternatives": [
+                        {
+                            "value": "230000",
+                            "source_refs": [
+                                {"document_id": "doc_resume", "page": 2, "text_quote": "230000", "confidence": 0.8}
+                            ],
+                        }
+                    ],
+                },
+            }
+        }
+
+        result = _extract_field_metadata(case_data)
+
+        assert result["employment.monthly_salary"]["alternatives"] == [
+            {
+                "value": "230000",
+                "source_refs": [
+                    {"document_id": "doc_resume", "page": 2, "text_quote": "230000", "confidence": 0.8}
+                ],
+            }
+        ]
+
 
 class TestUnflattenFieldValues:
     def test_accepts_source_ref_dict(self):
@@ -614,6 +646,186 @@ class TestUnflattenFieldValues:
         result = _unflatten_field_values(raw)
         assert result == {"value": "", "source_refs": []}
 
+    def test_normalizes_alternatives(self):
+        raw = {
+            "value": "250000",
+            "source_ref": {
+                "document_id": "doc_offer",
+                "page": 1,
+                "text_quote": "Monthly salary 250000",
+                "confidence": 0.95,
+            },
+            "alternatives": [
+                {
+                    "value": "230000",
+                    "source_ref": {
+                        "document_id": "doc_resume",
+                        "page": "2",
+                        "text_quote": "Salary 230000",
+                        "confidence": "0.82",
+                    },
+                }
+            ],
+        }
+
+        result = _unflatten_field_values(raw)
+
+        assert result["alternatives"] == [
+            {
+                "value": "230000",
+                "source_refs": [
+                    {
+                        "document_id": "doc_resume",
+                        "page": 2,
+                        "text_quote": "Salary 230000",
+                        "confidence": 0.82,
+                    }
+                ],
+            }
+        ]
+
+    def test_filters_alternative_quality(self):
+        raw = {
+            "value": "abc",
+            "source_ref": {
+                "document_id": "doc_primary",
+                "page": 1,
+                "text_quote": "abc",
+                "confidence": 0.9,
+            },
+            "alternatives": [
+                {
+                    "value": "ＡＢＣ ",
+                    "source_ref": {
+                        "document_id": "doc_same",
+                        "page": 1,
+                        "text_quote": "ABC",
+                        "confidence": 0.8,
+                    },
+                },
+                {
+                    "value": "",
+                    "source_ref": {
+                        "document_id": "doc_empty",
+                        "page": 1,
+                        "text_quote": "empty",
+                        "confidence": 0.8,
+                    },
+                },
+                {
+                    "value": "different",
+                    "source_ref": {
+                        "document_id": "doc_no_quote",
+                        "page": 1,
+                        "text_quote": "",
+                        "confidence": 0.8,
+                    },
+                },
+                {
+                    "value": "first",
+                    "source_ref": {
+                        "document_id": "doc_first",
+                        "page": 1,
+                        "text_quote": "first",
+                        "confidence": 0.8,
+                    },
+                },
+            ],
+        }
+
+        result = _unflatten_field_values(raw)
+
+        assert result["alternatives"] == [
+            {
+                "value": "first",
+                "source_refs": [
+                    {
+                        "document_id": "doc_first",
+                        "page": 1,
+                        "text_quote": "first",
+                        "confidence": 0.8,
+                    }
+                ],
+            }
+        ]
+
+    def test_caps_alternatives_at_two(self):
+        raw = {
+            "value": "primary",
+            "source_ref": {
+                "document_id": "doc_primary",
+                "page": 1,
+                "text_quote": "primary",
+                "confidence": 0.9,
+            },
+            "alternatives": [
+                {
+                    "value": f"alt-{index}",
+                    "source_ref": {
+                        "document_id": f"doc_{index}",
+                        "page": 1,
+                        "text_quote": f"alt-{index}",
+                        "confidence": 0.8,
+                    },
+                }
+                for index in range(3)
+            ],
+        }
+
+        result = _unflatten_field_values(raw)
+
+        assert [alt["value"] for alt in result["alternatives"]] == ["alt-0", "alt-1"]
+
+    def test_raw_source_refs_guard_allows_alternative_source_ref(self):
+        raw = {
+            "value": "250000",
+            "source_ref": {
+                "document_id": "doc_offer",
+                "page": 1,
+                "text_quote": "250000",
+                "confidence": 0.9,
+            },
+            "alternatives": [
+                {
+                    "value": "230000",
+                    "source_ref": {
+                        "document_id": "doc_resume",
+                        "page": 1,
+                        "text_quote": "230000",
+                        "confidence": 0.8,
+                    },
+                }
+            ],
+        }
+
+        assert _uses_raw_source_refs(raw) is False
+
+    def test_raw_source_refs_guard_rejects_alternative_source_refs(self):
+        raw = {
+            "value": "250000",
+            "source_ref": {
+                "document_id": "doc_offer",
+                "page": 1,
+                "text_quote": "250000",
+                "confidence": 0.9,
+            },
+            "alternatives": [
+                {
+                    "value": "230000",
+                    "source_refs": [
+                        {
+                            "document_id": "doc_resume",
+                            "page": 1,
+                            "text_quote": "230000",
+                            "confidence": 0.8,
+                        }
+                    ],
+                }
+            ],
+        }
+
+        assert _uses_raw_source_refs(raw) is True
+
 # ---------- _extract_display_values ------------------------------------
 
 
@@ -624,6 +836,12 @@ class TestExtractDisplayValues:
                 "name_roman": {
                     "value": "YAMADA TARO",
                     "source_refs": [{"confidence": 0.95}],
+                    "alternatives": [
+                        {
+                            "value": "YAMADA JIRO",
+                            "source_refs": [{"confidence": 0.7}],
+                        }
+                    ],
                 },
             }
         }

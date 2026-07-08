@@ -57,6 +57,44 @@ def test_resolve_anchors_adds_pdf_text_layer_bbox():
     assert ref["bbox"]["y_min"] < ref["bbox"]["y_max"]
 
 
+def test_resolve_anchors_adds_pdf_text_layer_bbox_to_alternative_ref():
+    field_metadata = {
+        "employment.monthly_salary": {
+            "source_refs": [
+                {
+                    "document_id": "doc_pdf",
+                    "page": 1,
+                    "text_quote": "250000",
+                    "confidence": 0.9,
+                }
+            ],
+            "alternatives": [
+                {
+                    "value": "230000",
+                    "source_refs": [
+                        {
+                            "document_id": "doc_pdf",
+                            "page": 1,
+                            "text_quote": "230000",
+                            "confidence": 0.8,
+                        }
+                    ],
+                }
+            ],
+        }
+    }
+
+    result = resolve_anchors(
+        field_metadata,
+        {"doc_pdf": _pdf_with_text(["Offer salary 250000", "Resume salary 230000"])},
+    )
+    alt_ref = result["employment.monthly_salary"]["alternatives"][0]["source_refs"][0]
+
+    assert alt_ref["anchor"]["status"] == "resolved"
+    assert alt_ref["anchor"]["resolver_type"] == "pdf_text_layer"
+    assert alt_ref["anchor"]["bbox"] == alt_ref["bbox"]
+
+
 def test_resolve_anchors_uses_unique_pdf_match_on_other_page():
     field_metadata = {
         "employer.postal_code": {
@@ -193,6 +231,40 @@ def test_sync_bbox_anchors_preserves_legacy_bbox():
     }
 
 
+def test_sync_bbox_anchors_preserves_alternative_legacy_bbox():
+    field_metadata = {
+        "employment.monthly_salary": {
+            "source_refs": [],
+            "alternatives": [
+                {
+                    "value": "230000",
+                    "source_refs": [
+                        {
+                            "document_id": "doc_pdf",
+                            "page": 2,
+                            "text_quote": "230000",
+                            "confidence": 0.8,
+                            "bbox": {"y_min": 100, "x_min": 200, "y_max": 130, "x_max": 260},
+                        }
+                    ],
+                }
+            ],
+        }
+    }
+
+    result = sync_bbox_anchors(field_metadata)
+    ref = result["employment.monthly_salary"]["alternatives"][0]["source_refs"][0]
+
+    assert ref["anchor"] == {
+        "type": "pdf_bbox",
+        "status": "resolved",
+        "resolver_type": "gemini_bbox",
+        "bbox": {"y_min": 100, "x_min": 200, "y_max": 130, "x_max": 260},
+        "match_count": 1,
+        "page": 2,
+    }
+
+
 def test_sync_bbox_anchors_does_not_promote_ambiguous_anchor():
     field_metadata = {
         "employment.monthly_salary": {
@@ -298,6 +370,77 @@ def test_resolve_anchors_adds_xlsx_cell_anchor():
         "row": 2,
         "col": 2,
     }
+
+
+def _xlsx_cell(sheet: str, cell: str, row: int, col: int, text: str) -> dict:
+    return {
+        "type": "xlsx_cell",
+        "sheet_name": sheet,
+        "cell": cell,
+        "row": row,
+        "col": col,
+        "text": text,
+        "anchor_id": f"{sheet}!{cell}",
+    }
+
+
+def test_resolve_anchors_resolves_multi_cell_quote_with_tab():
+    """質問セル+回答セルがタブ連結されたquoteは、回答セルで解決する。"""
+    field_metadata = {
+        "applicant.birth_place": {
+            "source_refs": [
+                {
+                    "document_id": "doc_xlsx",
+                    "page": 5,
+                    "text_quote": "Place of birth　出生地\tArghakhanchi",
+                    "confidence": 0.9,
+                }
+            ]
+        }
+    }
+    xlsx_index = {
+        "doc_xlsx": [
+            _xlsx_cell("Bhawana Khanal", "C3", 3, 3, "Place of birth　出生地"),
+            _xlsx_cell("Bhawana Khanal", "D3", 3, 4, "Arghakhanchi"),
+        ]
+    }
+
+    result = resolve_anchors(field_metadata, {}, xlsx_index, {})
+    anchor = result["applicant.birth_place"]["source_refs"][0]["anchor"]
+
+    assert anchor["status"] == "resolved"
+    assert anchor["anchor_id"] == "Bhawana Khanal!D3"
+
+
+def test_resolve_anchors_narrows_multi_cell_quote_by_question_row():
+    """回答セルが複数シートに一致しても、同じ行に質問セルがある方へ絞り込む。"""
+    field_metadata = {
+        "applicant.birth_place": {
+            "source_refs": [
+                {
+                    "document_id": "doc_xlsx",
+                    "page": 5,
+                    "text_quote": "Place of birth　出生地\tDhankuta",
+                    "confidence": 0.9,
+                }
+            ]
+        }
+    }
+    xlsx_index = {
+        "doc_xlsx": [
+            # 出身地(別の質問)の行にも同じ値がある
+            _xlsx_cell("Kushang", "C6", 6, 3, "Hometown city 出身地"),
+            _xlsx_cell("Kushang", "D6", 6, 4, "Dhankuta"),
+            _xlsx_cell("Kushang", "C3", 3, 3, "Place of birth　出生地"),
+            _xlsx_cell("Kushang", "D3", 3, 4, "Dhankuta"),
+        ]
+    }
+
+    result = resolve_anchors(field_metadata, {}, xlsx_index, {})
+    anchor = result["applicant.birth_place"]["source_refs"][0]["anchor"]
+
+    assert anchor["status"] == "resolved"
+    assert anchor["anchor_id"] == "Kushang!D3"
 
 
 def test_resolve_anchors_does_not_substring_match_short_quote():

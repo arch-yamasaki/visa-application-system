@@ -258,6 +258,11 @@ export interface SourceRef {
   anchor?: SourceAnchor
 }
 
+export interface FieldAlternative {
+  value: string | number | boolean
+  source_refs?: SourceRef[]
+}
+
 export interface SourceAnchor {
   type: 'pdf_bbox' | 'xlsx_cell' | 'docx_block' | string
   status: 'resolved' | 'ambiguous' | 'not_found' | 'skipped_unsupported' | string
@@ -280,6 +285,7 @@ export interface SourceAnchor {
 
 export interface FieldMeta {
   source_refs: SourceRef[]
+  alternatives?: FieldAlternative[]
   human_reviewed?: boolean
   human_edited?: boolean
   original_value?: string

@@ -180,6 +180,7 @@ function generateFieldMetadata(): FieldMetadataMap {
     'entry_plan.planned_entry_date': { confidence: 0.94, quote: '2026-08-01' },
     'entry_plan.planned_port': { confidence: 0.89, quote: '関西国際空港' },
     'employment.activity_details': { confidence: 0.86, quote: '技術総合職として…' },
+    'employment.monthly_salary': { confidence: 0.94, quote: '月額給与 300000' },
     'employer.name': { confidence: 0.97, quote: 'デモテクノロジー株式会社' },
     'employer.address': { confidence: 0.93, quote: '大阪府大阪市北区梅田1-1-1' },
     'employer.phone': { confidence: 0.91, quote: '0660000000' },
@@ -200,6 +201,19 @@ function generateFieldMetadata(): FieldMetadataMap {
       human_edited: false,
     }
   }
+  result['employment.monthly_salary'].alternatives = [
+    {
+      value: 280000,
+      source_refs: [
+        {
+          document_id: 'doc_002',
+          page: 2,
+          text_quote: '希望給与 280000',
+          confidence: 0.78,
+        },
+      ],
+    },
+  ]
   return result
 }
 

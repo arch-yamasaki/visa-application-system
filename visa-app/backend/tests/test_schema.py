@@ -1,10 +1,12 @@
 """Gemini response_schema contract tests."""
 
 from extractors.schema import (
+    BOOLEAN_VALUE_SCHEMA,
     EXTRACTION_SCHEMA,
     FIELD_VALUE_SCHEMA,
     SCOPE_SCHEMAS,
     SOURCE_REF_SCHEMA,
+    _fv,
 )
 
 
@@ -14,8 +16,20 @@ def _value_type(field_schema: dict) -> str:
 
 def test_default_field_value_is_string_and_source_ref_is_typed():
     assert FIELD_VALUE_SCHEMA["properties"]["value"]["type"] == "STRING"
+    assert "alternatives" in FIELD_VALUE_SCHEMA["properties"]
+    assert "alternatives" not in FIELD_VALUE_SCHEMA["required"]
     assert SOURCE_REF_SCHEMA["properties"]["page"]["type"] == "INTEGER"
     assert SOURCE_REF_SCHEMA["properties"]["confidence"]["type"] == "NUMBER"
+
+
+def test_fv_propagates_value_type_to_alternatives():
+    schema = _fv(BOOLEAN_VALUE_SCHEMA)
+
+    assert schema["properties"]["value"]["type"] == "BOOLEAN"
+    assert (
+        schema["properties"]["alternatives"]["items"]["properties"]["value"]["type"]
+        == "BOOLEAN"
+    )
 
 
 def test_identity_scope_uses_boolean_field_values():

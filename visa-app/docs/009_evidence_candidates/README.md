@@ -1,6 +1,6 @@
 # 009: 証跡候補の複数表示（位置候補ナビ + 値候補 alternatives）
 
-Status: Part A 実装済み / Part B 未実装（本ドキュメントが実装仕様）
+Status: Part A 実装済み / Part B 実装済み（2026-07-08）
 
 ## 背景・目的
 
@@ -256,13 +256,38 @@ eval（品質検証。**スキーマ+プロンプト変更なので必須**）:
 | 保存済みケースとの互換 | field_metadata への追加キーのみなので後方互換。alternatives が無いケースはバッジが出ないだけ |
 | 「採用」で証跡と値がずれる（valueだけ変わり source_refs は primary のまま） | 採用時に field_metadata の primary を差し替えるのは v1 ではやらない（編集=人の判断として扱う）。将来 PATCH に metadata 更新を足す場合は 007 の source_refs スキーマ移行ドキュメントを参照 |
 
-### B-9. 実装順序チェックリスト
+### B-9. 実装結果（2026-07-08）
 
-1. [ ] schema.py: FIELD_VALUE_SCHEMA / _fv() に alternatives 追加 + テスト
-2. [ ] prompt_template.py: 指示文追加（スコープ版・非スコープ版の両方）
-3. [ ] gemini.py: 正規化 + 品質ガード + テスト
-4. [ ] anchor_resolver.py / bbox_locator.py: alternatives refs の走査 + テスト
-5. [ ] frontend: 型 → FieldRow 展開UI・採用ボタン → ビルド
+実装済み:
+
+- `backend/extractors/schema.py`: `FIELD_VALUE_SCHEMA` に optional `alternatives` を追加し、`_fv()` で BOOLEAN / INTEGER などの value 型を alternatives 側にも反映
+- `backend/extractors/prompt_template.py`: legacy prompt / scoped prompt の両方に、値が食い違う場合のみ `alternatives` を最大2件返す指示と給与のOK/NG例を追加
+- `backend/extractors/gemini.py`: alternatives の正規化、同値・空値・空quote除外、最大2件への切り詰め、`field_metadata[path].alternatives` への保持を実装。表示用 `case_data` は value-only のまま
+- `backend/extractors/anchor_resolver.py`: primary refs と alternatives refs を共通走査し、PDF / DOCX / XLSX anchor と bbox同期を alternatives にも適用
+- `backend/extractors/bbox_locator.py`: alternatives refs を bbox 候補に含め、`(field_path, alt_index, ref_index)` で正しい ref に bbox を戻す
+- `frontend/src/types/caseData.ts`: `FieldAlternative` と `FieldMeta.alternatives` を追加
+- `frontend/src/pages/ReviewPage.tsx`: list形式 `field_metadata` 正規化時にも alternatives を保持
+- `frontend/src/components/review/FieldRow.tsx`: 赤系の `別候補N` バッジ、展開リスト、候補証跡ジャンプ、既存編集フローを使う `採用` ボタンを追加
+- `frontend/src/api/mockData.ts` / `frontend/e2e/review-flow.spec.ts`: デモケースに値候補を追加し、展開・採用のE2Eを追加
+
+確認済み:
+
+- `cd visa-app/backend && .venv/bin/python -m pytest -q` → 171 passed
+- `cd visa-app/frontend && npm run build` → success
+- `cd visa-app/frontend && npx playwright test` → 18 passed
+
+未実施:
+
+- B-6 の実資料 eval 4ケースによる alternatives precision / token 増分 / Amit golden 比較
+- 認証付きローカル実画面での新規ケース抽出、スクリーンショット保存、QA記録作成
+
+### B-10. 実装順序チェックリスト
+
+1. [x] schema.py: FIELD_VALUE_SCHEMA / _fv() に alternatives 追加 + テスト
+2. [x] prompt_template.py: 指示文追加（スコープ版・非スコープ版の両方）
+3. [x] gemini.py: 正規化 + 品質ガード + テスト
+4. [x] anchor_resolver.py / bbox_locator.py: alternatives refs の走査 + テスト
+5. [x] frontend: 型 → FieldRow 展開UI・採用ボタン → ビルド
 6. [ ] eval-cases で抽出品質・過剰検出・トークン増を確認
 7. [ ] 実画面QA → qa/ に記録 → commit → デプロイ
 
