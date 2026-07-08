@@ -153,5 +153,6 @@ gcloud run services update visa-app \
 | Region | `asia-northeast1` |
 | Cloud Run Service | `visa-app` (`https://visa-app-913363513517.asia-northeast1.run.app`) |
 | Cloud Run Job | `codex-runner-job` |
+| Cloud Scheduler Job | `visa-app-warmup`（3分毎に `/` をGETしてコールドスタート回避） |
 | GCS Bucket | `visa-codex-mvp-data` |
-| Firestore Collection | `cases`, `sessions` |
+| Firestore Collection | `cases`, `sessions`, `users` |
