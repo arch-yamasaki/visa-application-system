@@ -1,4 +1,9 @@
-"""Gemini bbox取得: 対象フィールドのsource_refにbboxを付与する。"""
+"""Gemini bbox取得: 未解決のPDF source_refにbboxを付与するfallback。
+
+対象はfield allowlistではなく「PDF由来で位置未解決のref全部」。
+コストは (document, page) 単位のGemini呼び出しなので、候補refが増えても
+参照ページ数以上には増えない。品質フィルタと重複集約が候補数の防御になる。
+"""
 
 import logging
 import os
@@ -12,68 +17,10 @@ from .gemini import get_bboxes_for_page, _map_field_metadata
 
 logger = logging.getLogger(__name__)
 
-PDF_GEMINI_BBOX_FIELDS = [
-    "applicant.birth_date",
-    "applicant.home_country_address",
-    "applicant.marital_status",
-    "applicant.name_roman",
-    "applicant.nationality_region",
-    "applicant.occupation",
-    "applicant.birth_place",
-    "applicant.passport.expiry_date",
-    "applicant.passport.number",
-    "applicant.family.has_accompanying_members",
-    "applicant.immigration_history.entries_count",
-    "applicant.immigration_history.criminal_record",
-    "applicant.immigration_history.deportation_or_departure_order",
-    "applicant.immigration_history.has_entries",
-    "applicant.immigration_history.prior_coe_applications.has_history",
-    "applicant.immigration_history.prior_coe_applications.count",
-    "entry_plan.planned_entry_date",
-    "entry_plan.planned_period_months",
-    "entry_plan.planned_period_years",
-    "entry_plan.purpose_of_entry",
-    "employer.address",
-    "employer.annual_sales_jpy",
-    "employer.capital_jpy",
-    "employer.corporate_number",
-    "employer.employee_count",
-    "employer.employment_insurance_office_number",
-    "employer.has_corporate_number",
-    "employer.industry_primary",
-    "employer.name",
-    "employer.office_name",
-    "employer.phone",
-    "employer.postal_code",
-    "employment.contract_type",
-    "employment.employment_period_months",
-    "employment.employment_period_type",
-    "employment.employment_period_years",
-    "employment.experience_months",
-    "employment.has_position",
-    "employment.job_category_primary",
-    "employment.joining_date",
-    "employment.monthly_salary",
-    "employment.position_title",
-    "employment.activity_details",
-]
-
-# 繰り返し配列はindex列挙だとスキーマ変更や件数増で漏れるため、prefixで丸ごと対象にする。
-PDF_GEMINI_BBOX_FIELD_PREFIXES = (
-    "applicant.education.",
-    "applicant.employment_history.",
-)
-
 # 抽出値のエコー(実文書に存在しないquote)はbboxを引けないので候補にしない。
 _VALUE_ECHO_QUOTES = {"true", "false", "null", "none"}
 _MIN_LOCATOR_CHARS = 2
 _BboxTarget = tuple[str, int | None, int]
-
-
-def _is_bbox_target(field_path: str) -> bool:
-    if field_path in PDF_GEMINI_BBOX_FIELDS:
-        return True
-    return field_path.startswith(PDF_GEMINI_BBOX_FIELD_PREFIXES)
 
 
 def _is_low_quality_locator(locator_text: str) -> bool:
@@ -150,7 +97,6 @@ def locate_bboxes(
     # 同一ページの同一locatorはGeminiに1回だけ聞き、結果を全refへ配る
     dedup_index: dict[tuple[str, int, str], dict] = {}
     candidate_count = 0
-    skipped_not_target = 0
     skipped_low_quality = 0
     deduped_refs = 0
     for field_path, meta in field_metadata.items():
@@ -167,9 +113,6 @@ def locate_bboxes(
                 continue
             # PDFのみ対象
             if doc_id not in pdf_bytes_map:
-                continue
-            if not _is_bbox_target(field_path):
-                skipped_not_target += 1
                 continue
             locator_text = _locator_text(text_quote)
             if _is_low_quality_locator(locator_text):
@@ -196,10 +139,9 @@ def locate_bboxes(
             candidate_map[candidate_id] = candidate
             dedup_index[dedup_key] = candidate
 
-    if skipped_not_target or skipped_low_quality or deduped_refs:
+    if skipped_low_quality or deduped_refs:
         logger.info(
-            "bbox_locator_metric event=candidates_filtered not_target=%d low_quality=%d deduped=%d",
-            skipped_not_target,
+            "bbox_locator_metric event=candidates_filtered low_quality=%d deduped=%d",
             skipped_low_quality,
             deduped_refs,
         )

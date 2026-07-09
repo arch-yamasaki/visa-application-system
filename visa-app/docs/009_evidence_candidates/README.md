@@ -64,7 +64,7 @@ Status: Part A 実装済み / Part B 実装済み（2026-07-08）
 
 - PDF のみ。xlsx / docx の ambiguous（`_resolve_from_text_index`）は candidates 未対応。
   対応する場合は structural anchor の候補（cell / paragraph_index）を同様に保存し、`HtmlViewer` に複数ハイライトを実装する
-- 保存済みケースは抽出（またはanchor再計算）をやり直さないと candidates が付かない
+- 保存済みケースへの反映は `POST /cases/{case_id}/reanchor`（Gemini再抽出なしでanchor/bboxのみ再計算し、`anchor_coverage` を保存する）
 
 ---
 

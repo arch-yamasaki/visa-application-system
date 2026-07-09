@@ -404,8 +404,8 @@ retry loop は最後に入れるため、最初から複雑なボタンは作ら
 
 - `review.validation_errors` に scope failure を文字列で入れる処理
   - retry 判定に使いにくいため、将来 `code / scope / severity / message` の object に寄せる。
-- `bbox_locator.py` の `PDF_GEMINI_BBOX_FIELDS`
-  - prefix対応・品質フィルタ・重複集約は導入済み。固定配列の完全廃止は `candidates_filtered` メトリクスの実測を見て判断する。
+- `bbox_locator.py` の field allowlist
+  - 2026-07-10 に廃止済み。未解決のPDF refすべてを候補化し、品質フィルタ+重複集約で制御する。
 - `main.py` 内の full extraction と retry の保存処理重複
   - helper に分ける。ただし最初から抽象化しすぎない。
 

@@ -30,6 +30,8 @@ from google.cloud import run_v2
 from pydantic import BaseModel
 
 from auth import AuthUser, require_user
+from extractors.anchor_resolver import anchor_coverage, resolve_anchors, sync_bbox_anchors
+from extractors.bbox_locator import locate_bboxes
 from extractors.document_models import LoadedDocument
 from extractors.document_preprocessor import prepare_documents
 from extractors.gemini_pipeline import extract_documents
@@ -994,6 +996,7 @@ def start_extraction_stream(
                 "case_data": merged_case_data,
                 "review": result.review,
                 "field_metadata": result.field_metadata,
+                "anchor_coverage": anchor_coverage(result.field_metadata),
                 "extraction": {
                     "backend": "gemini",
                     "run_id": run_id,
@@ -1121,6 +1124,7 @@ def _start_gemini_extraction(
                 "case_data": merged_case_data,
                 "review": result.review,
                 "field_metadata": result.field_metadata,  # 互換レイヤーで自動生成済み
+                "anchor_coverage": anchor_coverage(result.field_metadata),
                 "workflow_state": "extracted",
                 "updated_at": _now_iso(),
             }
@@ -1234,6 +1238,66 @@ def _start_codex_extraction(
         }
 
     return {"session_id": session_id, "status": "running"}
+
+
+@api.post("/cases/{case_id}/reanchor")
+def reanchor_case(case_id: str, user: AuthUser = Depends(require_user)):
+    """保存済みの抽出結果に対して、最新resolverでanchor/bboxだけ再計算する。
+
+    Gemini再抽出はしない(quoteはそのまま)。resolver改善を過去ケースに反映する用途。
+    """
+    data = _get_case(case_id, user)
+    field_metadata = data.get("field_metadata") or {}
+    documents = data.get("document_manifest", {}).get("documents", [])
+    if not field_metadata:
+        raise HTTPException(status_code=400, detail="No extraction result for this case")
+    if not documents:
+        raise HTTPException(status_code=400, detail="No documents uploaded for this case")
+
+    started_at = time.monotonic()
+
+    def _download_one(doc):
+        blob = gcs.bucket(GCS_BUCKET).blob(doc["gcs_path"])
+        return LoadedDocument(
+            document_id=doc["document_id"],
+            file_name=doc["file_name"],
+            document_role=doc.get("document_role", ""),
+            content=blob.download_as_bytes(),
+        )
+
+    with ThreadPoolExecutor(max_workers=min(len(documents), 8)) as pool:
+        loaded_documents = list(pool.map(_download_one, documents))
+    prepared = prepare_documents(loaded_documents)
+
+    before = anchor_coverage(field_metadata)
+    field_metadata = resolve_anchors(
+        field_metadata,
+        prepared.pdf_bytes_map,
+        prepared.xlsx_cell_indexes,
+        prepared.docx_block_indexes,
+    )
+    if prepared.pdf_contents and os.environ.get("ENABLE_BBOX_LOCATOR", "true").lower() == "true":
+        field_metadata = locate_bboxes(field_metadata, prepared.pdf_bytes_map)
+        field_metadata = sync_bbox_anchors(field_metadata)
+    coverage = anchor_coverage(field_metadata)
+
+    db.collection("cases").document(case_id).update({
+        "field_metadata": field_metadata,
+        "anchor_coverage": coverage,
+        "updated_at": _now_iso(),
+    })
+    logger.info(
+        "reanchor completed case_id=%s before=%s after=%s elapsed_ms=%d",
+        case_id,
+        before,
+        coverage,
+        round((time.monotonic() - started_at) * 1000),
+    )
+    return {
+        "case_id": case_id,
+        "anchor_coverage_before": before,
+        "anchor_coverage": coverage,
+    }
 
 
 @api.get("/cases/{case_id}/extraction-status")

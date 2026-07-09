@@ -269,11 +269,10 @@ config = types.GenerateContentConfig(
 フロントエンドで PDF 上にハイライト表示するために、値がPDF上のどこにあるかを Gemini で推定する。
 anchor resolver（PDFテキスト層等の決定的解決）で解決できなかった source_ref だけが対象の **fallback**。
 
-### 対象フィールド（PDF_GEMINI_BBOX_FIELDS / PDF_GEMINI_BBOX_FIELD_PREFIXES）
+### 対象フィールド
 
-固定の field path 列挙（約50フィールド）に加えて、prefix一致
-（`applicant.employment_history.` / `applicant.education.`）で繰り返し配列を丸ごと対象にする。
-正確なリストは `bbox_locator.py` を正とする。
+field allowlist は廃止済み（2026-07-10）。**PDF由来で位置未解決のrefすべて**が候補になる。
+候補数の防御は品質フィルタ（値エコー・短すぎるquoteの除外）と同一locatorの重複集約のみ。
 
 ### 処理フロー（locate_bboxes）
 

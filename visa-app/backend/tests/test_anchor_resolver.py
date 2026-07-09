@@ -2,7 +2,7 @@
 
 import pymupdf
 
-from extractors.anchor_resolver import resolve_anchors, sync_bbox_anchors
+from extractors.anchor_resolver import anchor_coverage, resolve_anchors, sync_bbox_anchors
 
 
 def _pdf_with_text(lines: list[str]) -> bytes:
@@ -443,6 +443,74 @@ def test_resolve_anchors_narrows_multi_cell_quote_by_question_row():
     assert anchor["anchor_id"] == "Kushang!D3"
 
 
+def test_resolve_anchors_prefers_applicant_sheet_for_ambiguous_xlsx():
+    """全シートに存在する回答値は、resolved anchorが集中するシートへ絞り込む。"""
+    field_metadata = {
+        "applicant.passport.number": {
+            "source_refs": [
+                {
+                    "document_id": "doc_xlsx",
+                    "page": 5,
+                    "text_quote": "PA9999999",
+                    "confidence": 0.9,
+                }
+            ]
+        },
+        "applicant.marital_status": {
+            "source_refs": [
+                {
+                    "document_id": "doc_xlsx",
+                    "page": 5,
+                    "text_quote": "Single",
+                    "confidence": 0.9,
+                }
+            ]
+        },
+    }
+    xlsx_index = {
+        "doc_xlsx": [
+            # 2シートに同じ回答値があるが、passport番号はBhawanaシートで一意
+            _xlsx_cell("Kushang", "D4", 4, 4, "Single"),
+            _xlsx_cell("Bhawana", "D4", 4, 4, "Single"),
+            _xlsx_cell("Bhawana", "D7", 7, 4, "PA9999999"),
+        ]
+    }
+
+    result = resolve_anchors(field_metadata, {}, xlsx_index, {})
+
+    marital = result["applicant.marital_status"]["source_refs"][0]["anchor"]
+    assert marital["status"] == "resolved"
+    assert marital["resolver_type"] == "xlsx_cell_index_sheet_preference"
+    assert marital["anchor_id"] == "Bhawana!D4"
+
+
+def test_resolve_anchors_keeps_ambiguous_when_no_sheet_majority():
+    """resolvedの集中シートが決まらない場合は昇格しない。"""
+    field_metadata = {
+        "applicant.marital_status": {
+            "source_refs": [
+                {
+                    "document_id": "doc_xlsx",
+                    "page": 5,
+                    "text_quote": "Single",
+                    "confidence": 0.9,
+                }
+            ]
+        },
+    }
+    xlsx_index = {
+        "doc_xlsx": [
+            _xlsx_cell("Kushang", "D4", 4, 4, "Single"),
+            _xlsx_cell("Bhawana", "D4", 4, 4, "Single"),
+        ]
+    }
+
+    result = resolve_anchors(field_metadata, {}, xlsx_index, {})
+    anchor = result["applicant.marital_status"]["source_refs"][0]["anchor"]
+
+    assert anchor["status"] == "ambiguous"
+
+
 def test_resolve_anchors_does_not_substring_match_short_quote():
     field_metadata = {
         "employer.has_corporate_number": {
@@ -791,4 +859,39 @@ def test_resolve_anchors_marks_duplicate_docx_blocks_as_ambiguous():
         "status": "ambiguous",
         "resolver_type": "docx_block_index",
         "match_count": 2,
+    }
+
+
+def test_anchor_coverage_counts_resolved_candidates_and_unresolved():
+    field_metadata = {
+        "a.resolved": {
+            "source_refs": [
+                {"document_id": "d1", "text_quote": "x", "anchor": {"status": "resolved"}}
+            ]
+        },
+        "a.candidates": {
+            "source_refs": [
+                {
+                    "document_id": "d1",
+                    "text_quote": "y",
+                    "anchor": {"status": "ambiguous", "candidates": [{"page": 1, "bbox": {}}]},
+                }
+            ]
+        },
+        "a.not_found": {
+            "source_refs": [
+                {"document_id": "d1", "text_quote": "z", "anchor": {"status": "not_found"}}
+            ]
+        },
+        "a.no_evidence": {
+            "source_refs": [{"document_id": "", "text_quote": ""}]
+        },
+    }
+
+    coverage = anchor_coverage(field_metadata)
+
+    assert coverage == {
+        "total_fields": 3,
+        "resolved_fields": 1,
+        "displayable_fields": 2,
     }

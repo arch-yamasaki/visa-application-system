@@ -2,12 +2,13 @@
 
 Status: 実装済み / 方針更新あり
 
-> **2026-07-08 更新**: 本文中の `BBOX_TARGET_FIELDS` は現在 `PDF_GEMINI_BBOX_FIELDS` に一本化済み（aliasは削除）。
-> 対象は固定列挙に加えて `PDF_GEMINI_BBOX_FIELD_PREFIXES`（`applicant.employment_history.` / `applicant.education.`）の
-> prefix一致で判定する。候補生成には品質フィルタ（値エコー・短すぎるquoteの除外）と
-> 同一(document, page, locator)の重複集約が入り、candidate は `targets: [(field_path, ref_index), ...]` を持つ
-> （旧 `ref_index` 単一形式から変更）。ambiguous は候補位置を `anchor.candidates`（最大3件）として保存し、
-> ビューアで全候補を表示・移動できる。詳細は `../009_evidence_candidates/README.md` を参照。
+> **2026-07-10 更新**: 本文中の `BBOX_TARGET_FIELDS` / `PDF_GEMINI_BBOX_FIELDS` は **廃止済み**。
+> 現在は「PDF由来で位置未解決のrefすべて」が Gemini bbox 候補になり、field allowlist は存在しない。
+> 候補数の防御は品質フィルタ（値エコー・短すぎるquoteの除外）と同一(document, page, locator)の重複集約のみで、
+> コストは (document, page) 単位。candidate は `targets` に複数の適用先を持つ。
+> ambiguous は候補位置を `anchor.candidates`（最大3件）として保存しビューアで全候補を表示・移動できる。
+> xlsx は resolved anchor が集中するシートを優先する2パス解決あり。保存済みケースへの反映は
+> `POST /cases/{case_id}/reanchor` で再計算できる。詳細は `../009_evidence_candidates/README.md` を参照。
 
 ## 目的
 
@@ -265,7 +266,7 @@ frontend は次の優先順位に寄せる。
 1. 短期修正として、`employer.employment_insurance_office_number` など明らかに漏れている主要fieldを `BBOX_TARGET_FIELDS` に追加する。実装済み。
 2. `anchor` に `page` を持てるよう schema / TypeScript 型 / frontend navigation を揃える。実装済み。
 3. `viewerStore.navigateToSource()` は `ref.anchor.page ?? ref.page ?? 1` を使う。実装済み。
-4. `bbox_locator.py` の candidate 生成を PDF `source_ref` 起点へ変更する。2026-07-08 に prefix対応・品質フィルタ・重複集約まで実装済み。allowlist の完全削除は `candidates_filtered` メトリクスの実測を見てから判断する。
+4. `bbox_locator.py` の candidate 生成を PDF `source_ref` 起点へ変更する。2026-07-10 に allowlist を完全削除し、未解決のPDF refすべてを候補化（品質フィルタ+重複集約が防御）。実測でカバレッジ 91〜99% を確認済み。
 5. Gemini bbox fallback の対象制御として `PDF_GEMINI_BBOX_FIELDS` を導入するか、候補数上限で制御する。実装済み。
 6. `sync_bbox_anchors()` は top-level `bbox` を `anchor.bbox` へ同期する互換処理として残す。実装済み。ただし `ambiguous` は resolved に昇格しない。
 7. `anchor.status`, `resolver_type`, `match_count` をQAで確認できるようにログとテストを追加する。実装済み。
@@ -296,9 +297,10 @@ Claude Codeレビュー相当の観点で、次を追加実装した。
 
 まだ残っている課題:
 
-- allowlist（`PDF_GEMINI_BBOX_FIELDS`）の完全削除。prefix対応・品質フィルタ・重複集約は実装済みで、削除判断は `candidates_filtered` メトリクスの実測待ち。
-- OCR word bbox resolver を追加すること。
-- ambiguous の自動解消（周辺文脈での絞り込み）。現状は候補位置を `anchor.candidates` として保存し、人が候補間を移動して判断する（`../009_evidence_candidates/README.md`）。
+- OCR word bbox resolver を追加すること（スキャン品質が悪く Gemini bbox も外すページ向け）。
+- xlsx ambiguous の候補表示（PDF candidates 相当を HtmlViewer に実装）。短い共通回答（No/0/NA）が
+  本人シート内でも複数行にあるケースが残る。
+- ambiguous の自動解消（質問ラベルとfieldの意味照合など）。現状は候補位置を `anchor.candidates` として保存し、人が候補間を移動して判断する（`../009_evidence_candidates/README.md`）。
 
 ### 受け入れ条件の更新
 

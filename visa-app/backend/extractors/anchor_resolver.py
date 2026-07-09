@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import re
 import unicodedata
+from collections import Counter
 from dataclasses import dataclass
 
 import pymupdf
@@ -370,6 +371,16 @@ def _match_multi_cell_quote(items: list[dict], text_quote: str) -> list[dict]:
     return narrowed or matches
 
 
+def _matches_for_quote(items: list[dict], text_quote: str) -> list[dict]:
+    target = _normalize_text(text_quote)
+    if not target:
+        return []
+    matches = _match_text_index_items(items, target)
+    if not matches:
+        matches = _match_multi_cell_quote(items, text_quote)
+    return matches
+
+
 def _resolve_from_text_index(
     ref: dict,
     items: list[dict],
@@ -378,12 +389,9 @@ def _resolve_from_text_index(
     resolver_type: str,
 ) -> str:
     text_quote = str(ref.get("text_quote") or "")
-    target = _normalize_text(text_quote)
-    if not target:
+    if not _normalize_text(text_quote):
         return "skipped"
-    matches = _match_text_index_items(items, target)
-    if not matches:
-        matches = _match_multi_cell_quote(items, text_quote)
+    matches = _matches_for_quote(items, text_quote)
     if len(matches) == 1:
         _set_resolved_structural_anchor(ref, matches[0], resolver_type)
         return "resolved"
@@ -392,6 +400,105 @@ def _resolve_from_text_index(
         return "ambiguous"
     _set_unresolved_structural_anchor(ref, anchor_type, "not_found", resolver_type, 0)
     return "not_found"
+
+
+def _preferred_sheets(field_metadata: dict) -> dict[str, str]:
+    """document_idごとに、resolved xlsx anchor が最も集まるシートを返す(単独首位のみ)。
+
+    シート=申請人のワークブック(8名分など)で、共通の回答値が全シートに
+    存在して ambiguous になるケースを、本人のシートへ寄せるためのヒント。
+    """
+    counts: dict[str, Counter] = {}
+    for meta in field_metadata.values():
+        if not isinstance(meta, dict):
+            continue
+        for ref in _iter_all_refs(meta):
+            anchor = ref.get("anchor") or {}
+            if (
+                anchor.get("type") == "xlsx_cell"
+                and anchor.get("status") == "resolved"
+                and anchor.get("sheet_name")
+            ):
+                doc_id = str(ref.get("document_id") or "")
+                counts.setdefault(doc_id, Counter())[anchor["sheet_name"]] += 1
+    preferred: dict[str, str] = {}
+    for doc_id, counter in counts.items():
+        top = counter.most_common(2)
+        if len(top) == 1 or top[0][1] > top[1][1]:
+            preferred[doc_id] = top[0][0]
+    return preferred
+
+
+def _apply_sheet_preference(
+    field_metadata: dict,
+    xlsx_cell_indexes: dict[str, list[dict]],
+) -> int:
+    """ambiguousなxlsx anchorを、優先シート内で一意ならresolvedへ昇格する。"""
+    preferred = _preferred_sheets(field_metadata)
+    if not preferred:
+        return 0
+    promoted = 0
+    for meta in field_metadata.values():
+        if not isinstance(meta, dict):
+            continue
+        for ref in _iter_all_refs(meta):
+            anchor = ref.get("anchor") or {}
+            if anchor.get("type") != "xlsx_cell" or anchor.get("status") != "ambiguous":
+                continue
+            doc_id = str(ref.get("document_id") or "")
+            sheet = preferred.get(doc_id)
+            items = xlsx_cell_indexes.get(doc_id)
+            if not sheet or not items:
+                continue
+            matches = _matches_for_quote(items, str(ref.get("text_quote") or ""))
+            sheet_matches = [m for m in matches if m.get("sheet_name") == sheet]
+            if len(sheet_matches) == 1:
+                _set_resolved_structural_anchor(
+                    ref, sheet_matches[0], "xlsx_cell_index_sheet_preference"
+                )
+                promoted += 1
+    if promoted:
+        logger.info("anchor_resolver_metric event=sheet_preference promoted=%d", promoted)
+    return promoted
+
+
+def anchor_coverage(field_metadata: dict | list) -> dict:
+    """field単位のanchorカバレッジ。
+
+    証跡(document_idまたはquoteを持つref)があるfieldのうち、
+    resolved(確定表示可) / displayable(候補表示含め何か光る) の数を返す。
+    """
+    field_metadata = _map_field_metadata(field_metadata)
+    total = resolved = displayable = 0
+    for meta in field_metadata.values():
+        if not isinstance(meta, dict):
+            continue
+        real_refs = [
+            ref
+            for ref in _iter_all_refs(meta)
+            if ref.get("document_id") or ref.get("text_quote")
+        ]
+        if not real_refs:
+            continue
+        total += 1
+        best = None
+        for ref in real_refs:
+            anchor = ref.get("anchor") or {}
+            if anchor.get("status") == "resolved" or ref.get("bbox"):
+                best = "resolved"
+                break
+            if anchor.get("status") == "ambiguous" and anchor.get("candidates"):
+                best = "candidates"
+        if best == "resolved":
+            resolved += 1
+            displayable += 1
+        elif best == "candidates":
+            displayable += 1
+    return {
+        "total_fields": total,
+        "resolved_fields": resolved,
+        "displayable_fields": displayable,
+    }
 
 
 def sync_bbox_anchors(field_metadata: dict | list) -> dict:
@@ -495,6 +602,11 @@ def resolve_anchors(
                 else:
                     _set_unresolved_pdf_anchor(ref, "not_found", "pdf_text_layer", 0)
                     not_found += 1
+        # 2nd pass: 複数シートで一致したxlsx ambiguousを、このケースの
+        # resolved anchorが集中するシート(=申請人のシート)へ絞り込む
+        promoted = _apply_sheet_preference(field_metadata, xlsx_cell_indexes)
+        resolved += promoted
+        ambiguous -= promoted
     finally:
         for index in pdf_indexes.values():
             index.close()
