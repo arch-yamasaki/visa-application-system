@@ -256,6 +256,25 @@ def _set_ambiguous_pdf_anchor(
     }
 
 
+_STRUCTURAL_ANCHOR_KEYS = (
+    "sheet_name",
+    "cell",
+    "row",
+    "col",
+    "paragraph_index",
+    "table_index",
+    "block_kind",
+)
+
+
+def _structural_candidate(item: dict) -> dict:
+    candidate = {"anchor_id": item.get("anchor_id")}
+    for key in _STRUCTURAL_ANCHOR_KEYS:
+        if key in item:
+            candidate[key] = item[key]
+    return candidate
+
+
 def _set_resolved_structural_anchor(ref: dict, item: dict, resolver_type: str) -> None:
     anchor = {
         "type": item["type"],
@@ -264,18 +283,31 @@ def _set_resolved_structural_anchor(ref: dict, item: dict, resolver_type: str) -
         "match_count": 1,
         "anchor_id": item.get("anchor_id"),
     }
-    for key in (
-        "sheet_name",
-        "cell",
-        "row",
-        "col",
-        "paragraph_index",
-        "table_index",
-        "block_kind",
-    ):
+    for key in _STRUCTURAL_ANCHOR_KEYS:
         if key in item:
             anchor[key] = item[key]
     ref["anchor"] = anchor
+
+
+def _set_ambiguous_structural_anchor(
+    ref: dict,
+    anchor_type: str,
+    resolver_type: str,
+    matches: list[dict],
+) -> None:
+    """複数一致は候補セル/ブロックごと保存し、後段の選択器やUIが使えるようにする。"""
+    if ref.get("anchor", {}).get("status") == "resolved":
+        return
+    ref["anchor"] = {
+        "type": anchor_type,
+        "status": "ambiguous",
+        "resolver_type": resolver_type,
+        "match_count": len(matches),
+        "candidates": [
+            _structural_candidate(match)
+            for match in matches[:MAX_AMBIGUOUS_CANDIDATES]
+        ],
+    }
 
 
 def _set_unresolved_structural_anchor(
@@ -396,7 +428,7 @@ def _resolve_from_text_index(
         _set_resolved_structural_anchor(ref, matches[0], resolver_type)
         return "resolved"
     if len(matches) > 1:
-        _set_unresolved_structural_anchor(ref, anchor_type, "ambiguous", resolver_type, len(matches))
+        _set_ambiguous_structural_anchor(ref, anchor_type, resolver_type, matches)
         return "ambiguous"
     _set_unresolved_structural_anchor(ref, anchor_type, "not_found", resolver_type, 0)
     return "not_found"
@@ -487,7 +519,13 @@ def anchor_coverage(field_metadata: dict | list) -> dict:
             if anchor.get("status") == "resolved" or ref.get("bbox"):
                 best = "resolved"
                 break
-            if anchor.get("status") == "ambiguous" and anchor.get("candidates"):
+            # 候補表示UIがあるのは現状PDFのみ。xlsx/docxのcandidatesはデータのみなので
+            # displayableに数えない(HtmlViewer対応時にここを外す)
+            if (
+                anchor.get("status") == "ambiguous"
+                and anchor.get("candidates")
+                and anchor.get("type") == "pdf_bbox"
+            ):
                 best = "candidates"
         if best == "resolved":
             resolved += 1

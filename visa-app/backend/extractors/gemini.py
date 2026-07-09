@@ -141,6 +141,62 @@ def get_bboxes_for_page(
         return {}
 
 
+def select_anchor_cells(
+    context_text: str,
+    selection_candidates: dict[str, dict],
+) -> dict[str, dict | None]:
+    """曖昧なフィールドごとに、候補セルから最適な1つをGeminiに選ばせる。
+
+    selection_candidates: {selection_id: {"field_path": ..., "text_quote": ...,
+                                          "candidate_anchor_ids": [...]}}
+    Returns: {selection_id: {"anchor_id": ..., "reason": ...} | None}
+    """
+    if not selection_candidates:
+        return {}
+
+    client = _get_client()
+
+    prompt = (
+        "スプレッドシートのセル内容(セル番地付き)と、位置が曖昧なフィールドの一覧を渡します。\n"
+        "各フィールドについて、フィールド名の意味と、候補セルと同じ行にある質問ラベルなどの文脈から、\n"
+        "そのフィールドの値の出どころとして最も適切な候補セルを1つ選んでください。\n"
+        "必ず candidates に列挙された anchor_id の中から選ぶこと。判断できない場合は null を返すこと。\n\n"
+        "=== シート内容 ===\n"
+        f"{context_text}\n\n"
+        "=== 選択対象 ===\n"
+    )
+    for selection_id, selection in selection_candidates.items():
+        prompt += (
+            f'- "{selection_id}" field={selection.get("field_path", "")} '
+            f'quote="{selection.get("text_quote", "")}" '
+            f'candidates={selection.get("candidate_anchor_ids", [])}\n'
+        )
+    prompt += (
+        '\nJSON形式で返してください: '
+        '{"<selection_id>": {"anchor_id": "...", "reason": "選択理由を30字以内"} または null}'
+    )
+
+    response = client.models.generate_content(
+        model=BBOX_MODEL_NAME,
+        contents=[prompt],
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            temperature=0.0,
+            thinking_config=_thinking_config(),
+        ),
+    )
+
+    try:
+        parsed = json.loads(response.text)
+    except json.JSONDecodeError:
+        logger.warning(
+            "Gemini cell select response parse error response_chars=%d",
+            len(response.text or ""),
+        )
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
 def _call_gemini(
     client: genai.Client,
     contents: list,

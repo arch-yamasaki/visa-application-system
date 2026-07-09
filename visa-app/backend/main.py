@@ -32,6 +32,7 @@ from pydantic import BaseModel
 from auth import AuthUser, require_user
 from extractors.anchor_resolver import anchor_coverage, resolve_anchors, sync_bbox_anchors
 from extractors.bbox_locator import locate_bboxes
+from extractors.cell_selector import select_ambiguous_cells
 from extractors.document_models import LoadedDocument
 from extractors.document_preprocessor import prepare_documents
 from extractors.gemini_pipeline import extract_documents
@@ -1276,6 +1277,8 @@ def reanchor_case(case_id: str, user: AuthUser = Depends(require_user)):
         prepared.xlsx_cell_indexes,
         prepared.docx_block_indexes,
     )
+    if prepared.xlsx_cell_indexes and os.environ.get("ENABLE_CELL_SELECTOR", "true").lower() == "true":
+        field_metadata = select_ambiguous_cells(field_metadata, prepared.xlsx_cell_indexes)
     if prepared.pdf_contents and os.environ.get("ENABLE_BBOX_LOCATOR", "true").lower() == "true":
         field_metadata = locate_bboxes(field_metadata, prepared.pdf_bytes_map)
         field_metadata = sync_bbox_anchors(field_metadata)

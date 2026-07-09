@@ -9,6 +9,7 @@ from google.genai import types as genai_types
 
 from .anchor_resolver import resolve_anchors, sync_bbox_anchors
 from .bbox_locator import locate_bboxes
+from .cell_selector import select_ambiguous_cells
 from .document_models import LoadedDocument, PreparedDocuments
 from .gemini import (
     EXTRACTION_SCOPES,
@@ -90,6 +91,11 @@ def attach_bboxes(
             prepared.xlsx_cell_indexes,
             prepared.docx_block_indexes,
         )
+        if prepared.xlsx_cell_indexes and os.environ.get("ENABLE_CELL_SELECTOR", "true").lower() == "true":
+            result.field_metadata = select_ambiguous_cells(
+                result.field_metadata,
+                prepared.xlsx_cell_indexes,
+            )
         if prepared.pdf_contents and os.environ.get("ENABLE_BBOX_LOCATOR", "true").lower() == "true":
             result.field_metadata = locate_bboxes(
                 result.field_metadata,

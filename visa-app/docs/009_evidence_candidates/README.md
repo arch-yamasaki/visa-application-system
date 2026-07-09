@@ -1,6 +1,33 @@
 # 009: 証跡候補の複数表示（位置候補ナビ + 値候補 alternatives）
 
-Status: Part A 実装済み / Part B 実装済み（2026-07-08）
+Status: Part A 実装済み / Part B 実装済み（2026-07-08）/ Part D 実装済み（2026-07-10）
+
+## Part D: Gemini cell selector（xlsx ambiguousの意味選択）
+
+短い共通回答（No/0/NA等）が本人シート内でも複数行にあり、文字列一致では行を確定できない
+ケースの解決策。**Geminiに探させるのではなく、決定的resolverが列挙した候補セルの中から
+fieldの意味で選ばせる**（selector方式）。存在しないセルを指すことは構造的にできない。
+
+処理順: `resolve_anchors`（シート優先2パス含む）→ `cell_selector.select_ambiguous_cells`
+→ `bbox_locator`。`ENABLE_CELL_SELECTOR=false` で無効化できる。
+
+- `anchor_resolver.py`: xlsx/docx の ambiguous に候補セル/ブロックを `anchor.candidates`
+  （最大3件、`{anchor_id, sheet_name, cell, row, col}`）として保存
+- `gemini.py::select_anchor_cells`: シート内容（セル番地付きテキスト）+ 選択対象一覧を渡し、
+  `{selection_id: {anchor_id, reason} | null}` を返させる（temperature 0）
+- `cell_selector.py`: 候補の収集・シート整形・検証。ガード:
+  - **申請人シートガード**: `_preferred_sheets` で本人シートが分かる場合、候補をそのシートに限定。
+    本人シート上に候補がなければ選択させず ambiguous のまま保留（他人のセルを選ばせない）
+  - 候補外の anchor_id は拒否、null は保留。Gemini失敗時も ambiguous のまま
+- 選択結果は `resolver_type: gemini_cell_select` で resolved になり、監査用に
+  `candidates` と `select_reason` を保持する（将来のUI選び直しに使える）
+- resolved な xlsx anchor のシート切替+セルハイライトは既存UIがそのまま動くため、
+  **フロント変更は不要**
+
+実測（2026-07-10）: Kushangケースの `birth_place='Dhankuta'`（Place of birth行 vs
+Hometown city行）を理由付きで正しく選択し、カバレッジ 67/67=100%。Bhawanaケースの
+他人シートのみ候補はガードで保留。anchor_coverage の displayable は候補表示UIがある
+pdf_bbox の candidates のみ数える（xlsx candidatesはデータのみのため）。
 
 ## 背景・目的
 

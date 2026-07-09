@@ -509,6 +509,9 @@ def test_resolve_anchors_keeps_ambiguous_when_no_sheet_majority():
     anchor = result["applicant.marital_status"]["source_refs"][0]["anchor"]
 
     assert anchor["status"] == "ambiguous"
+    # 候補セルは後段の選択器・UI用に保存される
+    assert [c["anchor_id"] for c in anchor["candidates"]] == ["Kushang!D4", "Bhawana!D4"]
+    assert anchor["candidates"][0]["cell"] == "D4"
 
 
 def test_resolve_anchors_does_not_substring_match_short_quote():
@@ -859,6 +862,10 @@ def test_resolve_anchors_marks_duplicate_docx_blocks_as_ambiguous():
         "status": "ambiguous",
         "resolver_type": "docx_block_index",
         "match_count": 2,
+        "candidates": [
+            {"anchor_id": "p-0", "paragraph_index": 0},
+            {"anchor_id": "p-1", "paragraph_index": 1},
+        ],
     }
 
 
@@ -874,7 +881,7 @@ def test_anchor_coverage_counts_resolved_candidates_and_unresolved():
                 {
                     "document_id": "d1",
                     "text_quote": "y",
-                    "anchor": {"status": "ambiguous", "candidates": [{"page": 1, "bbox": {}}]},
+                    "anchor": {"type": "pdf_bbox", "status": "ambiguous", "candidates": [{"page": 1, "bbox": {}}]},
                 }
             ]
         },
