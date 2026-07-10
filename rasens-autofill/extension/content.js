@@ -31,7 +31,9 @@ function byName(name) {
 }
 
 function isRasensOfferFormPage() {
-  return Boolean(document.querySelector("form#frm")) && Boolean(document.getElementById("select_256097"));
+  // RASENSの生成ID(select_256097 等)はシステム更新で振り直されるため使わない。
+  // 申請フォームは form#frm の中に item[N] 形式のnameを持つselectが並ぶ構造で判定する。
+  return Boolean(document.querySelector("form#frm select[name^='item[']"));
 }
 
 function rowContainer(element) {
