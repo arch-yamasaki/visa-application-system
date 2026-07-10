@@ -43,6 +43,30 @@ async function signIn(email, password) {
   });
 }
 
+/**
+ * ブラウザ(visa-appのWebログイン画面)経由でログインする。
+ * Googleログイン・メール/パスワードの両方が使え、visa-appのWebに
+ * ログイン済みのブラウザなら追加操作なしで完了する。
+ */
+async function signInWithBrowser() {
+  const redirectUri = chrome.identity.getRedirectURL();
+  const authUrl = `${DEFAULT_API_URL}/extension-auth?redirect_uri=${encodeURIComponent(redirectUri)}`;
+  const responseUrl = await chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true });
+  const params = new URLSearchParams(new URL(responseUrl).hash.slice(1));
+  const refreshToken = params.get("refresh_token");
+  if (!refreshToken) {
+    throw new Error("ログイン情報を取得できませんでした。もう一度お試しください");
+  }
+  await chrome.storage.local.set({
+    visaAuth: {
+      email: params.get("email") || "",
+      refreshToken,
+      idToken: "",
+      expiresAt: 0, // 初回のAPI呼び出し時に getIdToken() がリフレッシュする
+    },
+  });
+}
+
 async function signOut() {
   await chrome.storage.local.remove("visaAuth");
 }
@@ -137,4 +161,4 @@ async function listCases() {
 }
 
 // Export for use by popup.js
-window.apiClient = { getApplicationData, listCases, signIn, signOut, getAuthState };
+window.apiClient = { getApplicationData, listCases, signIn, signInWithBrowser, signOut, getAuthState };

@@ -3,7 +3,7 @@
   "name": "Visa Application Autofill",
   "version": "0.1.2",
   "description": "社内visa-appの申請情報を在留申請オンラインシステムのフォームへ入力補助します。",
-  "permissions": ["activeTab", "scripting", "storage"],
+  "permissions": ["activeTab", "scripting", "storage", "identity"],
   "host_permissions": [
     "https://www.rasens-immi.moj.go.jp/*",
     "https://visa-app-913363513517.asia-northeast1.run.app/*",

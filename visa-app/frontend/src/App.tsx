@@ -3,6 +3,7 @@ import CaseListPage from './pages/CaseListPage'
 import UploadPage from './pages/UploadPage'
 import ReviewPage from './pages/ReviewPage'
 import LoginPage from './pages/LoginPage'
+import ExtensionAuthPage from './pages/ExtensionAuthPage'
 import { isDemoMode } from './api/client'
 import { useAuthStore } from './store/authStore'
 
@@ -54,6 +55,7 @@ export default function App() {
       <main>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/extension-auth" element={<ExtensionAuthPage />} />
           <Route element={<RequireAuth />}>
             <Route path="/" element={<CaseListPage />} />
             <Route path="/cases/:caseId/upload" element={<UploadPage />} />

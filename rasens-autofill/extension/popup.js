@@ -15,6 +15,7 @@ const elements = {
   authPassword: document.querySelector("#authPassword"),
   authStatus: document.querySelector("#authStatus"),
   signInButton: document.querySelector("#signInButton"),
+  signInBrowserButton: document.querySelector("#signInBrowserButton"),
   signOutButton: document.querySelector("#signOutButton"),
   userEmail: document.querySelector("#userEmail"),
 };
@@ -260,6 +261,21 @@ elements.signInButton.addEventListener("click", async () => {
     elements.authStatus.textContent = error.message;
   } finally {
     elements.signInButton.disabled = false;
+  }
+});
+
+elements.signInBrowserButton.addEventListener("click", async () => {
+  elements.signInBrowserButton.disabled = true;
+  elements.authStatus.textContent = "ブラウザでログイン中...";
+  try {
+    await window.apiClient.signInWithBrowser();
+    elements.authStatus.textContent = "visa-appのアカウントでログインしてください";
+    await showSection(await window.apiClient.getAuthState());
+    await loadCases();
+  } catch (error) {
+    elements.authStatus.textContent = error.message;
+  } finally {
+    elements.signInBrowserButton.disabled = false;
   }
 });
 

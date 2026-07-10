@@ -21,12 +21,17 @@ function loginErrorMessage(err: unknown): string {
 
 export default function LoginPage() {
   const user = useAuthStore((s) => s.user)
+
+  if (user) return <Navigate to="/" replace />
+  return <LoginForm />
+}
+
+/** ログインフォーム本体。/login と /extension-auth の両方から使う。 */
+export function LoginForm() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-
-  if (user) return <Navigate to="/" replace />
 
   const signIn = async (action: () => Promise<unknown>) => {
     setError(null)
