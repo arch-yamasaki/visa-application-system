@@ -1,12 +1,12 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import {
-  ViewerToolbar,
   usePanZoom,
   applyZoomAnchor,
   clampScale,
   ZOOM_STEP,
   type ZoomAnchor,
-} from './viewerZoom'
+} from './viewerZoomBehavior'
+import { ViewerToolbar } from './viewerZoom'
 
 const CONTENT_MARGIN = 16
 

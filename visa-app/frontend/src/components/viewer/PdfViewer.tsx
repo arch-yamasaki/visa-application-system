@@ -4,13 +4,13 @@ import type { PDFDocumentProxy, RenderTask, TextItem } from 'pdfjs-dist/types/sr
 import { useViewerStore } from '../../store/viewerStore'
 import type { SourceRef } from '../../types/caseData'
 import {
-  ViewerToolbar,
   usePanZoom,
   applyZoomAnchor,
   clampScale,
   ZOOM_STEP,
   type ZoomAnchor,
-} from './viewerZoom'
+} from './viewerZoomBehavior'
+import { ViewerToolbar } from './viewerZoom'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
@@ -363,7 +363,7 @@ function appendBboxDiv(
 function normalizeText(s: string): string {
   return s
     .normalize('NFKC')
-    .replace(/[\s　]+/g, '')
+    .replace(/\s+/g, '')
     .replace(/[、。,.，．()（）]/g, '')
     .toLowerCase()
 }
