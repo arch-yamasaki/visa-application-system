@@ -10,6 +10,7 @@ interface Props {
   input: FieldInput
   meta?: FieldMeta
   onUpdate?: (fieldPath: string, value: string) => void
+  readOnly?: boolean
 }
 
 function normalizeEditorValue(value: string, type: FieldInput['type']): string {
@@ -38,7 +39,7 @@ function truncateText(value: string, maxLength = 40): string {
   return `${value.slice(0, maxLength)}...`
 }
 
-export default function FieldRow({ label, fieldPath, value, input, meta, onUpdate }: Props) {
+export default function FieldRow({ label, fieldPath, value, input, meta, onUpdate, readOnly = false }: Props) {
   const alternativesId = useId()
   const [editing, setEditing] = useState(false)
   const [alternativesOpen, setAlternativesOpen] = useState(false)
@@ -73,7 +74,7 @@ export default function FieldRow({ label, fieldPath, value, input, meta, onUpdat
   }
 
   const startEditing = () => {
-    if (!onUpdate) return
+    if (readOnly || !onUpdate) return
     setEditValue(normalizeEditorValue(rawValue, input.type))
     setEditing(true)
   }
@@ -142,6 +143,7 @@ export default function FieldRow({ label, fieldPath, value, input, meta, onUpdat
       <div
         ref={rowRef}
         data-field-row
+        data-read-only={readOnly || undefined}
         tabIndex={0}
         role="button"
         aria-selected={isActive}
@@ -225,6 +227,12 @@ export default function FieldRow({ label, fieldPath, value, input, meta, onUpdat
             位置候補{positionCandidateCount}
           </span>
         )}
+
+        {readOnly && (
+          <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">
+            固定設定
+          </span>
+        )}
         {hasAlternatives && (
           <button
             type="button"
@@ -272,7 +280,7 @@ export default function FieldRow({ label, fieldPath, value, input, meta, onUpdat
                 sourceLine={sourceLine(ref)}
                 quote={ref?.text_quote}
                 onNavigate={() => handleAlternativeNavigate(ref)}
-                action={onUpdate ? (
+                action={onUpdate && !readOnly ? (
                   <button
                     type="button"
                     className="shrink-0 rounded border border-rose-200 bg-white px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:text-gray-400 disabled:hover:bg-white"

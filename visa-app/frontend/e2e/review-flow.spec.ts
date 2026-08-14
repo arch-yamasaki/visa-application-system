@@ -102,6 +102,22 @@ test.describe('ReviewPage demo mode', () => {
     await expect(input).not.toBeVisible()
   })
 
+  test('intermediary settings are displayed as fixed and cannot be edited', async ({ page }) => {
+    const intermediaryRows = page.locator('[data-field-row][data-read-only="true"]')
+    await expect(intermediaryRows).toHaveCount(5)
+    await expect(intermediaryRows.getByText('固定設定')).toHaveCount(5)
+
+    const nameRow = intermediaryRows.filter({ hasText: '取次者 氏名' })
+    await expect(nameRow).toBeVisible()
+
+    await nameRow.dblclick()
+    await expect(nameRow.locator('input')).toHaveCount(0)
+
+    await nameRow.focus()
+    await page.keyboard.press('Enter')
+    await expect(nameRow.locator('input')).toHaveCount(0)
+  })
+
   test('value alternatives expand and can be adopted', async ({ page }) => {
     const salaryRow = page.locator('[data-field-row]').filter({ hasText: '月額給与' })
     await expect(salaryRow).toBeVisible()

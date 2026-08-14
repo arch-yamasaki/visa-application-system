@@ -3,6 +3,8 @@
 import json
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from extractors.gemini import (
     _build_ocr_context,
     _call_gemini,
@@ -12,12 +14,15 @@ from extractors.gemini import (
     _unflatten_field_values,
     _uses_raw_source_refs,
     _map_field_metadata,
+    _normalize_passport_identity_candidates,
+    _iso_birth_date,
     EXTRACTION_SCOPES,
     extract_all_scopes,
     extract_pdf_direct,
     extract_text_only,
     extract_with_images,
 )
+from application_data import build_application_data
 from extractors.prompt_template import build_extraction_prompt, build_scoped_prompt
 from extractors.types import (
     BoundingBox,
@@ -40,6 +45,8 @@ _DOCUMENTS = [
         "file_name": "passport.pdf",
         "document_role": "passport",
         "document_id": "doc_p",
+        "document_kind": "pdf",
+        "page_count": 1,
     },
     {
         "file_name": "diploma.pdf",
@@ -128,6 +135,79 @@ def _field_value(value, quote=None, confidence=0.95):
     }
 
 
+def _passport_candidate(document_id="doc_p", page=1, confidence=0.95):
+    return {
+        "document_id": document_id,
+        "page": page,
+        "confidence": confidence,
+        "detection_basis": "顔写真と身分事項欄を確認",
+        "mrz_detected": True,
+    }
+
+
+def test_passport_candidate_rejects_non_finite_confidence():
+    for confidence in (
+        float("nan"), float("inf"), float("-inf"), -0.01, 1.01, True, "invalid",
+    ):
+        candidates, invalid_count = _normalize_passport_identity_candidates(
+            [_passport_candidate(confidence=confidence)],
+            _DOCUMENTS,
+        )
+        assert candidates == []
+        assert invalid_count == 1
+
+
+def test_passport_candidate_rejects_office_document_even_with_page_count():
+    candidates, invalid_count = _normalize_passport_identity_candidates(
+        [_passport_candidate(document_id="doc_d")],
+        [{**_DOCUMENTS[1], "document_kind": "docx", "page_count": 1}],
+    )
+
+    assert candidates == []
+    assert invalid_count == 1
+
+
+def test_passport_candidate_rejects_non_integer_page():
+    candidates, invalid_count = _normalize_passport_identity_candidates(
+        [_passport_candidate(page=1.5)],
+        _DOCUMENTS,
+    )
+
+    assert candidates == []
+    assert invalid_count == 1
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("1990-01-02", "1990-01-02"),
+        ("1990/1/2", "1990-01-02"),
+        ("1990.01.02", "1990-01-02"),
+        ("02 JAN 1990", "1990-01-02"),
+        ("2-January-1990", "1990-01-02"),
+        ("31/12/1990", "1990-12-31"),
+        ("12/31/1990", "1990-12-31"),
+    ],
+)
+def test_iso_birth_date_normalizes_unambiguous_four_digit_year_formats(raw, expected):
+    assert _iso_birth_date(raw) == expected
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "02 JAN 90",
+        "02/01/1990",
+        "01/02/1990",
+        "31 FEB 1990",
+        "1990-02-30",
+        "",
+    ],
+)
+def test_iso_birth_date_rejects_ambiguous_or_invalid_formats(raw):
+    assert _iso_birth_date(raw) is None
+
+
 # ---------- build_extraction_prompt (prompt_template) -------------------
 
 
@@ -168,6 +248,9 @@ class TestBuildPrompt:
         prompt = build_scoped_prompt("applicant_identity", _CASE_META, _DOCUMENTS)
         assert "source_ref" in prompt
         assert "applicant_identity" not in prompt
+        assert "applicant.birth_date.value" in prompt
+        assert "YYYY-MM-DD" in prompt
+        assert "source_ref.text_quote" in prompt
 
 
 # ---------- _build_ocr_context ------------------------------------------
@@ -450,7 +533,15 @@ class TestExtractAllScopes:
     def test_merges_scope_results_deeply(self, mock_extract_scoped, mock_call_gemini):
         def scoped_result(scope, *_args, **_kwargs):
             if scope == "applicant_identity":
-                return {"case_data": {"applicant": {"name_roman": _field_value("TANAKA TARO")}}}
+                return {
+                    "case_data": {
+                        "applicant": {
+                            "name_roman": _field_value("TANAKA TARO"),
+                            "birth_date": _field_value("1990-01-02"),
+                        }
+                    },
+                    "passport_identity_page_candidates": [_passport_candidate()],
+                }
             if scope == "education":
                 return {"case_data": {"applicant": {"education": [{"school_name": _field_value("ABC University")}]}}}
             if scope == "employer":
@@ -463,8 +554,332 @@ class TestExtractAllScopes:
         result = extract_all_scopes(MagicMock(), [], _CASE_META, _DOCUMENTS)
 
         assert result.display_case_data["applicant"]["name_roman"] == "TANAKA TARO"
+        assert result.display_case_data["applicant"]["birth_date"] == "1990-01-02"
         assert result.display_case_data["applicant"]["education"][0]["school_name"] == "ABC University"
         assert result.display_case_data["employer"]["name"] == "Example Inc."
+        assert "passport_identity_page_candidates" not in result.display_case_data
+        assert result.review["passport_identity_authority"] == {
+            "status": "verified",
+            "required_action": "none",
+            "candidates": [{"document_id": "doc_p", "page": 1}],
+            "verified_fields": ["applicant.name_roman", "applicant.birth_date"],
+            "blocked_fields": [],
+        }
+
+    @patch("extractors.gemini._call_gemini")
+    @patch("extractors.gemini.extract_scoped")
+    def test_normalizes_passport_english_month_birth_date_and_builds_8_digit_row(
+        self, mock_extract_scoped, mock_call_gemini,
+    ):
+        def scoped_result(scope, *_args, **_kwargs):
+            if scope == "applicant_identity":
+                return {
+                    "case_data": {
+                        "applicant": {
+                            "name_roman": _field_value("TANAKA TARO"),
+                            "birth_date": _field_value("02 JAN 1990", "02 JAN 1990"),
+                        }
+                    },
+                    "passport_identity_page_candidates": [_passport_candidate()],
+                }
+            return {"case_data": {}}
+
+        mock_extract_scoped.side_effect = scoped_result
+        mock_call_gemini.return_value = {
+            "missing_items": [], "validation_errors": [], "findings": [],
+        }
+
+        result = extract_all_scopes(MagicMock(), [], _CASE_META, _DOCUMENTS)
+
+        assert result.display_case_data["applicant"]["birth_date"] == "1990-01-02"
+        birth_ref = result.field_metadata["applicant.birth_date"]["source_refs"][0]
+        assert birth_ref["text_quote"] == "02 JAN 1990"
+        for path in ("applicant.name_roman", "applicant.birth_date"):
+            result.field_metadata[path]["source_refs"][0]["anchor"] = {
+                "status": "resolved",
+                "type": "pdf_bbox",
+                "resolver_type": "pdf_text_layer",
+                "page": 1,
+            }
+
+        mapping = {
+            "schema_version": "test",
+            "mappings": [{
+                "canonical_id": "applicant.birth_date",
+                "value_path": "applicant.birth_date",
+                "field_id": "birth",
+                "field_name": "",
+                "input_type": "text",
+                "transform": "date_yyyymmdd",
+            }],
+        }
+        form_definitions = {
+            "fields": [{
+                "section": "identity",
+                "no": "2",
+                "label": "生年月日",
+                "required": True,
+                "controls": [{
+                    "field_id": "birth", "field_name": "", "input_type": "text",
+                }],
+            }],
+        }
+        application_data = build_application_data(
+            {
+                "case_id": "case_test01",
+                "workflow_state": "extracted",
+                "case_data": result.display_case_data,
+                "review": result.review,
+                "field_metadata": result.field_metadata,
+            },
+            mapping,
+            form_definitions,
+        )
+
+        assert application_data["rows"][0]["fill_value"] == "19900102"
+
+    @patch("extractors.gemini._call_gemini")
+    @patch("extractors.gemini.extract_scoped")
+    def test_withholds_ambiguous_passport_birth_date_instead_of_guessing(
+        self, mock_extract_scoped, mock_call_gemini,
+    ):
+        def scoped_result(scope, *_args, **_kwargs):
+            if scope == "applicant_identity":
+                return {
+                    "case_data": {
+                        "applicant": {
+                            "name_roman": _field_value("TANAKA TARO"),
+                            "birth_date": _field_value("02/01/1990", "02/01/1990"),
+                        }
+                    },
+                    "passport_identity_page_candidates": [_passport_candidate()],
+                }
+            return {"case_data": {}}
+
+        mock_extract_scoped.side_effect = scoped_result
+        mock_call_gemini.return_value = {
+            "missing_items": [], "validation_errors": [], "findings": [],
+        }
+
+        result = extract_all_scopes(MagicMock(), [], _CASE_META, _DOCUMENTS)
+
+        assert result.display_case_data["applicant"]["birth_date"] == ""
+        birth_meta = result.field_metadata["applicant.birth_date"]
+        assert birth_meta["alternatives"][0]["value"] == "02/01/1990"
+        assert birth_meta["alternatives"][0]["source_refs"][0]["text_quote"] == "02/01/1990"
+        authority = result.review["passport_identity_authority"]
+        assert authority["status"] == "blocked"
+        assert authority["blocked_fields"] == ["applicant.birth_date"]
+        assert any("YYYY-MM-DD" in error for error in result.review["validation_errors"])
+
+    @patch("extractors.gemini._call_gemini")
+    @patch("extractors.gemini.extract_scoped")
+    def test_withholds_name_and_birth_date_when_passport_candidate_is_missing(
+        self, mock_extract_scoped, mock_call_gemini,
+    ):
+        def scoped_result(scope, *_args, **_kwargs):
+            if scope == "applicant_identity":
+                return {
+                    "case_data": {
+                        "applicant": {
+                            "name_roman": _field_value("TANAKA TARO"),
+                            "birth_date": _field_value("1990-01-02"),
+                        }
+                    },
+                    "passport_identity_page_candidates": [],
+                }
+            return {"case_data": {}}
+
+        mock_extract_scoped.side_effect = scoped_result
+        mock_call_gemini.return_value = {
+            "missing_items": [], "validation_errors": [], "findings": [],
+        }
+
+        result = extract_all_scopes(MagicMock(), [], _CASE_META, _DOCUMENTS)
+
+        assert result.display_case_data["applicant"]["name_roman"] == ""
+        assert result.display_case_data["applicant"]["birth_date"] == ""
+        name_meta = result.field_metadata["applicant.name_roman"]
+        birth_meta = result.field_metadata["applicant.birth_date"]
+        assert name_meta["source_refs"] == []
+        assert name_meta["alternatives"][0]["value"] == "TANAKA TARO"
+        assert name_meta["alternatives"][0]["source_refs"][0]["document_id"] == "doc_p"
+        assert birth_meta["alternatives"][0]["value"] == "1990-01-02"
+        assert any("候補なし" in error for error in result.review["validation_errors"])
+        assert any("自動確定せず" in finding for finding in result.review["findings"])
+        assert result.review["expected_route"] == "needs_review"
+        assert result.review["passport_identity_authority"]["status"] == "blocked"
+        assert result.review["passport_identity_authority"]["required_action"] == "human_required"
+
+    @patch("extractors.gemini._call_gemini")
+    @patch("extractors.gemini.extract_scoped")
+    def test_withholds_both_fields_when_passport_candidates_are_ambiguous(
+        self, mock_extract_scoped, mock_call_gemini,
+    ):
+        documents = [
+            _DOCUMENTS[0],
+            {
+                "file_name": "old_passport.pdf",
+                "document_role": "passport",
+                "document_id": "doc_old",
+                "document_kind": "pdf",
+                "page_count": 1,
+            },
+        ]
+
+        def scoped_result(scope, *_args, **_kwargs):
+            if scope == "applicant_identity":
+                return {
+                    "case_data": {
+                        "applicant": {
+                            "name_roman": _field_value("TANAKA TARO"),
+                            "birth_date": _field_value("1990-01-02"),
+                        }
+                    },
+                    "passport_identity_page_candidates": [
+                        _passport_candidate(),
+                        _passport_candidate("doc_old", 1),
+                    ],
+                }
+            return {"case_data": {}}
+
+        mock_extract_scoped.side_effect = scoped_result
+        mock_call_gemini.return_value = {
+            "missing_items": [], "validation_errors": [], "findings": [],
+        }
+
+        result = extract_all_scopes(MagicMock(), [], _CASE_META, documents)
+
+        assert result.display_case_data["applicant"]["name_roman"] == ""
+        assert result.display_case_data["applicant"]["birth_date"] == ""
+        assert any("候補が複数" in error for error in result.review["validation_errors"])
+
+    @patch("extractors.gemini._call_gemini")
+    @patch("extractors.gemini.extract_scoped")
+    def test_withholds_only_field_whose_source_mismatches_unique_passport_page(
+        self, mock_extract_scoped, mock_call_gemini,
+    ):
+        def scoped_result(scope, *_args, **_kwargs):
+            if scope == "applicant_identity":
+                mismatched_birth = _field_value("1990-01-02")
+                mismatched_birth["source_ref"]["page"] = 2
+                return {
+                    "case_data": {
+                        "applicant": {
+                            "name_roman": _field_value("TANAKA TARO"),
+                            "birth_date": mismatched_birth,
+                        }
+                    },
+                    "passport_identity_page_candidates": [_passport_candidate()],
+                }
+            return {"case_data": {}}
+
+        mock_extract_scoped.side_effect = scoped_result
+        mock_call_gemini.return_value = {
+            "missing_items": [], "validation_errors": [], "findings": [],
+        }
+
+        result = extract_all_scopes(MagicMock(), [], _CASE_META, _DOCUMENTS)
+
+        assert result.display_case_data["applicant"]["name_roman"] == "TANAKA TARO"
+        assert result.display_case_data["applicant"]["birth_date"] == ""
+        assert result.field_metadata["applicant.birth_date"]["alternatives"][0]["value"] == "1990-01-02"
+        assert any("生年月日" in error and "一致しません" in error for error in result.review["validation_errors"])
+
+    @patch("extractors.gemini._call_gemini")
+    @patch("extractors.gemini.extract_scoped")
+    def test_rejects_candidate_outside_manifest_page_count(
+        self, mock_extract_scoped, mock_call_gemini,
+    ):
+        documents = [{**_DOCUMENTS[0], "page_count": 1}]
+
+        def scoped_result(scope, *_args, **_kwargs):
+            if scope == "applicant_identity":
+                return {
+                    "case_data": {
+                        "applicant": {
+                            "name_roman": _field_value("TANAKA TARO"),
+                            "birth_date": _field_value("1990-01-02"),
+                        }
+                    },
+                    "passport_identity_page_candidates": [_passport_candidate(page=2)],
+                }
+            return {"case_data": {}}
+
+        mock_extract_scoped.side_effect = scoped_result
+        mock_call_gemini.return_value = {
+            "missing_items": [], "validation_errors": [], "findings": [],
+        }
+
+        result = extract_all_scopes(MagicMock(), [], _CASE_META, documents)
+
+        assert result.display_case_data["applicant"]["name_roman"] == ""
+        assert any("実ページ範囲外" in error for error in result.review["validation_errors"])
+
+    @patch("extractors.gemini._call_gemini")
+    @patch("extractors.gemini.extract_scoped")
+    def test_withholds_unique_low_confidence_candidate(
+        self, mock_extract_scoped, mock_call_gemini,
+    ):
+        def scoped_result(scope, *_args, **_kwargs):
+            if scope == "applicant_identity":
+                return {
+                    "case_data": {
+                        "applicant": {
+                            "name_roman": _field_value("TANAKA TARO"),
+                            "birth_date": _field_value("1990-01-02"),
+                        }
+                    },
+                    "passport_identity_page_candidates": [
+                        _passport_candidate(confidence=0.79)
+                    ],
+                }
+            return {"case_data": {}}
+
+        mock_extract_scoped.side_effect = scoped_result
+        mock_call_gemini.return_value = {
+            "missing_items": [], "validation_errors": [], "findings": [],
+        }
+
+        result = extract_all_scopes(MagicMock(), [], _CASE_META, _DOCUMENTS)
+
+        assert result.display_case_data["applicant"]["name_roman"] == ""
+        assert any("確信度が低い" in error for error in result.review["validation_errors"])
+
+    @patch("extractors.gemini._call_gemini")
+    @patch("extractors.gemini.extract_scoped")
+    def test_withholds_name_when_source_quote_is_mrz_not_visual_zone(
+        self, mock_extract_scoped, mock_call_gemini,
+    ):
+        def scoped_result(scope, *_args, **_kwargs):
+            if scope == "applicant_identity":
+                return {
+                    "case_data": {
+                        "applicant": {
+                            "name_roman": _field_value(
+                                "TANAKA TARO", "P<JPN TANAKA<<TARO"
+                            ),
+                            "birth_date": _field_value("1990-01-02"),
+                        }
+                    },
+                    "passport_identity_page_candidates": [_passport_candidate()],
+                }
+            return {"case_data": {}}
+
+        mock_extract_scoped.side_effect = scoped_result
+        mock_call_gemini.return_value = {
+            "missing_items": [], "validation_errors": [], "findings": [],
+        }
+
+        result = extract_all_scopes(MagicMock(), [], _CASE_META, _DOCUMENTS)
+
+        assert result.display_case_data["applicant"]["name_roman"] == ""
+        assert result.display_case_data["applicant"]["birth_date"] == "1990-01-02"
+        authority = result.review["passport_identity_authority"]
+        assert authority["status"] == "blocked"
+        assert authority["verified_fields"] == ["applicant.birth_date"]
+        assert authority["blocked_fields"] == ["applicant.name_roman"]
+        assert any("MRZ形式" in error for error in result.review["validation_errors"])
 
     @patch("extractors.gemini._call_gemini")
     @patch("extractors.gemini.extract_scoped")

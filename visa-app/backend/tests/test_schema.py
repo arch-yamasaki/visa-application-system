@@ -41,6 +41,18 @@ def test_identity_scope_uses_boolean_field_values():
     assert _value_type(family["has_japan_relatives_or_cohabitants"]) == "BOOLEAN"
 
 
+def test_identity_scope_requires_passport_page_detection_metadata():
+    identity = SCOPE_SCHEMAS["applicant_identity"]
+    candidates = identity["properties"]["passport_identity_page_candidates"]
+    item = candidates["items"]
+
+    assert "passport_identity_page_candidates" in identity["required"]
+    assert candidates["type"] == "ARRAY"
+    assert item["properties"]["page"]["type"] == "INTEGER"
+    assert item["properties"]["confidence"]["type"] == "NUMBER"
+    assert item["properties"]["mrz_detected"]["type"] == "BOOLEAN"
+
+
 def test_immigration_scope_uses_boolean_and_integer_field_values():
     immigration = (
         SCOPE_SCHEMAS["immigration_history"]["properties"]["applicant"]["properties"]

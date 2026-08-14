@@ -53,6 +53,23 @@ def build_gemini_contents(prepared: PreparedDocuments) -> list:
     return parts
 
 
+def _enrich_manifest_documents(
+    manifest_documents: list[dict],
+    prepared: PreparedDocuments,
+) -> list[dict]:
+    """Attach byte-derived page bounds and media kind for safe page validation."""
+    enriched: list[dict] = []
+    for document in manifest_documents:
+        copied = dict(document)
+        document_id = str(copied.get("document_id") or "")
+        if document_id in prepared.page_counts:
+            copied["page_count"] = prepared.page_counts[document_id]
+        if document_id in prepared.document_kinds:
+            copied["document_kind"] = prepared.document_kinds[document_id]
+        enriched.append(copied)
+    return enriched
+
+
 def _log_event(
     event_logger: PipelineEventLogger | None,
     event: str,
@@ -168,12 +185,16 @@ def extract_documents(
     if scoped:
         client = _get_client()
         scoped_names = [*EXTRACTION_SCOPES, "review"]
+        enriched_documents = _enrich_manifest_documents(
+            manifest_documents,
+            prepared,
+        )
         contents_by_scope = {
             scope: build_gemini_contents(prepared)
             for scope in scoped_names
         }
         documents_by_scope = {
-            scope: list(manifest_documents)
+            scope: list(enriched_documents)
             for scope in scoped_names
         }
         logger.info(

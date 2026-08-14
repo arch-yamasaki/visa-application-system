@@ -2,12 +2,14 @@
 
 import json
 import logging
+import math
 import os
 import re
 import time
 import copy
 import unicodedata
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date
 
 from google import genai
 from google.genai import types
@@ -57,6 +59,25 @@ MODEL_NAME = os.environ.get("GEMINI_MODEL", "gemini-3-flash-preview")
 BBOX_MODEL_NAME = os.environ.get("GEMINI_BBOX_MODEL", "gemini-3-flash-preview")
 GEMINI_HTTP_TIMEOUT_MS = int(os.environ.get("GEMINI_HTTP_TIMEOUT_MS", "300000"))
 GEMINI_THINKING_LEVEL = os.environ.get("GEMINI_THINKING_LEVEL", "LOW").upper()
+PASSPORT_IDENTITY_MIN_CONFIDENCE = 0.8
+PASSPORT_IDENTITY_FIELDS = {
+    "name_roman": ("applicant.name_roman", "氏名（ローマ字）"),
+    "birth_date": ("applicant.birth_date", "生年月日"),
+}
+_ENGLISH_MONTHS = {
+    "JAN": 1, "JANUARY": 1,
+    "FEB": 2, "FEBRUARY": 2,
+    "MAR": 3, "MARCH": 3,
+    "APR": 4, "APRIL": 4,
+    "MAY": 5,
+    "JUN": 6, "JUNE": 6,
+    "JUL": 7, "JULY": 7,
+    "AUG": 8, "AUGUST": 8,
+    "SEP": 9, "SEPT": 9, "SEPTEMBER": 9,
+    "OCT": 10, "OCTOBER": 10,
+    "NOV": 11, "NOVEMBER": 11,
+    "DEC": 12, "DECEMBER": 12,
+}
 
 _SENTINEL = object()  # Default marker for _call_gemini schema parameter
 
@@ -446,6 +467,328 @@ def _deep_merge_case_data(target: dict, source: dict) -> dict:
         else:
             target[key] = value
     return target
+
+
+def _pop_passport_identity_candidates(identity_result: dict) -> list:
+    """Remove identity-page detection metadata before canonical data merging.
+
+    The response schema defines this as a sibling of ``applicant``.  The
+    defensive nested pop keeps a malformed/legacy ``case_data`` wrapper from
+    leaking the helper key into persisted canonical case_data.
+    """
+    if not isinstance(identity_result, dict):
+        return []
+
+    candidates = identity_result.pop("passport_identity_page_candidates", None)
+    wrapped = identity_result.get("case_data")
+    if isinstance(wrapped, dict):
+        nested = wrapped.pop("passport_identity_page_candidates", None)
+        if candidates is None:
+            candidates = nested
+    return candidates if isinstance(candidates, list) else []
+
+
+def _document_page_count(document: dict) -> int | None:
+    """Return manifest page count when a producer has supplied one."""
+    for key in ("page_count", "pages"):
+        value = document.get(key)
+        if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+            return value
+        if isinstance(value, str) and value.isdigit() and int(value) > 0:
+            return int(value)
+    return None
+
+
+def _normalize_passport_identity_candidates(
+    raw_candidates: list,
+    documents: list[dict],
+) -> tuple[list[dict], int]:
+    """Validate, normalize and de-duplicate document/page candidates."""
+    manifests = {
+        str(document.get("document_id") or "").strip(): document
+        for document in documents
+        if isinstance(document, dict) and str(document.get("document_id") or "").strip()
+    }
+    normalized: list[dict] = []
+    seen: set[tuple[str, int]] = set()
+    invalid_count = 0
+
+    for candidate in raw_candidates:
+        if not isinstance(candidate, dict):
+            invalid_count += 1
+            continue
+        document_id = str(candidate.get("document_id") or "").strip()
+        raw_page = candidate.get("page")
+        try:
+            if isinstance(raw_page, bool) or (
+                isinstance(raw_page, float) and not raw_page.is_integer()
+            ):
+                raise ValueError
+            page = int(raw_page)
+        except (TypeError, ValueError, OverflowError):
+            page = 0
+        document = manifests.get(document_id)
+        page_count = _document_page_count(document) if document else None
+        document_kind = str(document.get("document_kind") or "") if document else ""
+        if (
+            not document
+            or document_kind not in {"pdf", "image"}
+            or page_count is None
+            or page <= 0
+            or page > page_count
+        ):
+            invalid_count += 1
+            continue
+        key = (document_id, page)
+        if key in seen:
+            continue
+        raw_confidence = candidate.get("confidence", 0)
+        try:
+            if isinstance(raw_confidence, bool):
+                raise ValueError
+            confidence = float(raw_confidence)
+        except (TypeError, ValueError):
+            invalid_count += 1
+            continue
+        if not math.isfinite(confidence) or not 0.0 <= confidence <= 1.0:
+            invalid_count += 1
+            continue
+        normalized.append(
+            {
+                "document_id": document_id,
+                "page": page,
+                "confidence": confidence,
+                "mrz_detected": candidate.get("mrz_detected") is True,
+            }
+        )
+        seen.add(key)
+    return normalized, invalid_count
+
+
+def _empty_source_ref() -> dict:
+    return {"document_id": "", "page": 0, "text_quote": "", "confidence": 0}
+
+
+def _withhold_field_value(field_value: dict) -> bool:
+    """Clear an unverified primary value while retaining it for human adoption."""
+    if not isinstance(field_value, dict):
+        return False
+    value = field_value.get("value")
+    if value is None or value == "":
+        return False
+
+    source_ref = field_value.get("source_ref")
+    alternatives = field_value.get("alternatives")
+    retained = []
+    if isinstance(source_ref, dict):
+        retained.append({"value": value, "source_ref": copy.deepcopy(source_ref)})
+    if isinstance(alternatives, list):
+        retained.extend(copy.deepcopy(alternatives))
+
+    field_value["value"] = ""
+    field_value["source_ref"] = _empty_source_ref()
+    if retained:
+        # The normal compatibility layer also removes same-value duplicates
+        # and caps alternatives; keeping two here preserves its public limit.
+        field_value["alternatives"] = retained[:2]
+    else:
+        field_value.pop("alternatives", None)
+    return True
+
+
+def _source_matches_passport_page(field_value: dict, candidate: dict) -> bool:
+    if not isinstance(field_value, dict) or not field_value.get("value"):
+        return False
+    source_ref = field_value.get("source_ref")
+    if not isinstance(source_ref, dict):
+        return False
+    try:
+        page = int(source_ref.get("page"))
+    except (TypeError, ValueError):
+        return False
+    return (
+        str(source_ref.get("document_id") or "").strip() == candidate["document_id"]
+        and page == candidate["page"]
+    )
+
+
+def _source_looks_like_mrz(field_value: dict) -> bool:
+    """Reject source quotes that look like machine-readable-zone text."""
+    if not isinstance(field_value, dict):
+        return False
+    source_ref = field_value.get("source_ref")
+    if not isinstance(source_ref, dict):
+        return False
+    quote = unicodedata.normalize(
+        "NFKC", str(source_ref.get("text_quote") or "")
+    ).upper()
+    compact = re.sub(r"\s+", "", quote)
+    return compact.startswith("P<") or compact.count("<") >= 2
+
+
+def _iso_birth_date(value) -> str | None:
+    """Strictly normalize an unambiguous four-digit-year birth date."""
+    raw = unicodedata.normalize("NFKC", str(value or "")).strip()
+    if not raw:
+        return None
+
+    year_first = re.fullmatch(
+        r"(\d{4})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(\d{1,2})",
+        raw,
+    )
+    if year_first:
+        year, month, day = (int(part) for part in year_first.groups())
+    else:
+        month_name = re.fullmatch(
+            r"(\d{1,2})\s*(?:[-/.]|\s)\s*([A-Za-z]{3,9})\.?,?"
+            r"\s*(?:[-/.]|\s)\s*(\d{4})",
+            raw,
+        )
+        if month_name:
+            day_text, month_text, year_text = month_name.groups()
+            month = _ENGLISH_MONTHS.get(month_text.upper())
+            if month is None:
+                return None
+            year, day = int(year_text), int(day_text)
+        else:
+            year_last = re.fullmatch(
+                r"(\d{1,2})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(\d{4})",
+                raw,
+            )
+            if not year_last:
+                return None
+            first, second, year_text = (int(part) for part in year_last.groups())
+            year = year_text
+            if first > 12 >= second:
+                day, month = first, second
+            elif second > 12 >= first:
+                month, day = first, second
+            else:
+                # Both DMY and MDY are plausible; do not guess.
+                return None
+    try:
+        return date(year, month, day).isoformat()
+    except ValueError:
+        return None
+
+
+def _normalize_passport_birth_date_field(field_value: dict) -> bool:
+    """Normalize only FieldValue.value; source_ref keeps the original quote."""
+    if not isinstance(field_value, dict) or not field_value.get("value"):
+        return False
+    normalized = _iso_birth_date(field_value.get("value"))
+    if normalized is None:
+        return False
+    field_value["value"] = normalized
+    return True
+
+
+def _validate_passport_identity_authority(
+    case_data: dict,
+    raw_candidates: list,
+    documents: list[dict],
+    review: dict,
+) -> None:
+    """Fail closed unless passport identity-page evidence is unambiguous.
+
+    Only name and birth date are gated here because those are the fields whose
+    exact passport transcription is required.  Candidate metadata never enters
+    canonical case_data.  We do not add an OCR dependency: the deterministic
+    checks use the manifest and the existing source_ref contract only.
+    """
+    review.setdefault("validation_errors", [])
+    review.setdefault("findings", [])
+    review.setdefault("missing_items", [])
+
+    candidates, invalid_count = _normalize_passport_identity_candidates(
+        raw_candidates,
+        documents,
+    )
+    applicant = case_data.get("applicant") if isinstance(case_data, dict) else None
+    applicant_present = isinstance(applicant, dict)
+    if not applicant_present:
+        applicant = {}
+    withheld_labels: list[str] = []
+    invalid_birth_date = False
+    birth_date_field = applicant.get("birth_date")
+    if isinstance(birth_date_field, dict) and birth_date_field.get("value"):
+        if not _normalize_passport_birth_date_field(birth_date_field):
+            invalid_birth_date = True
+            if _withhold_field_value(birth_date_field):
+                withheld_labels.append("生年月日")
+            review["validation_errors"].append(
+                "生年月日を曖昧さなくYYYY-MM-DDへ正規化できないため、自動確定できません。"
+            )
+    block_reason: str | None = None
+    candidate: dict | None = None
+    if not applicant_present:
+        block_reason = "申請人の本人情報を抽出できないため、旅券記載との一致を確認できません。"
+    elif invalid_count:
+        block_reason = (
+            "旅券身分事項ページ候補に、対象外の書類形式、書類一覧と一致しないdocument_id、"
+            "または実ページ範囲外のページ番号が含まれるため、自動確定できません。"
+        )
+    elif not candidates:
+        block_reason = "旅券身分事項ページを一意に確認できません（候補なし）。"
+    elif len(candidates) > 1:
+        block_reason = "旅券身分事項ページを一意に確認できません（候補が複数あります）。"
+    else:
+        candidate = candidates[0]
+        if candidate["confidence"] < PASSPORT_IDENTITY_MIN_CONFIDENCE:
+            block_reason = "旅券身分事項ページ候補の確信度が低いため、自動確定できません。"
+
+    verified_fields: list[str] = []
+    blocked_fields: list[str] = []
+    if block_reason:
+        for field_name, (field_path, label) in PASSPORT_IDENTITY_FIELDS.items():
+            if _withhold_field_value(applicant.get(field_name)):
+                withheld_labels.append(label)
+            blocked_fields.append(field_path)
+        review["validation_errors"].append(block_reason)
+    elif candidate is not None:
+        for field_name, (field_path, label) in PASSPORT_IDENTITY_FIELDS.items():
+            field_value = applicant.get(field_name)
+            if field_name == "birth_date" and invalid_birth_date:
+                blocked_fields.append(field_path)
+            elif not _source_matches_passport_page(field_value, candidate):
+                if _withhold_field_value(field_value):
+                    withheld_labels.append(label)
+                blocked_fields.append(field_path)
+                review["validation_errors"].append(
+                    f"{label}の出典が、一意に検出した旅券身分事項ページと一致しません。"
+                )
+            elif _source_looks_like_mrz(field_value):
+                if _withhold_field_value(field_value):
+                    withheld_labels.append(label)
+                blocked_fields.append(field_path)
+                review["validation_errors"].append(
+                    f"{label}の出典引用がMRZ形式のため、顔写真側の身分事項欄(VIZ)を確認してください。"
+                )
+            else:
+                verified_fields.append(field_path)
+
+    status = "verified" if not blocked_fields else "blocked"
+    if status == "blocked":
+        review["expected_route"] = "needs_review"
+    review["passport_identity_authority"] = {
+        "status": status,
+        "required_action": "none" if status == "verified" else "human_required",
+        "candidates": [
+            {"document_id": item["document_id"], "page": item["page"]}
+            for item in candidates
+        ],
+        "verified_fields": verified_fields,
+        "blocked_fields": blocked_fields,
+    }
+
+    if withheld_labels:
+        labels = "・".join(withheld_labels)
+        review["findings"].append(
+            f"{labels}は旅券出典を機械的に確認できないため自動確定せず、抽出値を別候補として保持しました。"
+        )
+        review["missing_items"].append(
+            f"旅券身分事項ページを確認し、{labels}を確定してください。"
+        )
 
 
 def _normalize_corporate_number(case_data: dict) -> None:
@@ -869,6 +1212,9 @@ def extract_all_scopes(
         )
 
     # Phase 2: Merge scope results into unified case_data
+    passport_identity_candidates = _pop_passport_identity_candidates(
+        scope_results.get("applicant_identity", {})
+    )
     merged_case_data: dict = {}
     for scope, result in scope_results.items():
         # Each scope returns a flat dict of sections (e.g. {"applicant": {...}, "passport": {...}})
@@ -910,6 +1256,16 @@ def extract_all_scopes(
         review["findings"].append(
             "一部の抽出scopeが失敗したため、抽出結果は部分的です。"
         )
+
+    # The LLM review is advisory.  Passport authority is enforced
+    # deterministically after review so its result cannot be overwritten by a
+    # model response and helper metadata cannot leak into canonical case_data.
+    _validate_passport_identity_authority(
+        merged_case_data,
+        passport_identity_candidates,
+        documents_for("applicant_identity"),
+        review,
+    )
 
     # Phase 4: Build ExtractionResult via existing _build_extraction_result
     full_data = {"case_data": merged_case_data, "review": review}

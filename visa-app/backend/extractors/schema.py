@@ -417,8 +417,30 @@ SCOPE_APPLICANT_IDENTITY_SCHEMA = {
                 "passport",
             ],
         },
+        # This is extraction-control metadata, not canonical case_data.  The
+        # scoped pipeline removes it before merging the identity result.
+        "passport_identity_page_candidates": {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "document_id": {"type": "STRING"},
+                    "page": {"type": "INTEGER"},
+                    "confidence": {"type": "NUMBER"},
+                    "detection_basis": {"type": "STRING"},
+                    "mrz_detected": {"type": "BOOLEAN"},
+                },
+                "required": [
+                    "document_id",
+                    "page",
+                    "confidence",
+                    "detection_basis",
+                    "mrz_detected",
+                ],
+            },
+        },
     },
-    "required": ["applicant"],
+    "required": ["applicant", "passport_identity_page_candidates"],
 }
 
 SCOPE_ENTRY_PLAN_SCHEMA = {

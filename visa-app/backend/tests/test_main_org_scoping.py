@@ -127,5 +127,72 @@ def test_get_case_of_other_org_is_404(client, fake_db):
     assert client.get(f"/cases/{case_id}/application-data").status_code == 404
 
 
+def test_patch_rejects_case_level_settings(client, fake_db):
+    login_as(ORG_A)
+    case_id = client.post("/cases", json={}).json()["case_id"]
+
+    response = client.patch(
+        f"/cases/{case_id}",
+        json={"settings": {"intermediary": {"name": "試験　太郎"}}},
+    )
+
+    assert response.status_code == 400
+    assert "settings" not in fake_db.collections["cases"][case_id]
+
+
+def test_patch_rejects_settings_embedded_in_case_data(client, fake_db):
+    login_as(ORG_A)
+    case_id = client.post("/cases", json={}).json()["case_id"]
+    before = copy.deepcopy(fake_db.collections["cases"][case_id]["case_data"])
+
+    response = client.patch(
+        f"/cases/{case_id}",
+        json={
+            "case_data": {
+                **before,
+                "settings": {"intermediary": {"name": "試験　太郎"}},
+            },
+        },
+    )
+
+    assert response.status_code == 400
+    assert fake_db.collections["cases"][case_id]["case_data"] == before
+
+
+def test_partial_intermediary_env_does_not_break_case_or_application_data(
+    client,
+    fake_db,
+    monkeypatch,
+):
+    env_names = (
+        "INTERMEDIARY_NAME",
+        "INTERMEDIARY_POSTAL_CODE",
+        "INTERMEDIARY_ADDRESS",
+        "INTERMEDIARY_ORGANIZATION",
+        "INTERMEDIARY_PHONE",
+    )
+    for env_name in env_names:
+        monkeypatch.delenv(env_name, raising=False)
+    private_value = "非公開　試験値"
+    monkeypatch.setenv("INTERMEDIARY_NAME", private_value)
+    login_as(ORG_A)
+    case_id = client.post("/cases", json={}).json()["case_id"]
+
+    case_response = client.get(f"/cases/{case_id}")
+    application_response = client.get(f"/cases/{case_id}/application-data")
+
+    assert case_response.status_code == 200
+    assert private_value not in case_response.text
+    assert application_response.status_code == 200
+    payload = application_response.json()
+    assert payload["fillable"] is False
+    assert payload["intermediary_gate"]["status"] == "blocked"
+    assert not any(
+        row["canonical_path"].startswith("settings.intermediary.")
+        for row in payload["rows"]
+    )
+    assert private_value not in application_response.text
+
+
 def test_strip_api_prefix_still_requires_auth(client, fake_db):
     assert client.get("/api/cases").status_code == 401

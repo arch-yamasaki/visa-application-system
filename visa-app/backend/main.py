@@ -67,6 +67,10 @@ GCP_PROJECT = os.environ.get("GCP_PROJECT", "visa-codex-mvp")
 GCP_REGION = os.environ.get("GCP_REGION", "asia-northeast1")
 CLOUD_RUN_JOB_NAME = os.environ.get("CLOUD_RUN_JOB_NAME", "codex-runner-job")
 SUPPORTED_DOCUMENT_EXTENSIONS = {"pdf", "docx", "xlsx", "png", "jpg", "jpeg"}
+PASSPORT_HUMAN_EDITED_PATHS = {
+    "applicant.name_roman",
+    "applicant.birth_date",
+}
 
 # ---------------------------------------------------------------------------
 # Clients (initialized lazily on first request via module-level singletons)
@@ -181,9 +185,55 @@ def _deep_merge_dict(base: dict, updates: dict) -> dict:
     return base
 
 
-def _merge_extracted_case_data(existing_case_data: dict | None, extracted_case_data: dict) -> dict:
+def _value_at_path(data: dict, path: str):
+    current = data
+    for part in path.split("."):
+        if not isinstance(current, dict) or part not in current:
+            return None, False
+        current = current[part]
+    return copy.deepcopy(current), True
+
+
+def _set_value_at_path(data: dict, path: str, value) -> None:
+    current = data
+    parts = path.split(".")
+    for part in parts[:-1]:
+        child = current.get(part)
+        if not isinstance(child, dict):
+            child = {}
+            current[part] = child
+        current = child
+    current[parts[-1]] = copy.deepcopy(value)
+
+
+def _merge_extracted_case_data(
+    existing_case_data: dict | None,
+    extracted_case_data: dict,
+    existing_field_metadata: dict | None = None,
+) -> dict:
     merged = copy.deepcopy(existing_case_data or {})
     _deep_merge_dict(merged, copy.deepcopy(extracted_case_data or {}))
+    metadata = existing_field_metadata if isinstance(existing_field_metadata, dict) else {}
+    for path in PASSPORT_HUMAN_EDITED_PATHS:
+        meta = metadata.get(path)
+        if not isinstance(meta, dict) or meta.get("human_edited") is not True:
+            continue
+        existing_value, exists = _value_at_path(existing_case_data or {}, path)
+        if exists:
+            _set_value_at_path(merged, path, existing_value)
+    return merged
+
+
+def _merge_extracted_field_metadata(
+    existing_field_metadata: dict | None,
+    extracted_field_metadata: dict | None,
+) -> dict:
+    merged = copy.deepcopy(extracted_field_metadata or {})
+    existing = existing_field_metadata if isinstance(existing_field_metadata, dict) else {}
+    for path in PASSPORT_HUMAN_EDITED_PATHS:
+        meta = existing.get(path)
+        if isinstance(meta, dict) and meta.get("human_edited") is True:
+            merged[path] = copy.deepcopy(meta)
     return merged
 
 
@@ -512,24 +562,29 @@ def get_case(case_id: str, user: AuthUser = Depends(require_user)):
     data = _get_case(case_id, user)
     if data.get("case_data"):
         data["canonical_case_data"] = copy.deepcopy(data["case_data"])
-        data["case_data"] = build_display_case_data(
-            data["case_data"],
-            data.get("settings"),
-        )
+        data["case_data"] = build_display_case_data(data["case_data"])
     return data
 
 
 @api.patch("/cases/{case_id}")
 def update_case(case_id: str, body: UpdateCaseRequest, user: AuthUser = Depends(require_user)):
     _get_case(case_id, user)
+    if body.settings is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="Case-level settings updates are not supported",
+        )
+    if isinstance(body.case_data, dict) and "settings" in body.case_data:
+        raise HTTPException(
+            status_code=400,
+            detail="Settings must not be embedded in case_data",
+        )
     ref = db.collection("cases").document(case_id)
 
     updates: dict = {"updated_at": _now_iso()}
 
     if body.case_data is not None:
         updates["case_data"] = body.case_data
-    if body.settings is not None:
-        updates["settings"] = body.settings
     if body.field_metadata is not None:
         updates["field_metadata"] = body.field_metadata
     if body.workflow_state is not None:
@@ -991,13 +1046,18 @@ def start_extraction_stream(
             merged_case_data = _merge_extracted_case_data(
                 data.get("case_data"),
                 result.display_case_data,
+                data.get("field_metadata"),
+            )
+            merged_field_metadata = _merge_extracted_field_metadata(
+                data.get("field_metadata"),
+                result.field_metadata,
             )
 
             ref.update({
                 "case_data": merged_case_data,
                 "review": result.review,
-                "field_metadata": result.field_metadata,
-                "anchor_coverage": anchor_coverage(result.field_metadata),
+                "field_metadata": merged_field_metadata,
+                "anchor_coverage": anchor_coverage(merged_field_metadata),
                 "extraction": {
                     "backend": "gemini",
                     "run_id": run_id,
@@ -1118,14 +1178,19 @@ def _start_gemini_extraction(
         merged_case_data = _merge_extracted_case_data(
             case_doc.get("case_data"),
             result.display_case_data,
+            case_doc.get("field_metadata"),
+        )
+        merged_field_metadata = _merge_extracted_field_metadata(
+            case_doc.get("field_metadata"),
+            result.field_metadata,
         )
 
         case_ref.update(
             {
                 "case_data": merged_case_data,
                 "review": result.review,
-                "field_metadata": result.field_metadata,  # 互換レイヤーで自動生成済み
-                "anchor_coverage": anchor_coverage(result.field_metadata),
+                "field_metadata": merged_field_metadata,
+                "anchor_coverage": anchor_coverage(merged_field_metadata),
                 "workflow_state": "extracted",
                 "updated_at": _now_iso(),
             }
@@ -1393,11 +1458,17 @@ def _harvest_extraction_results(
                 except (json.JSONDecodeError, OSError):
                     pass
 
+        current_doc = case_ref.get().to_dict() or {}
         if extracted_case_data is not None:
-            current_doc = case_ref.get().to_dict() or {}
             updates["case_data"] = _merge_extracted_case_data(
                 current_doc.get("case_data"),
                 extracted_case_data,
+                current_doc.get("field_metadata"),
+            )
+        if "field_metadata" in updates:
+            updates["field_metadata"] = _merge_extracted_field_metadata(
+                current_doc.get("field_metadata"),
+                updates["field_metadata"],
             )
 
         case_ref.update(updates)

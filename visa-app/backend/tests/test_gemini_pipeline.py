@@ -1,8 +1,25 @@
 """gemini_pipeline anchor post-processing tests."""
 
 from extractors.document_models import PreparedDocuments
-from extractors.gemini_pipeline import attach_bboxes
+from extractors.gemini_pipeline import (
+    _enrich_manifest_documents,
+    attach_bboxes,
+)
 from extractors.types import ExtractionResult
+
+
+def test_enrich_manifest_documents_adds_prepared_page_bounds_without_mutation():
+    manifest = [{"document_id": "doc_pdf", "file_name": "bundle.pdf"}]
+    prepared = PreparedDocuments(
+        page_counts={"doc_pdf": 3},
+        document_kinds={"doc_pdf": "pdf"},
+    )
+
+    enriched = _enrich_manifest_documents(manifest, prepared)
+
+    assert enriched[0]["page_count"] == 3
+    assert enriched[0]["document_kind"] == "pdf"
+    assert "page_count" not in manifest[0]
 
 
 def test_attach_bboxes_resolves_office_anchors_without_pdfs():

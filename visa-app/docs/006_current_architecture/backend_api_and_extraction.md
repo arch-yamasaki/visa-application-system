@@ -60,13 +60,14 @@ Firestore case_data
   -> rows
 ```
 
-`fillable` は workflow 状態だけで決めます。
+`fillable` は原則として workflow 状態で決めます。
 
 ```text
 fillable = workflow_state in extracted / needs_review / ready_to_fill
+           and intermediary env is 5/5 configured
 ```
 
-必須不足や空欄は `fillable=false` の理由にしません。空値の mapping は rows から落ち、取得できた行だけがChrome拡張で部分入力されます。
+一般項目の必須不足や空欄は `fillable=false` の理由にしません。空値の mapping は rows から落ち、取得できた行だけがChrome拡張で部分入力されます。ただし取次者環境変数5件は一体で扱い、1件でも欠けている場合は `fillable=false` にします。
 
 ## 保存データと表示データ
 

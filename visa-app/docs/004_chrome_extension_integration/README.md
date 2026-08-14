@@ -64,7 +64,7 @@ Chrome拡張QAでは、申請の最終送信を絶対に押さない。
 - `application-data` で上陸予定港、滞在予定期間、同伴者、過去入出国歴、過去COE申請歴、犯罪歴、契約形態をMVP既定値で補完する。
 - `application-data` で最終学歴 23.1/23.2/23.3、過去COE申請歴 18.2/18.3、退去強制・出国命令 20.1/20.2/20.3 を生成対象に追加した。
 - `application-data` で就労予定期間 5.1/5.2/5.3 を生成対象に追加し、空の場合は `定めあり Fixed` / `1` / `0` を初期値にする。
-- `application-data` で代理人欄を勤務先会社情報から初期化する。取次者欄は `settings.intermediary` または `INTERMEDIARY_*` 環境変数から注入する。
+- `application-data` で代理人欄を勤務先会社情報から初期化する。取次者欄は固定の `INTERMEDIARY_*` 環境変数5件から一括注入し、欠落時は部分入力しない。案件側の `settings.intermediary` による上書きは許可しない。
 - Chrome拡張のradio選択を各選択肢ラベル基準に変更し、`無 No` が同じ行の `有 Yes` に吸われる問題を修正した。
 - Chrome拡張のselect探索で、同じnameに複数候補がある場合は表示中の要素を優先するようにした。
 
@@ -107,7 +107,10 @@ Chrome拡張QAでは、申請の最終送信を絶対に押さない。
 対応済み。`application_data.py` の投入可能状態を広げた。
 
 ```py
-fillable = workflow_state in {"extracted", "needs_review", "ready_to_fill"}
+fillable = (
+    workflow_state in {"extracted", "needs_review", "ready_to_fill"}
+    and intermediary_env_is_complete
+)
 ```
 
 warning 文言も `workflow_state is not fillable` のように状態名に依存しない表現へ変える。

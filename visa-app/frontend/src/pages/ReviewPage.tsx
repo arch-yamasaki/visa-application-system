@@ -4,7 +4,7 @@ import { apiClient } from '../api/client'
 import FieldPanel from '../components/review/FieldPanel'
 import DocumentViewer from '../components/viewer/DocumentViewer'
 import ReviewBanner from '../components/review/ReviewBanner'
-import type { CaseData, CaseDocument, FieldMetadataMap, Settings, SourceRef } from '../types/caseData'
+import type { CaseData, CaseDocument, FieldMetadataMap, SourceRef } from '../types/caseData'
 import { useViewerStore } from '../store/viewerStore'
 
 function normalizeSourceRef(ref: Record<string, unknown>): SourceRef {
@@ -69,9 +69,10 @@ function setValueAtPath<T>(root: T, path: string, value: unknown): T {
   return clone as T
 }
 
-function splitCaseDataSettings(caseData: CaseData): { caseData: CaseData; settings?: Settings } {
-  const { settings, ...rest } = caseData
-  return { caseData: rest as CaseData, settings }
+function withoutSettings(caseData: CaseData): CaseData {
+  const result = { ...caseData }
+  delete result.settings
+  return result
 }
 
 export default function ReviewPage() {
@@ -129,10 +130,9 @@ export default function ReviewPage() {
     setSaveMessage(null)
     setSaveFailed(false)
     try {
-      const updates = splitCaseDataSettings(caseDoc.canonical_case_data ?? caseDoc.case_data)
+      const caseData = withoutSettings(caseDoc.canonical_case_data ?? caseDoc.case_data)
       await apiClient.updateCase(caseId, {
-        case_data: updates.caseData,
-        settings: updates.settings,
+        case_data: caseData,
         field_metadata: caseDoc.field_metadata,
       })
       setSaveMessage('保存しました')

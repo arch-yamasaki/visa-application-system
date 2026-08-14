@@ -12,6 +12,17 @@ from typing import Any
 
 EMPTY_STRINGS = {"unknown", "not_applicable", "n/a", "na"}
 FILLABLE_WORKFLOW_STATES = {"extracted", "needs_review", "ready_to_fill"}
+INTERMEDIARY_ENV_VARS = {
+    "name": "INTERMEDIARY_NAME",
+    "postal_code": "INTERMEDIARY_POSTAL_CODE",
+    "address": "INTERMEDIARY_ADDRESS",
+    "organization": "INTERMEDIARY_ORGANIZATION",
+    "phone": "INTERMEDIARY_PHONE",
+}
+INTERMEDIARY_PATHS = tuple(
+    f"settings.intermediary.{field}"
+    for field in INTERMEDIARY_ENV_VARS
+)
 BOOLEAN_PATHS = (
     "applicant.family.has_accompanying_members",
     "applicant.family.has_japan_relatives_or_cohabitants",
@@ -349,15 +360,13 @@ def apply_application_defaults(source_data: dict[str, Any]) -> None:
 
 def load_default_settings() -> dict[str, Any]:
     intermediary = {
-        "name": os.environ.get("INTERMEDIARY_NAME", ""),
-        "postal_code": os.environ.get("INTERMEDIARY_POSTAL_CODE", ""),
-        "address": os.environ.get("INTERMEDIARY_ADDRESS", ""),
-        "organization": os.environ.get("INTERMEDIARY_ORGANIZATION", ""),
-        "phone": os.environ.get("INTERMEDIARY_PHONE", ""),
+        field: os.environ.get(env_name, "").strip()
+        for field, env_name in INTERMEDIARY_ENV_VARS.items()
     }
-    if any(not is_empty_value(value) for value in intermediary.values()):
-        return {"intermediary": intermediary}
-    return {}
+    if not all(intermediary.values()):
+        return {}
+
+    return {"intermediary": intermediary}
 
 
 def visible(case_data: dict[str, Any], mapping_item: dict[str, Any]) -> bool:
@@ -490,7 +499,7 @@ def build_rows(
         rows.append(
             {
                 "section": info["section"],
-                "form_order": info["form_order"],
+                "form_order": item.get("form_order", info["form_order"]),
                 "display_no": info["display_no"],
                 "label": item.get("label") or info["label"],
                 "canonical_path": value_path,
@@ -517,15 +526,28 @@ def build_application_data(
     form_definitions: dict[str, Any],
 ) -> dict[str, Any]:
     case_data = case_doc.get("case_data", {})
-    settings = case_doc.get("settings") or case_data.get("settings") or load_default_settings()
+    settings = load_default_settings()
     source_data = copy.deepcopy(case_data)
+    source_data.pop("settings", None)
     if settings:
         source_data["settings"] = settings
     apply_application_defaults(source_data)
     workflow_state = case_doc.get("workflow_state") or case_data.get("case", {}).get("workflow_state", "")
     rows = build_rows(source_data, mapping, form_definitions)
-    fillable = is_fillable_workflow_state(workflow_state)
-    warnings = [] if fillable else [f"workflow_state is not fillable: {workflow_state or 'unknown'}"]
+    workflow_fillable = is_fillable_workflow_state(workflow_state)
+    intermediary_configured = isinstance(settings.get("intermediary"), dict)
+    fillable = workflow_fillable and intermediary_configured
+    warnings = (
+        []
+        if workflow_fillable
+        else [f"workflow_state is not fillable: {workflow_state or 'unknown'}"]
+    )
+    if not intermediary_configured:
+        warnings.append("取次者の固定環境変数5件が揃っていないため、自動入力できません")
+    intermediary_gate = {
+        "status": "verified" if intermediary_configured else "blocked",
+        "blocked_fields": [] if intermediary_configured else list(INTERMEDIARY_PATHS),
+    }
 
     return {
         "schema_version": "1.0",
@@ -535,6 +557,7 @@ def build_application_data(
         "mapping_version": mapping.get("schema_version", ""),
         "form_definition": mapping.get("form_definition") or form_definitions.get("source_file", ""),
         "warnings": warnings,
+        "intermediary_gate": intermediary_gate,
         "summary": {
             "rows_total": len(rows),
             "rows_fillable": len([row for row in rows if row["fill_value"]]),
@@ -545,13 +568,11 @@ def build_application_data(
     }
 
 
-def build_display_case_data(
-    case_data: dict[str, Any],
-    settings: dict[str, Any] | None = None,
-) -> dict[str, Any]:
+def build_display_case_data(case_data: dict[str, Any]) -> dict[str, Any]:
     """Return case_data with deterministic display/fill defaults applied."""
     display_data = copy.deepcopy(case_data)
-    display_settings = settings or display_data.get("settings") or load_default_settings()
+    display_data.pop("settings", None)
+    display_settings = load_default_settings()
     if display_settings:
         display_data["settings"] = copy.deepcopy(display_settings)
     apply_application_defaults(display_data)

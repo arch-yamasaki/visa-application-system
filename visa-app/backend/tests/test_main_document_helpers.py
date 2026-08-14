@@ -9,6 +9,8 @@ from fastapi import HTTPException
 from main import (
     SUPPORTED_DOCUMENT_EXTENSIONS,
     _file_extension,
+    _merge_extracted_case_data,
+    _merge_extracted_field_metadata,
     _xlsx_to_html,
 )
 
@@ -42,3 +44,52 @@ def test_xlsx_to_html_rejects_unknown_sheet():
         _xlsx_to_html(buffer.getvalue(), sheet_name="Missing")
 
     assert exc.value.status_code == 400
+
+
+def test_reextraction_preserves_human_edited_passport_identity_fields():
+    existing = {
+        "applicant": {
+            "name_roman": "HUMAN CONFIRMED",
+            "birth_date": "1990-01-02",
+            "sex": "male",
+        }
+    }
+    extracted = {
+        "applicant": {
+            "name_roman": "MODEL VALUE",
+            "birth_date": "",
+            "sex": "female",
+        }
+    }
+    metadata = {
+        "applicant.name_roman": {"human_edited": True, "source_refs": []},
+        "applicant.birth_date": {"human_edited": True, "source_refs": []},
+    }
+
+    merged = _merge_extracted_case_data(existing, extracted, metadata)
+
+    assert merged["applicant"]["name_roman"] == "HUMAN CONFIRMED"
+    assert merged["applicant"]["birth_date"] == "1990-01-02"
+    assert merged["applicant"]["sex"] == "female"
+
+
+def test_reextraction_preserves_human_edited_passport_field_metadata_only():
+    existing = {
+        "applicant.name_roman": {
+            "human_edited": True,
+            "source_refs": [{"document_id": "doc_reviewed"}],
+        },
+        "applicant.sex": {"human_edited": True, "source_refs": []},
+    }
+    extracted = {
+        "applicant.name_roman": {
+            "human_edited": False,
+            "source_refs": [{"document_id": "doc_model"}],
+        },
+        "applicant.sex": {"human_edited": False, "source_refs": []},
+    }
+
+    merged = _merge_extracted_field_metadata(existing, extracted)
+
+    assert merged["applicant.name_roman"] == existing["applicant.name_roman"]
+    assert merged["applicant.sex"] == extracted["applicant.sex"]

@@ -199,7 +199,22 @@ _SCOPE_INSTRUCTIONS: dict[str, str] = {
     "applicant_identity": (
         "以下の書類から申請人の身分事項を抽出してください。"
         "国籍、生年月日、氏名、性別、出生地、配偶者の有無、職業、"
-        "本国居住地、日本連絡先、旅券情報を抽出してください。"
+        "本国居住地、日本連絡先、旅券情報を抽出してください。\n"
+        "併せて、顔写真、旅券番号、氏名、生年月日等の身分事項が掲載され、"
+        "通常は機械読取領域(MRZ)もある旅券の身分事項ページを検出し、"
+        "`passport_identity_page_candidates` に document_id、1始まりのpage、"
+        "confidence、短いdetection_basis、mrz_detectedを出力してください。"
+        "旅券の表紙、査証ページ、出入国スタンプ、在留カードは候補にしないでください。"
+        "複数人・新旧旅券を含む場合は、異なる身分事項ページをすべて候補にしてください。"
+        "疑わしいページは除外せず低いconfidenceで候補に含め、候補がなければ空配列にしてください。\n"
+        "`applicant.name_roman` と `applicant.birth_date` は、有効な旅券身分事項ページを"
+        "一意に特定できる場合、その顔写真側の身分事項欄(VIZ)の表記を優先し、"
+        "source_refのdocument_idとpageを必ず同じ候補ページにしてください。"
+        "`applicant.birth_date.value` は原本が `02 JAN 1990` 等の表記でも必ず"
+        "`1990-01-02` のようなYYYY-MM-DDに正規化し、source_ref.text_quoteは"
+        "日付の英字月や区切り記号を含め原文のまま変更しないでください。"
+        "MRZは照合に用いますが、記号変換や氏名の切捨てがあり得るため、"
+        "氏名の正本としてVIZより優先しないでください。"
     ),
     "entry_plan": (
         "以下の書類から入国・在留予定に関する情報を抽出してください。"
@@ -273,6 +288,7 @@ NG: `{"value": "250000", "source_ref": {"document_id": "doc_offer", "page": 1, "
 - schemaでBOOLEANに指定されている `value` は JSON boolean（`true` / `false`）で出力すること。`"true"`、`"false"`、`"有"`、`"無"` のような文字列は禁止。
 - schemaでINTEGERに指定されている `value` は JSON number（例: `0`, `1`, `3`）で出力すること。`"0"`、`"3"` のような文字列は禁止。
 - BOOLEAN / INTEGER の値が書類から見つからない場合は、各項目の既定方針に従い `false` または `0` を出力すること。空文字やnullは使わないこと。この場合は source_ref を空にし、review に既定値であることを記録すること。
+- 生年月日（`applicant.birth_date`）: valueは必ず4桁年の`YYYY-MM-DD`。原本が`DD MMM YYYY`、`DD-MMM-YYYY`等でもvalueだけ正規化し、source_ref.text_quoteは原文表記をそのまま引用すること。2桁年や解釈が曖昧な数値日付を推測しないこと。
 - 法人番号（`employer.corporate_number`）: 13桁の数字のみ。ハイフン・スペースは除去すること。
 - 法人番号の有無（`employer.has_corporate_number`）: 法人番号が読み取れる場合は `true`、読み取れない場合は `false`。
 - 契約形態（`employment.contract_type`）: 雇用、委任、請負、その他のいずれかで出力すること。Offer Letter等の雇用契約は雇用とする。
@@ -288,7 +304,7 @@ NG: `{"value": "250000", "source_ref": {"document_id": "doc_offer", "page": 1, "
 - DOCX書類からの抽出: ページ概念がないため page は 1 とすること。
 
 ### 出力言語ルール
-- 値は原本の言語をそのまま使用（例：ローマ字氏名はローマ字、日本語住所は日本語）
+- 値は原本の言語をそのまま使用（例：ローマ字氏名はローマ字、日本語住所は日本語）。ただし`applicant.birth_date.value`のみYYYY-MM-DDへ正規化する。
 - 説明テキスト（reason, message 等）は日本語で記述
 - text_quote は原文から直接引用
 

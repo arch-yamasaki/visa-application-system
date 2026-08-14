@@ -19,6 +19,8 @@ class PreparedDocuments:
     pdf_bytes_map: dict[str, bytes] = field(default_factory=dict)
     xlsx_cell_indexes: dict[str, list[dict]] = field(default_factory=dict)
     docx_block_indexes: dict[str, list[dict]] = field(default_factory=dict)
+    page_counts: dict[str, int] = field(default_factory=dict)
+    document_kinds: dict[str, str] = field(default_factory=dict)
 
     @property
     def total_inline_bytes(self) -> int:

@@ -220,11 +220,11 @@ canonical v2 では、mapping、`transform`、`visible_when` の評価は backen
 
 | フォーム順 | 画面番号（参考） | RASENS表示名 | visa-app表示 | canonical path | 入力方針 | application mapping | 備考 |
 |---:|---|---|---|---|---|---|---|
-| 54 | 取次者 | 氏名 | 非表示 | `settings.intermediary.name` | 設定値 | あり | 太田さん側の申請アカウントを持つ申請会社情報から注入 |
-| 55 | 取次者 | 郵便番号 | 非表示 | `settings.intermediary.postal_code` | 設定値 | あり | 案件ごとの抽出対象ではない |
-| 56 | 取次者 | 住所 | 非表示 | `settings.intermediary.address` | 設定値 | あり | 案件ごとの抽出対象ではない |
-| 57 | 取次者 | 所属機関等 | 非表示 | `settings.intermediary.organization` | 設定値 | あり | 申請アカウントを持つ申請会社名 |
-| 58 | 取次者 | 電話番号 | 非表示 | `settings.intermediary.phone` | 設定値 | あり | 案件ごとの抽出対象ではない |
+| 54 | 取次者 | 氏名 | 表示（固定・編集不可） | `settings.intermediary.name` | 設定値 | あり | 太田さん側の申請アカウントを持つ申請会社情報から注入 |
+| 55 | 取次者 | 郵便番号 | 表示（固定・編集不可） | `settings.intermediary.postal_code` | 設定値 | あり | 案件ごとの抽出対象ではない |
+| 56 | 取次者 | 住所 | 表示（固定・編集不可） | `settings.intermediary.address` | 設定値 | あり | 案件ごとの抽出対象ではない |
+| 57 | 取次者 | 所属機関等 | 表示（固定・編集不可） | `settings.intermediary.organization` | 設定値 | あり | 申請アカウントを持つ申請会社名 |
+| 58 | 取次者 | 電話番号 | 表示（固定・編集不可） | `settings.intermediary.phone` | 設定値 | あり | 案件ごとの抽出対象ではない |
 
 ### 6. 所属機関に関する情報等
 

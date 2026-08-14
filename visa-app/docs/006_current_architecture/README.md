@@ -45,7 +45,7 @@ draft -> extracting -> extracted
 
 `needs_review` と `ready_to_fill` は旧データ互換として読むことがありますが、UIの正規状態として増やしません。
 
-Chrome拡張の部分入力は許可します。`/application-data` の `fillable` は workflow 状態ベースで決まり、必須不足、warning、レビュー未完了では `fillable=false` にしません。取得できた `rows` だけを投入し、残った空欄は人がレビュー画面またはRASENS画面で補完します。
+Chrome拡張の部分入力は許可します。一般項目の必須不足、warning、レビュー未完了では `fillable=false` にせず、取得できた `rows` だけを投入します。例外として、全案件共通の取次者環境変数5件が揃っていない場合は部分的な固定情報を入力しないため `fillable=false` にします。
 
 ## ファイル構成
 

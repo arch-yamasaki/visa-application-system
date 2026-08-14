@@ -11,8 +11,26 @@ from application_data import (
     build_display_case_data,
     build_rows,
     is_fillable_workflow_state,
+    load_default_form_definitions,
+    load_default_mapping,
+    load_default_settings,
     transform_value,
 )
+
+
+SYNTHETIC_INTERMEDIARY_ENV = {
+    "INTERMEDIARY_NAME": "試験　花子",
+    "INTERMEDIARY_POSTAL_CODE": "1234567",
+    "INTERMEDIARY_ADDRESS": "東京都千代田区霞が関一丁目一番一号　ＡＢＣビル１２階",
+    "INTERMEDIARY_ORGANIZATION": "試験行政書士法人",
+    "INTERMEDIARY_PHONE": "0312345678",
+}
+
+
+@pytest.fixture(autouse=True)
+def complete_intermediary_env(monkeypatch):
+    for key, value in SYNTHETIC_INTERMEDIARY_ENV.items():
+        monkeypatch.setenv(key, value)
 
 
 FORM_DEFINITIONS = {
@@ -666,26 +684,27 @@ def test_display_case_data_includes_proxy_defaults():
     }
 
 
-def test_display_case_data_includes_intermediary_settings():
+def test_display_case_data_uses_env_intermediary_and_ignores_embedded_settings():
     result = build_display_case_data(
-        {"applicant": {}},
         {
-            "intermediary": {
-                "organization": "中央ビジネスグループ",
-                "name": "太田",
-                "postal_code": "5300001",
-                "address": "大阪府大阪市北区梅田1-1-1",
-                "phone": "0660000000",
-            }
-        },
+            "applicant": {},
+            "settings": {
+                "intermediary": {"name": "案件埋込　太郎"},
+            },
+        }
     )
 
-    assert result["settings"]["intermediary"]["name"] == "太田"
-    assert result["settings"]["intermediary"]["organization"] == "中央ビジネスグループ"
+    assert result["settings"]["intermediary"] == {
+        "name": "試験　花子",
+        "postal_code": "1234567",
+        "address": "東京都千代田区霞が関一丁目一番一号　ＡＢＣビル１２階",
+        "organization": "試験行政書士法人",
+        "phone": "0312345678",
+    }
 
 
 def test_build_application_data_uses_intermediary_env_fallback(monkeypatch):
-    monkeypatch.setenv("INTERMEDIARY_NAME", "太田")
+    monkeypatch.setenv("INTERMEDIARY_NAME", "環境　太郎")
     case_doc = {
         key: value
         for key, value in CASE_DOC.items()
@@ -698,7 +717,163 @@ def test_build_application_data_uses_intermediary_env_fallback(monkeypatch):
         row["canonical_path"]: row["fill_value"]
         for row in rows
         if row["canonical_path"].startswith("settings.intermediary")
-    } == {"settings.intermediary.name": "太田"}
+    } == {"settings.intermediary.name": "環境　太郎"}
+
+
+def test_complete_intermediary_env_builds_all_five_default_mapping_rows():
+    result = build_application_data(
+        copy.deepcopy(CASE_DOC),
+        load_default_mapping(),
+        load_default_form_definitions(),
+    )
+
+    intermediary_rows = {
+        row["canonical_path"]: row["fill_value"]
+        for row in result["rows"]
+        if row["canonical_path"].startswith("settings.intermediary.")
+    }
+    assert intermediary_rows == {
+        "settings.intermediary.name": "試験　花子",
+        "settings.intermediary.postal_code": "1234567",
+        "settings.intermediary.address": "東京都千代田区霞が関一丁目一番一号　ＡＢＣビル１２階",
+        "settings.intermediary.organization": "試験行政書士法人",
+        "settings.intermediary.phone": "0312345678",
+    }
+    ordered_rows = [
+        row
+        for row in result["rows"]
+        if row["canonical_path"].startswith("settings.intermediary.")
+    ]
+    assert [row["form_order"] for row in ordered_rows] == [167, 168, 169, 170, 171]
+    assert [
+        (row["field_id"], row["field_name"])
+        for row in ordered_rows
+    ] == [
+        ("switch_256263", "item[167].textData"),
+        ("item_168_textData", "item[168].textData"),
+        ("address_256265", "item[169].textData"),
+        ("switch_256266", "item[170].textData"),
+        ("switch_256267", "item[171].textData"),
+    ]
+    assert all(row["source_page"] == "settings" for row in ordered_rows)
+    assert all(row["required"] is True for row in ordered_rows)
+    assert result["fillable"] is True
+    assert result["intermediary_gate"] == {
+        "status": "verified",
+        "blocked_fields": [],
+    }
+
+
+def test_application_data_ignores_case_intermediary_override(monkeypatch):
+    monkeypatch.setenv("INTERMEDIARY_NAME", "環境　優子")
+    case_doc = copy.deepcopy(CASE_DOC)
+    case_doc["settings"] = {
+        "intermediary": {
+            "name": "案件　太郎",
+            "postal_code": "7654321",
+            "address": "京都府京都市中京区試験通一丁目",
+            "organization": "案件行政書士法人",
+            "phone": "0612345678",
+        },
+    }
+    case_doc["case_data"]["settings"] = {
+        "intermediary": {"name": "埋込　次郎"},
+    }
+
+    rows = build_application_data(case_doc, MAPPING, FORM_DEFINITIONS)["rows"]
+
+    assert {
+        row["canonical_path"]: row["fill_value"]
+        for row in rows
+        if row["canonical_path"].startswith("settings.intermediary.")
+    } == {"settings.intermediary.name": "環境　優子"}
+
+
+def test_all_intermediary_env_unset_blocks_filling_and_returns_gate(monkeypatch):
+    for key in SYNTHETIC_INTERMEDIARY_ENV:
+        monkeypatch.delenv(key, raising=False)
+
+    assert load_default_settings() == {}
+
+    result = build_application_data(
+        copy.deepcopy(CASE_DOC),
+        MAPPING,
+        FORM_DEFINITIONS,
+    )
+
+    assert result["fillable"] is False
+    assert not any(
+        row["canonical_path"].startswith("settings.intermediary.")
+        for row in result["rows"]
+    )
+    assert result["intermediary_gate"] == {
+        "status": "blocked",
+        "blocked_fields": [
+            "settings.intermediary.name",
+            "settings.intermediary.postal_code",
+            "settings.intermediary.address",
+            "settings.intermediary.organization",
+            "settings.intermediary.phone",
+        ],
+    }
+    assert any("取次者の固定環境変数5件" in warning for warning in result["warnings"])
+
+
+def test_partial_intermediary_env_blocks_without_exposing_value(monkeypatch):
+    for key in SYNTHETIC_INTERMEDIARY_ENV:
+        monkeypatch.delenv(key, raising=False)
+    private_value = "非公開　試験値"
+    monkeypatch.setenv("INTERMEDIARY_NAME", private_value)
+
+    assert load_default_settings() == {}
+
+    display_data = build_display_case_data(copy.deepcopy(CASE_DOC["case_data"]))
+    assert "settings" not in display_data
+
+    result = build_application_data(
+        copy.deepcopy(CASE_DOC),
+        MAPPING,
+        FORM_DEFINITIONS,
+    )
+
+    assert result["fillable"] is False
+    assert result["intermediary_gate"]["status"] == "blocked"
+    assert private_value not in json.dumps(result, ensure_ascii=False)
+
+
+@pytest.mark.parametrize("missing_env", list(SYNTHETIC_INTERMEDIARY_ENV))
+def test_each_missing_intermediary_env_blocks_atomic_bundle(monkeypatch, missing_env):
+    monkeypatch.delenv(missing_env, raising=False)
+
+    assert load_default_settings() == {}
+    result = build_application_data(
+        copy.deepcopy(CASE_DOC),
+        MAPPING,
+        FORM_DEFINITIONS,
+    )
+
+    assert result["fillable"] is False
+    assert result["intermediary_gate"]["status"] == "blocked"
+    assert not any(
+        row["canonical_path"].startswith("settings.intermediary.")
+        for row in result["rows"]
+    )
+
+
+def test_intermediary_env_values_are_trimmed(monkeypatch):
+    monkeypatch.setenv("INTERMEDIARY_NAME", "　試験　花子　")
+    monkeypatch.setenv("INTERMEDIARY_POSTAL_CODE", " 1234567 ")
+    monkeypatch.setenv("INTERMEDIARY_ADDRESS", "　東京都千代田区霞が関一丁目　")
+    monkeypatch.setenv("INTERMEDIARY_ORGANIZATION", " 試験行政書士法人 ")
+    monkeypatch.setenv("INTERMEDIARY_PHONE", " 0312345678 ")
+
+    assert load_default_settings()["intermediary"] == {
+        "name": "試験　花子",
+        "postal_code": "1234567",
+        "address": "東京都千代田区霞が関一丁目",
+        "organization": "試験行政書士法人",
+        "phone": "0312345678",
+    }
 
 
 @pytest.mark.parametrize("workflow_state", ["extracted", "needs_review", "ready_to_fill"])
@@ -712,6 +887,28 @@ def test_fillable_workflow_states(workflow_state):
     assert result["fillable"] is True
     assert result["warnings"] == []
     assert result["summary"]["rows_total"] == 5
+
+
+def test_empty_unverified_birth_date_is_not_returned_as_fill_row_in_review_state():
+    case_doc = {
+        **CASE_DOC,
+        "workflow_state": "needs_review",
+        "case_data": {
+            **CASE_DOC["case_data"],
+            "applicant": {
+                **CASE_DOC["case_data"]["applicant"],
+                "birth_date": "",
+            },
+        },
+    }
+
+    result = build_application_data(case_doc, MAPPING, FORM_DEFINITIONS)
+
+    assert result["fillable"] is True
+    assert not any(
+        row["canonical_path"] == "applicant.birth_date"
+        for row in result["rows"]
+    )
 
 
 @pytest.mark.parametrize(

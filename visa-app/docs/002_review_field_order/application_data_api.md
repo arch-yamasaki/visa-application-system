@@ -151,17 +151,17 @@ MVPでは、RASENS入力で必ず選択が必要な一部項目を backend 側�
 
 `required` の意味は分けます。`rows[].required` は `form_definitions` 由来のRASENS入力制約を表し、業務上の不足や人手確認は `review.missing_items`, `review.validation_errors`, `manual_required` で表します。固定設定値で埋まる取次者は、Gemini抽出requiredにはしません。
 
-Chrome拡張への投入は、部分入力を基本許可します。RASENS上の必須項目が未入力でも、取得できた行は投入し、空欄はレビュー画面とRASENS画面で人が確認・補完します。`fillable=false` は `draft`、`extracting`、`failed` など、まだ投入対象にすべきでない workflow 状態を止めるために使い、必須不足の validation gate には使いません。
+Chrome拡張への投入は、部分入力を基本許可します。RASENS上の必須項目が未入力でも、取得できた行は投入し、空欄はレビュー画面とRASENS画面で人が確認・補完します。`fillable=false` は `draft`、`extracting`、`failed` など、まだ投入対象にすべきでない workflow 状態を止めるために使います。ただし取次者固定設定は5項目を一体で扱うため、未設定・部分設定の場合は例外的に投入全体を止めます。
 
-`intermediary` は取次者で、太田さん側の申請アカウントを持つ申請会社情報を設定から注入します。案件書類やGemini抽出から作る値ではありません。Firestore `settings.intermediary` があればそれを使い、なければ Cloud Run 環境変数 `INTERMEDIARY_NAME`, `INTERMEDIARY_POSTAL_CODE`, `INTERMEDIARY_ADDRESS`, `INTERMEDIARY_ORGANIZATION`, `INTERMEDIARY_PHONE` から注入します。
+`intermediary` は取次者で、太田さん側の申請アカウントを持つ申請会社情報を固定設定から注入します。案件書類やGemini抽出から作る値ではありません。正本は Cloud Run 環境変数 `INTERMEDIARY_NAME`, `INTERMEDIARY_POSTAL_CODE`, `INTERMEDIARY_ADDRESS`, `INTERMEDIARY_ORGANIZATION`, `INTERMEDIARY_PHONE` の5件です。
 
-本番では実値をrepoに書かず、Secret Manager または Cloud Run 環境変数で設定します。Firestore `settings.intermediary` があるケースでは Firestore の値を優先し、ないケースでは Cloud Run の固定設定を使います。
+本番では実値をrepoに書かず、Cloud Runの通常環境変数として設定します。認証情報ではないため、取次者情報にはSecret Managerを使いません。5件すべてに値がある場合だけ5行を生成し、0〜4件では部分入力せず `fillable=false` にします。値の形式はデプロイ時に確認します。Firestore の `settings.intermediary` は固定値を上書きできず、ケース更新APIも `settings` の保存を拒否します。
 
 ```bash
 gcloud run services update visa-app \
   --region asia-northeast1 \
   --project visa-codex-mvp \
-  --update-secrets="INTERMEDIARY_NAME=INTERMEDIARY_NAME:latest,INTERMEDIARY_POSTAL_CODE=INTERMEDIARY_POSTAL_CODE:latest,INTERMEDIARY_ADDRESS=INTERMEDIARY_ADDRESS:latest,INTERMEDIARY_ORGANIZATION=INTERMEDIARY_ORGANIZATION:latest,INTERMEDIARY_PHONE=INTERMEDIARY_PHONE:latest"
+  --update-env-vars="INTERMEDIARY_NAME=<name>,INTERMEDIARY_POSTAL_CODE=<postal-code>,INTERMEDIARY_ADDRESS=<address>,INTERMEDIARY_ORGANIZATION=<organization>,INTERMEDIARY_PHONE=<phone>"
 ```
 
 有無系は、レビューUIやFirestore上で `true`, `"true"`, `"有"` のように表記が揺れても、`application-data` 生成時に同じ意味として扱います。これにより、`visible_when` を持つ条件付き項目が文字列/booleanの違いだけで消えないようにします。

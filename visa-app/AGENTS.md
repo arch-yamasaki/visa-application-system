@@ -103,18 +103,13 @@ gcloud run deploy visa-app \
 
 ### Secret Manager
 
-`GOOGLE_API_KEY`（Gemini API用）は GCP Secret Manager で管理し、Cloud Run の環境変数としてマウントしている。
+`GOOGLE_API_KEY`（Gemini API用）は認証情報なので、GCP Secret Manager で管理し、Cloud Run の環境変数としてマウントする。
 
 | シークレット名 | 用途 | レプリケーション |
 |---|---|---|
 | `GOOGLE_API_KEY` | Gemini API 認証キー | `asia-northeast1`（user-managed） |
-| `INTERMEDIARY_NAME` | 取次者 氏名 | `asia-northeast1`（user-managed） |
-| `INTERMEDIARY_POSTAL_CODE` | 取次者 郵便番号 | `asia-northeast1`（user-managed） |
-| `INTERMEDIARY_ADDRESS` | 取次者 住所 | `asia-northeast1`（user-managed） |
-| `INTERMEDIARY_ORGANIZATION` | 取次者 所属機関 | `asia-northeast1`（user-managed） |
-| `INTERMEDIARY_PHONE` | 取次者 電話番号 | `asia-northeast1`（user-managed） |
 
-Cloud Run サービスアカウント（`913363513517-compute@developer.gserviceaccount.com`）に `roles/secretmanager.secretAccessor` を付与済み。
+Cloud Run サービスアカウント（`913363513517-compute@developer.gserviceaccount.com`）には、利用するシークレット単位で `roles/secretmanager.secretAccessor` を付与する。
 
 シークレットの更新手順:
 
@@ -130,18 +125,26 @@ gcloud run services update visa-app \
   --update-secrets="GOOGLE_API_KEY=GOOGLE_API_KEY:latest"
 ```
 
-取次者情報は案件書類やGemini抽出ではなく、Cloud Run の固定設定から注入する。実値はrepoに書かず、Secret Manager または Cloud Run 環境変数で管理する。
+### 取次者の固定環境変数
+
+取次者情報は認証情報ではなく、公開されている会社の連絡先なので、Secret Managerを使わずCloud Runの通常環境変数で管理する。案件書類やGemini抽出から生成せず、案件データからも上書きしない。実値はrepoには書かない。
+
+| 環境変数 | 用途 |
+|---|---|
+| `INTERMEDIARY_NAME` | 取次者 氏名 |
+| `INTERMEDIARY_POSTAL_CODE` | 取次者 郵便番号 |
+| `INTERMEDIARY_ADDRESS` | 取次者 住所 |
+| `INTERMEDIARY_ORGANIZATION` | 取次者 所属機関 |
+| `INTERMEDIARY_PHONE` | 取次者 電話番号 |
+
+5項目は一体で扱う。5件すべてに値がある場合だけ取次者欄へ注入し、1件でも欠けていれば部分入力しない。
 
 ```bash
-# 例: Secret Manager に取次者情報を登録
-echo -n "<intermediary-name>" | gcloud secrets versions add INTERMEDIARY_NAME \
-  --data-file=- --project=visa-codex-mvp
-
-# Cloud Run に反映
+# Cloud Runの通常環境変数を一括更新
 gcloud run services update visa-app \
   --region asia-northeast1 \
   --project visa-codex-mvp \
-  --update-secrets="INTERMEDIARY_NAME=INTERMEDIARY_NAME:latest,INTERMEDIARY_POSTAL_CODE=INTERMEDIARY_POSTAL_CODE:latest,INTERMEDIARY_ADDRESS=INTERMEDIARY_ADDRESS:latest,INTERMEDIARY_ORGANIZATION=INTERMEDIARY_ORGANIZATION:latest,INTERMEDIARY_PHONE=INTERMEDIARY_PHONE:latest"
+  --update-env-vars="INTERMEDIARY_NAME=<name>,INTERMEDIARY_POSTAL_CODE=<postal-code>,INTERMEDIARY_ADDRESS=<address>,INTERMEDIARY_ORGANIZATION=<organization>,INTERMEDIARY_PHONE=<phone>"
 ```
 
 ## GCPリソース

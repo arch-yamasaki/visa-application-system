@@ -49,6 +49,10 @@ function isRepeatedDetailPath(path: string): boolean {
   return REPEATED_FIELD_PREFIXES.some((prefix) => path.startsWith(prefix))
 }
 
+function isFixedSettingsPath(path: string): boolean {
+  return path.startsWith('settings.intermediary.')
+}
+
 function isTruthy(value: unknown): boolean {
   if (typeof value === 'boolean') return value
   if (typeof value === 'number') return value === 1
@@ -135,6 +139,7 @@ export default function FieldPanel({ caseData, fieldMetadata, review, onFieldUpd
                   input={getFieldInput(f.path)}
                   meta={fieldMetadata[f.path]}
                   onUpdate={onFieldUpdate}
+                  readOnly={isFixedSettingsPath(f.path)}
                 />
                 {f.path === 'applicant.family.has_japan_relatives_or_cohabitants' && (
                   <RepeatedFieldGroup
