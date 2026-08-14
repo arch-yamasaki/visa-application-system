@@ -1,0 +1,3410 @@
+{
+  "experiment": "passport_page_routing",
+  "generated_at": "2026-08-09T00:45:13+09:00",
+  "sdk": "google-genai",
+  "model_availability": {
+    "gemini-3-flash-preview": true,
+    "gemini-3.5-flash-lite": true,
+    "gemini-3.6-flash": true
+  },
+  "case_count": 2,
+  "config_count": 9,
+  "repetitions": 3,
+  "contains_pii": false,
+  "pricing": {
+    "currency": "USD",
+    "retrieved_date": "2026-08-09",
+    "standard_rates_per_million_tokens": {
+      "gemini-3.6-flash": {
+        "input": 1.5,
+        "output_including_thinking": 7.5
+      },
+      "gemini-3.5-flash-lite": {
+        "input": 0.3,
+        "output_including_thinking": 2.5
+      },
+      "gemini-3-flash-preview": {
+        "input": 0.5,
+        "output_including_thinking": 3.0
+      }
+    },
+    "formula": "(prompt_tokens * input_rate + (candidate_tokens + thought_tokens) * output_rate) / 1_000_000",
+    "excludes": [
+      "tax",
+      "network",
+      "storage",
+      "other pipeline calls"
+    ]
+  },
+  "aggregates": [
+    {
+      "config_id": "g35lite_low_high_conservative",
+      "model": "gemini-3.5-flash-lite",
+      "thinking_level": "LOW",
+      "media_resolution": "HIGH",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "runs": 6,
+      "api_success_rate": 1.0,
+      "coverage_complete_rate": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "classification_precision_when_api_successful": 1.0,
+      "classification_recall_when_api_successful": 1.0,
+      "classification_exact_match_rate_when_api_successful": 1.0,
+      "page_set_exact_match_rate": 1.0,
+      "mean_elapsed_ms": 11561,
+      "mean_total_tokens": 39756,
+      "mean_estimated_usd": 0.019426
+    },
+    {
+      "config_id": "g35lite_minimal_medium_conservative",
+      "model": "gemini-3.5-flash-lite",
+      "thinking_level": "MINIMAL",
+      "media_resolution": "MEDIUM",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "runs": 6,
+      "api_success_rate": 1.0,
+      "coverage_complete_rate": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "classification_precision_when_api_successful": 1.0,
+      "classification_recall_when_api_successful": 1.0,
+      "classification_exact_match_rate_when_api_successful": 1.0,
+      "page_set_exact_match_rate": 1.0,
+      "mean_elapsed_ms": 11525,
+      "mean_total_tokens": 21268,
+      "mean_estimated_usd": 0.01386
+    },
+    {
+      "config_id": "g36_low_high_conservative",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "LOW",
+      "media_resolution": "HIGH",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "runs": 6,
+      "api_success_rate": 1.0,
+      "coverage_complete_rate": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "classification_precision_when_api_successful": 1.0,
+      "classification_recall_when_api_successful": 1.0,
+      "classification_exact_match_rate_when_api_successful": 1.0,
+      "page_set_exact_match_rate": 1.0,
+      "mean_elapsed_ms": 15587,
+      "mean_total_tokens": 39219,
+      "mean_estimated_usd": 0.076058
+    },
+    {
+      "config_id": "g36_low_low_conservative",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "LOW",
+      "media_resolution": "LOW",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "runs": 6,
+      "api_success_rate": 1.0,
+      "coverage_complete_rate": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "classification_precision_when_api_successful": 1.0,
+      "classification_recall_when_api_successful": 1.0,
+      "classification_exact_match_rate_when_api_successful": 1.0,
+      "page_set_exact_match_rate": 1.0,
+      "mean_elapsed_ms": 16877,
+      "mean_total_tokens": 12592,
+      "mean_estimated_usd": 0.039904
+    },
+    {
+      "config_id": "g36_low_medium_conservative",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "LOW",
+      "media_resolution": "MEDIUM",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "runs": 6,
+      "api_success_rate": 0.8333,
+      "coverage_complete_rate": 0.8333,
+      "precision": 1.0,
+      "recall": 0.8333,
+      "classification_precision_when_api_successful": 1.0,
+      "classification_recall_when_api_successful": 1.0,
+      "classification_exact_match_rate_when_api_successful": 1.0,
+      "page_set_exact_match_rate": 0.8333,
+      "mean_elapsed_ms": 15481,
+      "mean_total_tokens": 20657,
+      "mean_estimated_usd": 0.048363
+    },
+    {
+      "config_id": "g36_medium_medium_conservative",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "MEDIUM",
+      "media_resolution": "MEDIUM",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "runs": 6,
+      "api_success_rate": 1.0,
+      "coverage_complete_rate": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "classification_precision_when_api_successful": 1.0,
+      "classification_recall_when_api_successful": 1.0,
+      "classification_exact_match_rate_when_api_successful": 1.0,
+      "page_set_exact_match_rate": 1.0,
+      "mean_elapsed_ms": 23111,
+      "mean_total_tokens": 22699,
+      "mean_estimated_usd": 0.06304
+    },
+    {
+      "config_id": "g36_minimal_medium_concise",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "MINIMAL",
+      "media_resolution": "MEDIUM",
+      "prompt_variant": "concise",
+      "temperature_mode": "omitted",
+      "runs": 6,
+      "api_success_rate": 1.0,
+      "coverage_complete_rate": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "classification_precision_when_api_successful": 1.0,
+      "classification_recall_when_api_successful": 1.0,
+      "classification_exact_match_rate_when_api_successful": 1.0,
+      "page_set_exact_match_rate": 1.0,
+      "mean_elapsed_ms": 14490,
+      "mean_total_tokens": 20430,
+      "mean_estimated_usd": 0.046425
+    },
+    {
+      "config_id": "g3preview_low_high_no_temperature",
+      "model": "gemini-3-flash-preview",
+      "thinking_level": "LOW",
+      "media_resolution": "HIGH",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "runs": 6,
+      "api_success_rate": 1.0,
+      "coverage_complete_rate": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "classification_precision_when_api_successful": 1.0,
+      "classification_recall_when_api_successful": 1.0,
+      "classification_exact_match_rate_when_api_successful": 1.0,
+      "page_set_exact_match_rate": 1.0,
+      "mean_elapsed_ms": 14307,
+      "mean_total_tokens": 38239,
+      "mean_estimated_usd": 0.023849
+    },
+    {
+      "config_id": "g3preview_low_high_temperature0",
+      "model": "gemini-3-flash-preview",
+      "thinking_level": "LOW",
+      "media_resolution": "HIGH",
+      "prompt_variant": "conservative",
+      "temperature_mode": "explicit_zero",
+      "runs": 6,
+      "api_success_rate": 0.8333,
+      "coverage_complete_rate": 0.8333,
+      "precision": 1.0,
+      "recall": 0.8333,
+      "classification_precision_when_api_successful": 1.0,
+      "classification_recall_when_api_successful": 1.0,
+      "classification_exact_match_rate_when_api_successful": 1.0,
+      "page_set_exact_match_rate": 0.8333,
+      "mean_elapsed_ms": 19099,
+      "mean_total_tokens": 38001,
+      "mean_estimated_usd": 0.023682
+    }
+  ],
+  "results": [
+    {
+      "config_id": "g36_minimal_medium_concise",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "MINIMAL",
+      "media_resolution": "MEDIUM",
+      "prompt_variant": "concise",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 18271,
+      "usage": {
+        "prompt_tokens": 18333,
+        "candidate_tokens": 3465,
+        "thought_tokens": null,
+        "total_tokens": 21798
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 34,
+      "document_type_histogram": {
+        "academic_transcript": 7,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 1,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 98,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 1,
+      "repetition": 1,
+      "estimated_usd": 0.053487
+    },
+    {
+      "config_id": "g36_minimal_medium_concise",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "MINIMAL",
+      "media_resolution": "MEDIUM",
+      "prompt_variant": "concise",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 12607,
+      "usage": {
+        "prompt_tokens": 18333,
+        "candidate_tokens": 1922,
+        "thought_tokens": null,
+        "total_tokens": 20255
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 34,
+      "document_type_histogram": {
+        "academic_transcript": 7,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 1,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 98,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 1,
+      "repetition": 2,
+      "estimated_usd": 0.041915
+    },
+    {
+      "config_id": "g36_minimal_medium_concise",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "MINIMAL",
+      "media_resolution": "MEDIUM",
+      "prompt_variant": "concise",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 16603,
+      "usage": {
+        "prompt_tokens": 18333,
+        "candidate_tokens": 3468,
+        "thought_tokens": null,
+        "total_tokens": 21801
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 34,
+      "document_type_histogram": {
+        "academic_transcript": 7,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 1,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 98,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 1,
+      "repetition": 3,
+      "estimated_usd": 0.05351
+    },
+    {
+      "config_id": "g36_low_medium_conservative",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "LOW",
+      "media_resolution": "MEDIUM",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": false,
+      "schema_validation": null,
+      "elapsed_ms": 3943,
+      "usage": null,
+      "finish_reason": null,
+      "input_pdf_count": 3,
+      "input_page_count": 34,
+      "document_type_histogram": {},
+      "passport_candidates": [],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 0,
+        "false_positive": 0,
+        "false_negative": 1,
+        "precision": 0.0,
+        "recall": 0.0,
+        "page_set_exact_match": false
+      },
+      "error_type": "ServerError",
+      "case_ordinal": 1,
+      "repetition": 1,
+      "estimated_usd": null
+    },
+    {
+      "config_id": "g36_low_medium_conservative",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "LOW",
+      "media_resolution": "MEDIUM",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 16715,
+      "usage": {
+        "prompt_tokens": 18400,
+        "candidate_tokens": 3052,
+        "thought_tokens": null,
+        "total_tokens": 21452
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 34,
+      "document_type_histogram": {
+        "academic_transcript": 7,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 1,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 98,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 1,
+      "repetition": 2,
+      "estimated_usd": 0.05049
+    },
+    {
+      "config_id": "g36_low_medium_conservative",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "LOW",
+      "media_resolution": "MEDIUM",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 16105,
+      "usage": {
+        "prompt_tokens": 18400,
+        "candidate_tokens": 3055,
+        "thought_tokens": null,
+        "total_tokens": 21455
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 34,
+      "document_type_histogram": {
+        "academic_transcript": 7,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 1,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 98,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 1,
+      "repetition": 3,
+      "estimated_usd": 0.050513
+    },
+    {
+      "config_id": "g36_medium_medium_conservative",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "MEDIUM",
+      "media_resolution": "MEDIUM",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 18355,
+      "usage": {
+        "prompt_tokens": 18400,
+        "candidate_tokens": 1928,
+        "thought_tokens": 1378,
+        "total_tokens": 21706
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 34,
+      "document_type_histogram": {
+        "academic_transcript": 7,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 1,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 98,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 1,
+      "repetition": 1,
+      "estimated_usd": 0.052395
+    },
+    {
+      "config_id": "g36_medium_medium_conservative",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "MEDIUM",
+      "media_resolution": "MEDIUM",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 28675,
+      "usage": {
+        "prompt_tokens": 18400,
+        "candidate_tokens": 3478,
+        "thought_tokens": 2968,
+        "total_tokens": 24846
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 34,
+      "document_type_histogram": {
+        "academic_transcript": 7,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 1,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 98,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 1,
+      "repetition": 2,
+      "estimated_usd": 0.075945
+    },
+    {
+      "config_id": "g36_medium_medium_conservative",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "MEDIUM",
+      "media_resolution": "MEDIUM",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 25399,
+      "usage": {
+        "prompt_tokens": 18400,
+        "candidate_tokens": 3471,
+        "thought_tokens": 1688,
+        "total_tokens": 23559
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 34,
+      "document_type_histogram": {
+        "academic_transcript": 7,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 1,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 98,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 1,
+      "repetition": 3,
+      "estimated_usd": 0.066293
+    },
+    {
+      "config_id": "g36_low_high_conservative",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "LOW",
+      "media_resolution": "HIGH",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 18857,
+      "usage": {
+        "prompt_tokens": 37440,
+        "candidate_tokens": 3459,
+        "thought_tokens": null,
+        "total_tokens": 40899
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 34,
+      "document_type_histogram": {
+        "academic_transcript": 7,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 1,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 98,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 1,
+      "repetition": 1,
+      "estimated_usd": 0.082102
+    },
+    {
+      "config_id": "g36_low_high_conservative",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "LOW",
+      "media_resolution": "HIGH",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 16703,
+      "usage": {
+        "prompt_tokens": 37440,
+        "candidate_tokens": 3459,
+        "thought_tokens": null,
+        "total_tokens": 40899
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 34,
+      "document_type_histogram": {
+        "academic_transcript": 7,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 1,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 98,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 1,
+      "repetition": 2,
+      "estimated_usd": 0.082102
+    },
+    {
+      "config_id": "g36_low_high_conservative",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "LOW",
+      "media_resolution": "HIGH",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 12334,
+      "usage": {
+        "prompt_tokens": 37440,
+        "candidate_tokens": 1928,
+        "thought_tokens": null,
+        "total_tokens": 39368
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 34,
+      "document_type_histogram": {
+        "academic_transcript": 7,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 1,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 98,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 1,
+      "repetition": 3,
+      "estimated_usd": 0.07062
+    },
+    {
+      "config_id": "g35lite_minimal_medium_conservative",
+      "model": "gemini-3.5-flash-lite",
+      "thinking_level": "MINIMAL",
+      "media_resolution": "MEDIUM",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 11886,
+      "usage": {
+        "prompt_tokens": 18400,
+        "candidate_tokens": 3495,
+        "thought_tokens": null,
+        "total_tokens": 21895
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 34,
+      "document_type_histogram": {
+        "academic_transcript": 7,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 1,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 100,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 1,
+      "repetition": 1,
+      "estimated_usd": 0.014257
+    },
+    {
+      "config_id": "g35lite_minimal_medium_conservative",
+      "model": "gemini-3.5-flash-lite",
+      "thinking_level": "MINIMAL",
+      "media_resolution": "MEDIUM",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 12487,
+      "usage": {
+        "prompt_tokens": 18400,
+        "candidate_tokens": 3505,
+        "thought_tokens": null,
+        "total_tokens": 21905
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 34,
+      "document_type_histogram": {
+        "academic_transcript": 7,
+        "company_financial_or_tax": 4,
+        "company_other": 13,
+        "company_registry": 6,
+        "diploma_or_certificate": 1,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 100,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 1,
+      "repetition": 2,
+      "estimated_usd": 0.014283
+    },
+    {
+      "config_id": "g35lite_minimal_medium_conservative",
+      "model": "gemini-3.5-flash-lite",
+      "thinking_level": "MINIMAL",
+      "media_resolution": "MEDIUM",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 11362,
+      "usage": {
+        "prompt_tokens": 18400,
+        "candidate_tokens": 3485,
+        "thought_tokens": null,
+        "total_tokens": 21885
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 34,
+      "document_type_histogram": {
+        "academic_transcript": 7,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 1,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 100,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 1,
+      "repetition": 3,
+      "estimated_usd": 0.014233
+    },
+    {
+      "config_id": "g35lite_low_high_conservative",
+      "model": "gemini-3.5-flash-lite",
+      "thinking_level": "LOW",
+      "media_resolution": "HIGH",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 12050,
+      "usage": {
+        "prompt_tokens": 37440,
+        "candidate_tokens": 3500,
+        "thought_tokens": null,
+        "total_tokens": 40940
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 34,
+      "document_type_histogram": {
+        "academic_transcript": 7,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 1,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 100,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 1,
+      "repetition": 1,
+      "estimated_usd": 0.019982
+    },
+    {
+      "config_id": "g35lite_low_high_conservative",
+      "model": "gemini-3.5-flash-lite",
+      "thinking_level": "LOW",
+      "media_resolution": "HIGH",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 10824,
+      "usage": {
+        "prompt_tokens": 37440,
+        "candidate_tokens": 3509,
+        "thought_tokens": null,
+        "total_tokens": 40949
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 34,
+      "document_type_histogram": {
+        "academic_transcript": 7,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 1,
+        "employment_terms": 1,
+        "immigration_application": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 100,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 1,
+      "repetition": 2,
+      "estimated_usd": 0.020005
+    },
+    {
+      "config_id": "g35lite_low_high_conservative",
+      "model": "gemini-3.5-flash-lite",
+      "thinking_level": "LOW",
+      "media_resolution": "HIGH",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 12167,
+      "usage": {
+        "prompt_tokens": 37440,
+        "candidate_tokens": 3509,
+        "thought_tokens": null,
+        "total_tokens": 40949
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 34,
+      "document_type_histogram": {
+        "academic_transcript": 7,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 1,
+        "employment_terms": 1,
+        "immigration_application": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 100,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 1,
+      "repetition": 3,
+      "estimated_usd": 0.020005
+    },
+    {
+      "config_id": "g3preview_low_high_temperature0",
+      "model": "gemini-3-flash-preview",
+      "thinking_level": "LOW",
+      "media_resolution": "HIGH",
+      "prompt_variant": "conservative",
+      "temperature_mode": "explicit_zero",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 26828,
+      "usage": {
+        "prompt_tokens": 37440,
+        "candidate_tokens": 1954,
+        "thought_tokens": null,
+        "total_tokens": 39394
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 34,
+      "document_type_histogram": {
+        "academic_transcript": 7,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 1,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 100,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 1,
+      "repetition": 1,
+      "estimated_usd": 0.024582
+    },
+    {
+      "config_id": "g3preview_low_high_temperature0",
+      "model": "gemini-3-flash-preview",
+      "thinking_level": "LOW",
+      "media_resolution": "HIGH",
+      "prompt_variant": "conservative",
+      "temperature_mode": "explicit_zero",
+      "api_success": false,
+      "schema_validation": null,
+      "elapsed_ms": 5962,
+      "usage": null,
+      "finish_reason": null,
+      "input_pdf_count": 3,
+      "input_page_count": 34,
+      "document_type_histogram": {},
+      "passport_candidates": [],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 0,
+        "false_positive": 0,
+        "false_negative": 1,
+        "precision": 0.0,
+        "recall": 0.0,
+        "page_set_exact_match": false
+      },
+      "error_type": "ServerError",
+      "case_ordinal": 1,
+      "repetition": 2,
+      "estimated_usd": null
+    },
+    {
+      "config_id": "g3preview_low_high_temperature0",
+      "model": "gemini-3-flash-preview",
+      "thinking_level": "LOW",
+      "media_resolution": "HIGH",
+      "prompt_variant": "conservative",
+      "temperature_mode": "explicit_zero",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 11461,
+      "usage": {
+        "prompt_tokens": 37440,
+        "candidate_tokens": 1954,
+        "thought_tokens": null,
+        "total_tokens": 39394
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 34,
+      "document_type_histogram": {
+        "academic_transcript": 7,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 1,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 100,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 1,
+      "repetition": 3,
+      "estimated_usd": 0.024582
+    },
+    {
+      "config_id": "g3preview_low_high_no_temperature",
+      "model": "gemini-3-flash-preview",
+      "thinking_level": "LOW",
+      "media_resolution": "HIGH",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 13100,
+      "usage": {
+        "prompt_tokens": 37440,
+        "candidate_tokens": 1955,
+        "thought_tokens": null,
+        "total_tokens": 39395
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 34,
+      "document_type_histogram": {
+        "academic_transcript": 7,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 1,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 100,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 1,
+      "repetition": 1,
+      "estimated_usd": 0.024585
+    },
+    {
+      "config_id": "g3preview_low_high_no_temperature",
+      "model": "gemini-3-flash-preview",
+      "thinking_level": "LOW",
+      "media_resolution": "HIGH",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 13818,
+      "usage": {
+        "prompt_tokens": 37440,
+        "candidate_tokens": 1945,
+        "thought_tokens": null,
+        "total_tokens": 39385
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 34,
+      "document_type_histogram": {
+        "academic_transcript": 7,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 1,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 100,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 1,
+      "repetition": 2,
+      "estimated_usd": 0.024555
+    },
+    {
+      "config_id": "g3preview_low_high_no_temperature",
+      "model": "gemini-3-flash-preview",
+      "thinking_level": "LOW",
+      "media_resolution": "HIGH",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 12987,
+      "usage": {
+        "prompt_tokens": 37440,
+        "candidate_tokens": 1939,
+        "thought_tokens": null,
+        "total_tokens": 39379
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 34,
+      "document_type_histogram": {
+        "academic_transcript": 7,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 1,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 100,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 1,
+      "repetition": 3,
+      "estimated_usd": 0.024537
+    },
+    {
+      "config_id": "g36_minimal_medium_concise",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "MINIMAL",
+      "media_resolution": "MEDIUM",
+      "prompt_variant": "concise",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 16825,
+      "usage": {
+        "prompt_tokens": 17268,
+        "candidate_tokens": 3278,
+        "thought_tokens": null,
+        "total_tokens": 20546
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 32,
+      "document_type_histogram": {
+        "academic_transcript": 3,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 3,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 98,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 2,
+      "repetition": 1,
+      "estimated_usd": 0.050487
+    },
+    {
+      "config_id": "g36_minimal_medium_concise",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "MINIMAL",
+      "media_resolution": "MEDIUM",
+      "prompt_variant": "concise",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 11418,
+      "usage": {
+        "prompt_tokens": 17268,
+        "candidate_tokens": 1828,
+        "thought_tokens": null,
+        "total_tokens": 19096
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 32,
+      "document_type_histogram": {
+        "academic_transcript": 3,
+        "company_financial_or_tax": 4,
+        "company_other": 14,
+        "company_registry": 5,
+        "diploma_or_certificate": 3,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 95,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 2,
+      "repetition": 2,
+      "estimated_usd": 0.039612
+    },
+    {
+      "config_id": "g36_minimal_medium_concise",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "MINIMAL",
+      "media_resolution": "MEDIUM",
+      "prompt_variant": "concise",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 11214,
+      "usage": {
+        "prompt_tokens": 17268,
+        "candidate_tokens": 1818,
+        "thought_tokens": null,
+        "total_tokens": 19086
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 32,
+      "document_type_histogram": {
+        "academic_transcript": 3,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 3,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 98,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 2,
+      "repetition": 3,
+      "estimated_usd": 0.039537
+    },
+    {
+      "config_id": "g36_low_medium_conservative",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "LOW",
+      "media_resolution": "MEDIUM",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 12084,
+      "usage": {
+        "prompt_tokens": 17335,
+        "candidate_tokens": 1822,
+        "thought_tokens": null,
+        "total_tokens": 19157
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 32,
+      "document_type_histogram": {
+        "academic_transcript": 3,
+        "company_financial_or_tax": 4,
+        "company_other": 14,
+        "company_registry": 5,
+        "diploma_or_certificate": 3,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 98,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 2,
+      "repetition": 1,
+      "estimated_usd": 0.039668
+    },
+    {
+      "config_id": "g36_low_medium_conservative",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "LOW",
+      "media_resolution": "MEDIUM",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 16535,
+      "usage": {
+        "prompt_tokens": 17335,
+        "candidate_tokens": 3276,
+        "thought_tokens": null,
+        "total_tokens": 20611
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 32,
+      "document_type_histogram": {
+        "academic_transcript": 3,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 3,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 98,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 2,
+      "repetition": 2,
+      "estimated_usd": 0.050572
+    },
+    {
+      "config_id": "g36_low_medium_conservative",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "LOW",
+      "media_resolution": "MEDIUM",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 15965,
+      "usage": {
+        "prompt_tokens": 17335,
+        "candidate_tokens": 3276,
+        "thought_tokens": null,
+        "total_tokens": 20611
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 32,
+      "document_type_histogram": {
+        "academic_transcript": 3,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 3,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 98,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 2,
+      "repetition": 3,
+      "estimated_usd": 0.050572
+    },
+    {
+      "config_id": "g36_medium_medium_conservative",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "MEDIUM",
+      "media_resolution": "MEDIUM",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 23145,
+      "usage": {
+        "prompt_tokens": 17335,
+        "candidate_tokens": 3278,
+        "thought_tokens": 2055,
+        "total_tokens": 22668
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 32,
+      "document_type_histogram": {
+        "academic_transcript": 3,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 3,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 95,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 2,
+      "repetition": 1,
+      "estimated_usd": 0.066
+    },
+    {
+      "config_id": "g36_medium_medium_conservative",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "MEDIUM",
+      "media_resolution": "MEDIUM",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 18300,
+      "usage": {
+        "prompt_tokens": 17335,
+        "candidate_tokens": 1818,
+        "thought_tokens": 1700,
+        "total_tokens": 20853
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 32,
+      "document_type_histogram": {
+        "academic_transcript": 3,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 3,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 98,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 2,
+      "repetition": 2,
+      "estimated_usd": 0.052387
+    },
+    {
+      "config_id": "g36_medium_medium_conservative",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "MEDIUM",
+      "media_resolution": "MEDIUM",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 24794,
+      "usage": {
+        "prompt_tokens": 17335,
+        "candidate_tokens": 3283,
+        "thought_tokens": 1946,
+        "total_tokens": 22564
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 32,
+      "document_type_histogram": {
+        "academic_transcript": 3,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 3,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 98,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 2,
+      "repetition": 3,
+      "estimated_usd": 0.06522
+    },
+    {
+      "config_id": "g36_low_high_conservative",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "LOW",
+      "media_resolution": "HIGH",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 18087,
+      "usage": {
+        "prompt_tokens": 35255,
+        "candidate_tokens": 3276,
+        "thought_tokens": null,
+        "total_tokens": 38531
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 32,
+      "document_type_histogram": {
+        "academic_transcript": 3,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 3,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 98,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 2,
+      "repetition": 1,
+      "estimated_usd": 0.077452
+    },
+    {
+      "config_id": "g36_low_high_conservative",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "LOW",
+      "media_resolution": "HIGH",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 16110,
+      "usage": {
+        "prompt_tokens": 35255,
+        "candidate_tokens": 3278,
+        "thought_tokens": null,
+        "total_tokens": 38533
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 32,
+      "document_type_histogram": {
+        "academic_transcript": 3,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 3,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 98,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 2,
+      "repetition": 2,
+      "estimated_usd": 0.077467
+    },
+    {
+      "config_id": "g36_low_high_conservative",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "LOW",
+      "media_resolution": "HIGH",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 11430,
+      "usage": {
+        "prompt_tokens": 35255,
+        "candidate_tokens": 1830,
+        "thought_tokens": null,
+        "total_tokens": 37085
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 32,
+      "document_type_histogram": {
+        "academic_transcript": 3,
+        "company_financial_or_tax": 4,
+        "company_other": 14,
+        "company_registry": 5,
+        "diploma_or_certificate": 3,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 95,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 2,
+      "repetition": 3,
+      "estimated_usd": 0.066608
+    },
+    {
+      "config_id": "g35lite_minimal_medium_conservative",
+      "model": "gemini-3.5-flash-lite",
+      "thinking_level": "MINIMAL",
+      "media_resolution": "MEDIUM",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 10705,
+      "usage": {
+        "prompt_tokens": 17335,
+        "candidate_tokens": 3310,
+        "thought_tokens": null,
+        "total_tokens": 20645
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 32,
+      "document_type_histogram": {
+        "academic_transcript": 3,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 3,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 100,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 2,
+      "repetition": 1,
+      "estimated_usd": 0.013475
+    },
+    {
+      "config_id": "g35lite_minimal_medium_conservative",
+      "model": "gemini-3.5-flash-lite",
+      "thinking_level": "MINIMAL",
+      "media_resolution": "MEDIUM",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 10941,
+      "usage": {
+        "prompt_tokens": 17335,
+        "candidate_tokens": 3310,
+        "thought_tokens": null,
+        "total_tokens": 20645
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 32,
+      "document_type_histogram": {
+        "academic_transcript": 3,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 3,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 100,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 2,
+      "repetition": 2,
+      "estimated_usd": 0.013475
+    },
+    {
+      "config_id": "g35lite_minimal_medium_conservative",
+      "model": "gemini-3.5-flash-lite",
+      "thinking_level": "MINIMAL",
+      "media_resolution": "MEDIUM",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 11767,
+      "usage": {
+        "prompt_tokens": 17335,
+        "candidate_tokens": 3295,
+        "thought_tokens": null,
+        "total_tokens": 20630
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 32,
+      "document_type_histogram": {
+        "academic_transcript": 3,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 3,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 100,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 2,
+      "repetition": 3,
+      "estimated_usd": 0.013438
+    },
+    {
+      "config_id": "g35lite_low_high_conservative",
+      "model": "gemini-3.5-flash-lite",
+      "thinking_level": "LOW",
+      "media_resolution": "HIGH",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 11347,
+      "usage": {
+        "prompt_tokens": 35255,
+        "candidate_tokens": 3317,
+        "thought_tokens": null,
+        "total_tokens": 38572
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 32,
+      "document_type_histogram": {
+        "academic_transcript": 3,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 4,
+        "employment_terms": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 100,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 2,
+      "repetition": 1,
+      "estimated_usd": 0.018869
+    },
+    {
+      "config_id": "g35lite_low_high_conservative",
+      "model": "gemini-3.5-flash-lite",
+      "thinking_level": "LOW",
+      "media_resolution": "HIGH",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 11569,
+      "usage": {
+        "prompt_tokens": 35255,
+        "candidate_tokens": 3305,
+        "thought_tokens": null,
+        "total_tokens": 38560
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 32,
+      "document_type_histogram": {
+        "academic_transcript": 3,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 3,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 100,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 2,
+      "repetition": 2,
+      "estimated_usd": 0.018839
+    },
+    {
+      "config_id": "g35lite_low_high_conservative",
+      "model": "gemini-3.5-flash-lite",
+      "thinking_level": "LOW",
+      "media_resolution": "HIGH",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 11410,
+      "usage": {
+        "prompt_tokens": 35255,
+        "candidate_tokens": 3312,
+        "thought_tokens": null,
+        "total_tokens": 38567
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 32,
+      "document_type_histogram": {
+        "academic_transcript": 3,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 3,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 100,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 2,
+      "repetition": 3,
+      "estimated_usd": 0.018857
+    },
+    {
+      "config_id": "g3preview_low_high_temperature0",
+      "model": "gemini-3-flash-preview",
+      "thinking_level": "LOW",
+      "media_resolution": "HIGH",
+      "prompt_variant": "conservative",
+      "temperature_mode": "explicit_zero",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 22616,
+      "usage": {
+        "prompt_tokens": 35255,
+        "candidate_tokens": 1818,
+        "thought_tokens": null,
+        "total_tokens": 37073
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 32,
+      "document_type_histogram": {
+        "academic_transcript": 3,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 3,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 99,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 2,
+      "repetition": 1,
+      "estimated_usd": 0.023082
+    },
+    {
+      "config_id": "g3preview_low_high_temperature0",
+      "model": "gemini-3-flash-preview",
+      "thinking_level": "LOW",
+      "media_resolution": "HIGH",
+      "prompt_variant": "conservative",
+      "temperature_mode": "explicit_zero",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 17864,
+      "usage": {
+        "prompt_tokens": 35255,
+        "candidate_tokens": 1818,
+        "thought_tokens": null,
+        "total_tokens": 37073
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 32,
+      "document_type_histogram": {
+        "academic_transcript": 3,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 3,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 99,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 2,
+      "repetition": 2,
+      "estimated_usd": 0.023082
+    },
+    {
+      "config_id": "g3preview_low_high_temperature0",
+      "model": "gemini-3-flash-preview",
+      "thinking_level": "LOW",
+      "media_resolution": "HIGH",
+      "prompt_variant": "conservative",
+      "temperature_mode": "explicit_zero",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 16724,
+      "usage": {
+        "prompt_tokens": 35255,
+        "candidate_tokens": 1818,
+        "thought_tokens": null,
+        "total_tokens": 37073
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 32,
+      "document_type_histogram": {
+        "academic_transcript": 3,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 3,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 99,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 2,
+      "repetition": 3,
+      "estimated_usd": 0.023082
+    },
+    {
+      "config_id": "g3preview_low_high_no_temperature",
+      "model": "gemini-3-flash-preview",
+      "thinking_level": "LOW",
+      "media_resolution": "HIGH",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 17313,
+      "usage": {
+        "prompt_tokens": 35255,
+        "candidate_tokens": 1827,
+        "thought_tokens": null,
+        "total_tokens": 37082
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 32,
+      "document_type_histogram": {
+        "academic_transcript": 3,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 3,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 100,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 2,
+      "repetition": 1,
+      "estimated_usd": 0.023109
+    },
+    {
+      "config_id": "g3preview_low_high_no_temperature",
+      "model": "gemini-3-flash-preview",
+      "thinking_level": "LOW",
+      "media_resolution": "HIGH",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 14226,
+      "usage": {
+        "prompt_tokens": 35255,
+        "candidate_tokens": 1849,
+        "thought_tokens": null,
+        "total_tokens": 37104
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 32,
+      "document_type_histogram": {
+        "academic_transcript": 3,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 3,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 100,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 2,
+      "repetition": 2,
+      "estimated_usd": 0.023175
+    },
+    {
+      "config_id": "g3preview_low_high_no_temperature",
+      "model": "gemini-3-flash-preview",
+      "thinking_level": "LOW",
+      "media_resolution": "HIGH",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 14400,
+      "usage": {
+        "prompt_tokens": 35255,
+        "candidate_tokens": 1835,
+        "thought_tokens": null,
+        "total_tokens": 37090
+      },
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 32,
+      "document_type_histogram": {
+        "academic_transcript": 3,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 3,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 100,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 2,
+      "repetition": 3,
+      "estimated_usd": 0.023133
+    },
+    {
+      "config_id": "g36_low_low_conservative",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "LOW",
+      "media_resolution": "LOW",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 20410,
+      "usage": {
+        "prompt_tokens": 9356,
+        "candidate_tokens": 3459,
+        "thought_tokens": 765,
+        "total_tokens": 13580
+      },
+      "estimated_usd": 0.045714,
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 34,
+      "document_type_histogram": {
+        "academic_transcript": 7,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 1,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 98,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 1,
+      "repetition": 1
+    },
+    {
+      "config_id": "g36_low_low_conservative",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "LOW",
+      "media_resolution": "LOW",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 16392,
+      "usage": {
+        "prompt_tokens": 9356,
+        "candidate_tokens": 3471,
+        "thought_tokens": null,
+        "total_tokens": 12827
+      },
+      "estimated_usd": 0.040066,
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 34,
+      "document_type_histogram": {
+        "academic_transcript": 7,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 1,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 98,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 1,
+      "repetition": 2
+    },
+    {
+      "config_id": "g36_low_low_conservative",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "LOW",
+      "media_resolution": "LOW",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 18379,
+      "usage": {
+        "prompt_tokens": 9356,
+        "candidate_tokens": 3466,
+        "thought_tokens": null,
+        "total_tokens": 12822
+      },
+      "estimated_usd": 0.040029,
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 34,
+      "document_type_histogram": {
+        "academic_transcript": 7,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 1,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 95,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 1,
+      "repetition": 3
+    },
+    {
+      "config_id": "g36_low_low_conservative",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "LOW",
+      "media_resolution": "LOW",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 15182,
+      "usage": {
+        "prompt_tokens": 8823,
+        "candidate_tokens": 3283,
+        "thought_tokens": null,
+        "total_tokens": 12106
+      },
+      "estimated_usd": 0.037857,
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 32,
+      "document_type_histogram": {
+        "academic_transcript": 3,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 3,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 95,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 2,
+      "repetition": 1
+    },
+    {
+      "config_id": "g36_low_low_conservative",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "LOW",
+      "media_resolution": "LOW",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 15421,
+      "usage": {
+        "prompt_tokens": 8823,
+        "candidate_tokens": 3287,
+        "thought_tokens": null,
+        "total_tokens": 12110
+      },
+      "estimated_usd": 0.037887,
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 32,
+      "document_type_histogram": {
+        "academic_transcript": 3,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 3,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 98,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 2,
+      "repetition": 2
+    },
+    {
+      "config_id": "g36_low_low_conservative",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "LOW",
+      "media_resolution": "LOW",
+      "prompt_variant": "conservative",
+      "temperature_mode": "omitted",
+      "api_success": true,
+      "schema_validation": {
+        "valid": true,
+        "coverage_complete": true,
+        "coverage_ratio": 1.0,
+        "errors": []
+      },
+      "elapsed_ms": 15476,
+      "usage": {
+        "prompt_tokens": 8823,
+        "candidate_tokens": 3285,
+        "thought_tokens": null,
+        "total_tokens": 12108
+      },
+      "estimated_usd": 0.037872,
+      "finish_reason": "FinishReason.STOP",
+      "input_pdf_count": 3,
+      "input_page_count": 32,
+      "document_type_histogram": {
+        "academic_transcript": 3,
+        "company_financial_or_tax": 3,
+        "company_other": 15,
+        "company_registry": 5,
+        "diploma_or_certificate": 3,
+        "employment_terms": 1,
+        "other": 1,
+        "passport_identity_page": 1
+      },
+      "passport_candidates": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1,
+          "confidence": 98,
+          "needs_human_review": false
+        }
+      ],
+      "ground_truth": {
+        "document_ordinal": 3,
+        "page_number": 1,
+        "label_source": "human_visual_review_of_pixelated_contact_sheet"
+      },
+      "metrics": {
+        "true_positive": 1,
+        "false_positive": 0,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "page_set_exact_match": true
+      },
+      "error_type": null,
+      "case_ordinal": 2,
+      "repetition": 3
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "labeling_method": "human_visual_review_of_pixelated_contact_sheet",
+  "contains_pii": false,
+  "cases": [
+    {
+      "case_ordinal": 1,
+      "passport_identity_pages": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1
+        }
+      ]
+    },
+    {
+      "case_ordinal": 2,
+      "passport_identity_pages": [
+        {
+          "document_ordinal": 3,
+          "page_number": 1
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "Document ordinal is the order of input PDFs after non-PDF documents are excluded.",
+    "No name, date of birth, passport number, file name, source document ID, or document text is stored."
+  ]
+}

@@ -162,7 +162,7 @@ def run(args: argparse.Namespace) -> None:
         scoped=True,
         run_id=f"eval_{uuid.uuid4().hex[:12]}",
         case_id=scenario.get("case_id") or manifest.get("case_id", ""),
-        attach_bbox_refs=False,
+        attach_bbox_refs=args.attach_bbox_refs,
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -192,6 +192,11 @@ def main() -> None:
         help="Eval run directory name under visa-eval/eval_runs/. Ignored when --output-dir is set.",
     )
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--attach-bbox-refs",
+        action="store_true",
+        help="Run the production-like anchor/bbox evidence pass after extraction.",
+    )
     parser.add_argument("--max-inline-mib", type=int, default=20)
     run(parser.parse_args())
 

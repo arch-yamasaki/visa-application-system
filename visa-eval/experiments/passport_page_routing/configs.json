@@ -1,0 +1,76 @@
+{
+  "configs": [
+    {
+      "id": "g36_minimal_medium_concise",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "MINIMAL",
+      "media_resolution": "MEDIUM",
+      "prompt_variant": "concise",
+      "temperature": null
+    },
+    {
+      "id": "g36_low_medium_conservative",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "LOW",
+      "media_resolution": "MEDIUM",
+      "prompt_variant": "conservative",
+      "temperature": null
+    },
+    {
+      "id": "g36_low_low_conservative",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "LOW",
+      "media_resolution": "LOW",
+      "prompt_variant": "conservative",
+      "temperature": null
+    },
+    {
+      "id": "g36_medium_medium_conservative",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "MEDIUM",
+      "media_resolution": "MEDIUM",
+      "prompt_variant": "conservative",
+      "temperature": null
+    },
+    {
+      "id": "g36_low_high_conservative",
+      "model": "gemini-3.6-flash",
+      "thinking_level": "LOW",
+      "media_resolution": "HIGH",
+      "prompt_variant": "conservative",
+      "temperature": null
+    },
+    {
+      "id": "g35lite_minimal_medium_conservative",
+      "model": "gemini-3.5-flash-lite",
+      "thinking_level": "MINIMAL",
+      "media_resolution": "MEDIUM",
+      "prompt_variant": "conservative",
+      "temperature": null
+    },
+    {
+      "id": "g35lite_low_high_conservative",
+      "model": "gemini-3.5-flash-lite",
+      "thinking_level": "LOW",
+      "media_resolution": "HIGH",
+      "prompt_variant": "conservative",
+      "temperature": null
+    },
+    {
+      "id": "g3preview_low_high_temperature0",
+      "model": "gemini-3-flash-preview",
+      "thinking_level": "LOW",
+      "media_resolution": "HIGH",
+      "prompt_variant": "conservative",
+      "temperature": 0.0
+    },
+    {
+      "id": "g3preview_low_high_no_temperature",
+      "model": "gemini-3-flash-preview",
+      "thinking_level": "LOW",
+      "media_resolution": "HIGH",
+      "prompt_variant": "conservative",
+      "temperature": null
+    }
+  ]
+}
