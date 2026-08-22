@@ -4,6 +4,7 @@ import UploadPage from './pages/UploadPage'
 import ReviewPage from './pages/ReviewPage'
 import LoginPage from './pages/LoginPage'
 import ExtensionAuthPage from './pages/ExtensionAuthPage'
+import VisaAutofillPrivacyPage from './pages/VisaAutofillPrivacyPage'
 import OrgSettingsPage from './pages/OrgSettingsPage'
 import { isDemoMode } from './api/client'
 import { useAuthStore } from './store/authStore'
@@ -61,6 +62,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/extension-auth" element={<ExtensionAuthPage />} />
+          <Route path="/privacy/visa-autofill" element={<VisaAutofillPrivacyPage />} />
           <Route element={<RequireAuth />}>
             <Route path="/" element={<CaseListPage />} />
             <Route path="/settings" element={<OrgSettingsPage />} />

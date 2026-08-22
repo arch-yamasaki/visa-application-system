@@ -21,6 +21,21 @@ h1 {
   font-size: 16px;
 }
 
+.privacyNotice {
+  padding: 8px;
+  border: 1px solid #c7d2e8;
+  border-radius: 6px;
+  background: #eef4ff;
+  color: #40506a;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.privacyNotice a {
+  color: #1d5fd1;
+  font-weight: 600;
+}
+
 button {
   display: block;
   width: 100%;
