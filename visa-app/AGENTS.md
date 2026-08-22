@@ -125,9 +125,9 @@ gcloud run services update visa-app \
   --update-secrets="GOOGLE_API_KEY=GOOGLE_API_KEY:latest"
 ```
 
-### 取次者の固定環境変数
+### 取次者・受領方法の組織設定
 
-取次者情報は認証情報ではなく、公開されている会社の連絡先なので、Secret Managerを使わずCloud Runの通常環境変数で管理する。案件書類やGemini抽出から生成せず、案件データからも上書きしない。実値はrepoには書かない。
+取次者5項目と通知送信用メールアドレスは企業（`org_id`）単位で Firestore `org_settings/{org_id}` に保存する。案件書類やGemini抽出から生成せず、案件データからも上書きしない。`GET /org-settings` は組織メンバーが参照でき、`PATCH /org-settings` はadminだけが変更できる。受領方法は `メール Email` 固定で、通知メール再入力欄にも同じ設定値を投入する。
 
 | 環境変数 | 用途 |
 |---|---|
@@ -137,14 +137,16 @@ gcloud run services update visa-app \
 | `INTERMEDIARY_ORGANIZATION` | 取次者 所属機関 |
 | `INTERMEDIARY_PHONE` | 取次者 電話番号 |
 
-5項目は一体で扱う。5件すべてに値がある場合だけ取次者欄へ注入し、1件でも欠けていれば部分入力しない。
+`/api` 経路では組織設定だけを参照し、未登録なら `fillable=false` にする。低レベルの `application_data` 生成関数には既存ローカル検証向けに `INTERMEDIARY_*` 5件のfallbackを残すが、組織設定が正本。取次者5項目と通知メールがすべて揃う場合だけ自動入力可能にする。
 
 ```bash
-# Cloud Runの通常環境変数を一括更新
-gcloud run services update visa-app \
-  --region asia-northeast1 \
-  --project visa-codex-mvp \
-  --update-env-vars="INTERMEDIARY_NAME=<name>,INTERMEDIARY_POSTAL_CODE=<postal-code>,INTERMEDIARY_ADDRESS=<address>,INTERMEDIARY_ORGANIZATION=<organization>,INTERMEDIARY_PHONE=<phone>"
+# chuo-business の設定（実行するとFirestoreへ書き込む）
+.venv/bin/python scripts/manage_users.py org-settings set \
+  --org chuo-business --name '<取次者氏名>' --postal-code '<半角数字>' \
+  --address '奈良県奈良市宝来4丁目13番7号' --organization '<所属機関>' \
+  --phone '<半角数字>' --notification-email 'promot1@gold.ocn.ne.jp'
+
+.venv/bin/python scripts/manage_users.py org-settings list --org chuo-business
 ```
 
 ## GCPリソース
@@ -158,4 +160,4 @@ gcloud run services update visa-app \
 | Cloud Run Job | `codex-runner-job` |
 | Cloud Scheduler Job | `visa-app-warmup`（5分毎に `/` をGETしてコールドスタート回避） |
 | GCS Bucket | `visa-codex-mvp-data` |
-| Firestore Collection | `cases`, `sessions`, `users` |
+| Firestore Collection | `cases`, `sessions`, `users`, `org_settings` |

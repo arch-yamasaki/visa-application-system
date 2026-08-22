@@ -51,7 +51,7 @@ cases/demo_case_data.json
 
 `mappings/rasens_offer_mapping_v2.json` は canonical v2 のMVP自動投入対象です。`form_definitions/rasens_offer_fields.json` の274行台帳を正とし、自動投入しない行は今後 `manual`, `settings`, `derived`, `unsupported`, `future` などの扱いを付けていきます。
 
-代理人は `proxy` として案件ごとに扱います。取次者は `intermediary` として、太田さん側の申請アカウントを持つ申請会社情報を固定設定値から注入します。
+代理人は `proxy` として案件ごとに扱います。取次者は `settings.intermediary`、受領方法・通知メールは `settings.receiving_method` として、企業単位の組織設定から注入します。受領方法は `メール Email` 固定で、通知メールと再入力欄には同じ値を使います。
 
 ## デモ生成
 

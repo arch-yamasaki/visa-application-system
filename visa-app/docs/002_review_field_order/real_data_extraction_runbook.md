@@ -147,8 +147,9 @@ MVPでは、まず次の方針でscopeごとに渡す文書を絞ります。
 
 - 抽出が complete している。
 - workflow が `extracted` 相当である。
+- Firestore `org_settings/{org_id}` に取次者5項目と通知送信用メールアドレスが揃っている。
 
-Chrome拡張への投入は部分入力を基本許可します。MVP mapping 対象の required 値が空でも、取れた行を先に投入し、空欄や不足はレビュー画面とRASENS画面で人が確認・補完します。ただし取次者の固定環境変数は5件を一体で扱うため、1件でも欠けていれば `fillable=false` にします。
+Chrome拡張への投入は部分入力を基本許可します。MVP mapping 対象の required 値が空でも、取れた行を先に投入し、空欄や不足はレビュー画面とRASENS画面で人が確認・補完します。ただし組織共通の取次者5項目と通知送信用メールアドレスは一体で扱うため、1件でも欠けていれば `fillable=false` にします。`/api` 経路では `org_settings/{org_id}` 未登録時に `INTERMEDIARY_*` 環境変数へfallbackしません。
 
 `draft`、`extracting`、`failed` のケースは preview 用に rows を返すことはあっても、`fillable=false` にします。移行互換として `needs_review` と `ready_to_fill` は `extracted` 相当で扱います。
 
@@ -160,4 +161,4 @@ Chrome拡張への投入は部分入力を基本許可します。MVP mapping �
 | `field_metadata` が増えない | GCS download、Gemini認証、Gemini API timeout |
 | rootが一部だけ | scope失敗、schema不足、文書ルーティング不備。レビューで確認できるよう失敗scopeを表示する |
 | rowsが少ない | mapping対象pathが `case_data` にない |
-| `fillable=false` | `workflow_state` が投入対象外、または取次者環境変数5件が揃っていない |
+| `fillable=false` | `workflow_state` が投入対象外、または組織設定の取次者5項目・通知メールが揃っていない |

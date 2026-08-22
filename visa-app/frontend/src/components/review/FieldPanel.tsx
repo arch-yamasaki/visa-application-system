@@ -50,7 +50,7 @@ function isRepeatedDetailPath(path: string): boolean {
 }
 
 function isFixedSettingsPath(path: string): boolean {
-  return path.startsWith('settings.intermediary.')
+  return path.startsWith('settings.')
 }
 
 function isTruthy(value: unknown): boolean {

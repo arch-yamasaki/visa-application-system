@@ -4,6 +4,31 @@ import { mockApi } from './mockData'
 
 const BASE = '/api'
 
+export interface CurrentUser {
+  uid: string
+  email: string
+  org_id: string
+  role: 'admin' | 'member' | string
+}
+
+export interface OrgSettings {
+  org_id: string
+  intermediary: {
+    name: string
+    postal_code: string
+    address: string
+    organization: string
+    phone: string
+  }
+  receiving_method: {
+    method: string
+    notification_email: string
+  }
+  updated_at: string | null
+  updated_by_uid: string | null
+  can_update: boolean
+}
+
 export function isDemoMode(): boolean {
   if (import.meta.env.VITE_DEMO === 'true') return true
   if (typeof window !== 'undefined') {
@@ -36,6 +61,44 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const apiClient = {
+  getMe(): Promise<CurrentUser> {
+    if (isDemoMode()) {
+      return Promise.resolve({ uid: 'demo', email: 'demo@example.com', org_id: 'demo', role: 'admin' })
+    }
+    return request('/me')
+  },
+
+  getOrgSettings(): Promise<OrgSettings> {
+    if (isDemoMode()) {
+      return Promise.resolve({
+        org_id: 'demo',
+        intermediary: { name: '', postal_code: '', address: '', organization: '', phone: '' },
+        receiving_method: { method: 'メール Email', notification_email: '' },
+        updated_at: null,
+        updated_by_uid: null,
+        can_update: true,
+      })
+    }
+    return request('/org-settings')
+  },
+
+  updateOrgSettings(settings: Pick<OrgSettings, 'intermediary' | 'receiving_method'>): Promise<OrgSettings> {
+    if (isDemoMode()) {
+      return Promise.resolve({
+        org_id: 'demo',
+        ...settings,
+        receiving_method: {
+          method: 'メール Email',
+          notification_email: settings.receiving_method.notification_email,
+        },
+        updated_at: new Date().toISOString(),
+        updated_by_uid: 'demo',
+        can_update: true,
+      })
+    }
+    return request('/org-settings', { method: 'PATCH', body: JSON.stringify(settings) })
+  },
+
   // Cases
   createCase(params: { application_type: string; target_status: string }) {
     if (isDemoMode()) return mockApi.createCase(params)

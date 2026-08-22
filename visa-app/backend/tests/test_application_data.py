@@ -721,10 +721,23 @@ def test_build_application_data_uses_intermediary_env_fallback(monkeypatch):
 
 
 def test_complete_intermediary_env_builds_all_five_default_mapping_rows():
+    org_settings = {
+        "intermediary": {
+            "name": "試験　花子",
+            "postal_code": "123-4567",
+            "address": "東京都千代田区霞が関一丁目一番一号　ＡＢＣビル１２階",
+            "organization": "試験行政書士法人",
+            "phone": "03-1234-5678",
+        },
+        "receiving_method": {
+            "notification_email": "notice@example.com",
+        },
+    }
     result = build_application_data(
         copy.deepcopy(CASE_DOC),
         load_default_mapping(),
         load_default_form_definitions(),
+        org_settings,
     )
 
     intermediary_rows = {
@@ -759,6 +772,20 @@ def test_complete_intermediary_env_builds_all_five_default_mapping_rows():
     assert all(row["required"] is True for row in ordered_rows)
     assert result["fillable"] is True
     assert result["intermediary_gate"] == {
+        "status": "verified",
+        "blocked_fields": [],
+    }
+    receiving_rows = {
+        row["canonical_path"]: row["fill_value"]
+        for row in result["rows"]
+        if row["canonical_path"].startswith("settings.receiving_method.")
+    }
+    assert receiving_rows == {
+        "settings.receiving_method.method": "メール Email",
+        "settings.receiving_method.notification_email": "notice@example.com",
+        "settings.receiving_method.notification_email_confirmation": "notice@example.com",
+    }
+    assert result["settings_gate"] == {
         "status": "verified",
         "blocked_fields": [],
     }
@@ -816,7 +843,7 @@ def test_all_intermediary_env_unset_blocks_filling_and_returns_gate(monkeypatch)
             "settings.intermediary.phone",
         ],
     }
-    assert any("取次者の固定環境変数5件" in warning for warning in result["warnings"])
+    assert any("取次者の組織設定5件" in warning for warning in result["warnings"])
 
 
 def test_partial_intermediary_env_blocks_without_exposing_value(monkeypatch):
@@ -874,6 +901,166 @@ def test_intermediary_env_values_are_trimmed(monkeypatch):
         "organization": "試験行政書士法人",
         "phone": "0312345678",
     }
+
+
+def test_application_data_uses_org_settings_before_env(monkeypatch):
+    monkeypatch.setenv("INTERMEDIARY_NAME", "環境　太郎")
+    settings = {
+        "intermediary": {
+            "name": "組織　花子",
+            "postal_code": "６３１-０８５５",
+            "address": "奈良県奈良市宝来4丁目13番7号",
+            "organization": "太田行政書士事務所",
+            "phone": "0742-40-5620",
+        },
+        "receiving_method": {"notification_email": "promot1@gold.ocn.ne.jp"},
+    }
+
+    result = build_application_data(
+        copy.deepcopy(CASE_DOC),
+        load_default_mapping(),
+        load_default_form_definitions(),
+        settings,
+    )
+
+    rows = {
+        row["canonical_path"]: row["fill_value"]
+        for row in result["rows"]
+        if row["canonical_path"].startswith(("settings.intermediary.", "settings.receiving_method."))
+    }
+    assert rows["settings.intermediary.name"] == "組織　花子"
+    assert rows["settings.intermediary.postal_code"] == "6310855"
+    assert rows["settings.intermediary.phone"] == "0742405620"
+    assert rows["settings.receiving_method.notification_email"] == "promot1@gold.ocn.ne.jp"
+    assert result["fillable"] is True
+
+
+def test_missing_org_notification_email_blocks_with_clear_field():
+    result = build_application_data(
+        copy.deepcopy(CASE_DOC),
+        load_default_mapping(),
+        load_default_form_definitions(),
+        {
+            "intermediary": {
+                "name": "組織　花子",
+                "postal_code": "6310855",
+                "address": "奈良県奈良市宝来4丁目13番7号",
+                "organization": "太田行政書士事務所",
+                "phone": "0742405620",
+            },
+            "receiving_method": {},
+        },
+    )
+
+    assert result["fillable"] is False
+    assert result["settings_gate"] == {
+        "status": "blocked",
+        "blocked_fields": ["settings.receiving_method.notification_email"],
+    }
+    assert any("通知送信用メールアドレス" in warning for warning in result["warnings"])
+
+
+def test_digits_transform_normalizes_full_width_numbers():
+    assert transform_value("０７４２-４０-５６２０", "digits") == "0742405620"
+
+
+def test_employment_insurance_transform_accepts_only_eleven_digits():
+    assert transform_value("2700-000000-0", "employment_insurance_office_number") == "27000000000"
+    assert transform_value("12345678901234", "employment_insurance_office_number") == ""
+
+
+def test_annual_sales_transform_converts_man_yen_to_yen():
+    assert transform_value("2,500万円", "annual_sales_jpy") == "25000000"
+    assert transform_value("1億2,345万円", "annual_sales_jpy") == "123450000"
+    assert transform_value("499,852百万円", "annual_sales_jpy") == "499852000000"
+    assert transform_value(250000000, "annual_sales_jpy") == "250000000"
+
+
+def test_annual_sales_uses_source_quote_unit_for_existing_case_data():
+    case_doc = copy.deepcopy(CASE_DOC)
+    case_doc["case_data"]["employer"] = {"annual_sales_jpy": 2500}
+    case_doc["field_metadata"] = {
+        "employer.annual_sales_jpy": {
+            "source_refs": [
+                {
+                    "document_id": "company_document",
+                    "page": 1,
+                    "text_quote": "2,500万円",
+                    "confidence": 0.9,
+                }
+            ],
+        }
+    }
+    settings = {
+        "intermediary": {
+            "name": "組織　花子",
+            "postal_code": "6310855",
+            "address": "奈良県奈良市宝来4丁目13番7号",
+            "organization": "太田行政書士事務所",
+            "phone": "0742405620",
+        },
+        "receiving_method": {"notification_email": "promot1@gold.ocn.ne.jp"},
+    }
+
+    result = build_application_data(
+        case_doc,
+        load_default_mapping(),
+        load_default_form_definitions(),
+        settings,
+    )
+
+    rows = {row["canonical_path"]: row["fill_value"] for row in result["rows"]}
+    assert rows["employer.annual_sales_jpy"] == "25000000"
+    assert build_display_case_data(
+        case_doc["case_data"],
+        settings,
+        case_doc["field_metadata"],
+    )["employer"]["annual_sales_jpy"] == "25000000"
+
+
+def test_annual_sales_source_quote_with_multiple_amounts_is_not_reinterpreted():
+    case_doc = copy.deepcopy(CASE_DOC)
+    case_doc["case_data"]["employer"] = {"annual_sales_jpy": 2500}
+    case_doc["field_metadata"] = {
+        "employer.annual_sales_jpy": {
+            "source_refs": [
+                {
+                    "document_id": "company_document",
+                    "page": 1,
+                    "text_quote": "資本金1,000万円 年間売上2,500万円",
+                }
+            ]
+        }
+    }
+
+    result = build_application_data(
+        case_doc,
+        load_default_mapping(),
+        load_default_form_definitions(),
+        {
+            "intermediary": {
+                "name": "組織　花子",
+                "postal_code": "6310855",
+                "address": "奈良県奈良市宝来4丁目13番7号",
+                "organization": "太田行政書士事務所",
+                "phone": "0742405620",
+            },
+            "receiving_method": {"notification_email": "promot1@gold.ocn.ne.jp"},
+        },
+    )
+
+    rows = {row["canonical_path"]: row["fill_value"] for row in result["rows"]}
+    assert rows["employer.annual_sales_jpy"] == "2500"
+
+
+def test_email_and_nationality_transforms_normalize_rasens_values():
+    assert transform_value(" Notice@Example.COM ", "email_lower_trim") == "notice@example.com"
+    assert transform_value("Nepal", "nationality_region") == "ネパール Nepal"
+
+
+def test_kanji_only_text_transform_skips_non_kanji_company_names():
+    assert transform_value("Shree Ram Trading", "kanji_only_text") == ""
+    assert transform_value("株式会社フジタ", "kanji_only_text") == "株式会社フジタ"
 
 
 @pytest.mark.parametrize("workflow_state", ["extracted", "needs_review", "ready_to_fill"])

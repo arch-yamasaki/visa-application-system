@@ -8,7 +8,7 @@
 
     email:  ログインメールアドレス(表示用)
     org_id: 所属組織。ケース・セッションはこの org_id 単位で分離する
-    role:   "admin" | "member" (現状は表示用。権限差はまだ持たせない)
+    role:   "admin" | "member" (`org_settings` の更新はadminのみ)
 """
 
 import os

@@ -151,17 +151,17 @@ MVPでは、RASENS入力で必ず選択が必要な一部項目を backend 側�
 
 `required` の意味は分けます。`rows[].required` は `form_definitions` 由来のRASENS入力制約を表し、業務上の不足や人手確認は `review.missing_items`, `review.validation_errors`, `manual_required` で表します。固定設定値で埋まる取次者は、Gemini抽出requiredにはしません。
 
-Chrome拡張への投入は、部分入力を基本許可します。RASENS上の必須項目が未入力でも、取得できた行は投入し、空欄はレビュー画面とRASENS画面で人が確認・補完します。`fillable=false` は `draft`、`extracting`、`failed` など、まだ投入対象にすべきでない workflow 状態を止めるために使います。ただし取次者固定設定は5項目を一体で扱うため、未設定・部分設定の場合は例外的に投入全体を止めます。
+Chrome拡張への投入は、部分入力を基本許可します。RASENS上の必須項目が未入力でも、取得できた行は投入し、空欄はレビュー画面とRASENS画面で人が確認・補完します。`fillable=false` は `draft`、`extracting`、`failed` など、まだ投入対象にすべきでない workflow 状態を止めるために使います。ただし組織共通の取次者5項目または通知送信用メールアドレスが欠ける場合は、例外的に投入全体を止めます。
 
-`intermediary` は取次者で、太田さん側の申請アカウントを持つ申請会社情報を固定設定から注入します。案件書類やGemini抽出から作る値ではありません。正本は Cloud Run 環境変数 `INTERMEDIARY_NAME`, `INTERMEDIARY_POSTAL_CODE`, `INTERMEDIARY_ADDRESS`, `INTERMEDIARY_ORGANIZATION`, `INTERMEDIARY_PHONE` の5件です。
+`settings.intermediary` は取次者、`settings.receiving_method` は受領方法と通知メールです。正本は Firestore `org_settings/{org_id}` で、案件書類やGemini抽出から作る値ではありません。受領方法は `メール Email` 固定、通知メールと再入力欄は1つの `notification_email` から生成します。
 
-本番では実値をrepoに書かず、Cloud Runの通常環境変数として設定します。認証情報ではないため、取次者情報にはSecret Managerを使いません。5件すべてに値がある場合だけ5行を生成し、0〜4件では部分入力せず `fillable=false` にします。値の形式はデプロイ時に確認します。Firestore の `settings.intermediary` は固定値を上書きできず、ケース更新APIも `settings` の保存を拒否します。
+`GET /org-settings` はmember/adminが参照でき、`PATCH /org-settings` はadminだけが変更できます。ケース更新APIは引き続き案件単位の `settings` 保存を拒否します。`/api` 経路では組織設定が未登録の場合は空設定として扱い、別組織の固定値が混ざらないよう `fillable=false` にします。従来の `INTERMEDIARY_*` 5環境変数fallbackは、直接 `application_data` 生成関数を呼ぶローカル検証用途だけに残します。
 
 ```bash
-gcloud run services update visa-app \
-  --region asia-northeast1 \
-  --project visa-codex-mvp \
-  --update-env-vars="INTERMEDIARY_NAME=<name>,INTERMEDIARY_POSTAL_CODE=<postal-code>,INTERMEDIARY_ADDRESS=<address>,INTERMEDIARY_ORGANIZATION=<organization>,INTERMEDIARY_PHONE=<phone>"
+.venv/bin/python scripts/manage_users.py org-settings set \
+  --org chuo-business --name '<取次者氏名>' --postal-code '<半角数字>' \
+  --address '奈良県奈良市宝来4丁目13番7号' --organization '<所属機関>' \
+  --phone '<半角数字>' --notification-email 'promot1@gold.ocn.ne.jp'
 ```
 
 有無系は、レビューUIやFirestore上で `true`, `"true"`, `"有"` のように表記が揺れても、`application-data` 生成時に同じ意味として扱います。これにより、`visible_when` を持つ条件付き項目が文字列/booleanの違いだけで消えないようにします。
@@ -178,6 +178,8 @@ gcloud run services update visa-app \
 | `contract_type` | `fixed term contract employee` | `雇用 Employment` |
 | `employment_period_type` | `fixed` | `定めあり Fixed` |
 | `education_country` | `TRIBHUVAN UNIVERSITY` | `外国 Foreign country` |
+| `annual_sales_jpy` | `2,500万円` | `25000000` |
+| `annual_sales_jpy` | `499,852百万円` | `499852000000` |
 | `education_level` | `Bachelor` | `大学 Bachelor` |
 | `major_field_university` | `Architectural Engineering` | `工学 Engineer` |
 | `sex_ja` | `male` | `男 Male` |

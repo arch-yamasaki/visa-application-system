@@ -25,6 +25,7 @@
       "field_name": "item[5].selectData",
       "field_id": "select_256101",
       "input_type": "select",
+      "transform": "nationality_region",
       "required": true
     },
     {
@@ -124,6 +125,7 @@
       "field_name": "item[13].textData",
       "field_id": "item_13_textData",
       "input_type": "text",
+      "transform": "digits",
       "required": true
     },
     {
@@ -148,6 +150,7 @@
       "field_name": "item[15].textData",
       "field_id": "switch_256111",
       "input_type": "text",
+      "transform": "digits",
       "required": false
     },
     {
@@ -160,6 +163,7 @@
       "field_name": "item[16].textData",
       "field_id": "switch_256112",
       "input_type": "text",
+      "transform": "digits",
       "required": false
     },
     {
@@ -1178,6 +1182,7 @@
       "field_name": "item[111].textData",
       "field_id": "switch_256207",
       "input_type": "text",
+      "transform": "kanji_only_text",
       "visible_when": [
         {
           "path": "applicant.has_employment_history",
@@ -1375,6 +1380,7 @@
       "field_name": "item[120].textData",
       "field_id": "switch_256216",
       "input_type": "text",
+      "transform": "kanji_only_text",
       "visible_when": [
         {
           "path": "applicant.has_employment_history",
@@ -1572,6 +1578,7 @@
       "field_name": "item[129].textData",
       "field_id": "switch_256225",
       "input_type": "text",
+      "transform": "kanji_only_text",
       "visible_when": [
         {
           "path": "applicant.has_employment_history",
@@ -1615,6 +1622,7 @@
       "field_name": "item[161].textData",
       "field_id": "item_161_textData",
       "input_type": "text",
+      "transform": "digits",
       "required": true
     },
     {
@@ -1639,6 +1647,7 @@
       "field_name": "item[163].textData",
       "field_id": "switch_256259",
       "input_type": "text",
+      "transform": "digits",
       "required": false
     },
     {
@@ -1651,6 +1660,7 @@
       "field_name": "item[164].textData",
       "field_id": "switch_256260",
       "input_type": "text",
+      "transform": "digits",
       "required": false
     },
     {
@@ -1676,6 +1686,7 @@
       "field_name": "item[168].textData",
       "field_id": "item_168_textData",
       "input_type": "text",
+      "transform": "digits",
       "source_page": "settings",
       "required": true
     },
@@ -1715,6 +1726,7 @@
       "field_name": "item[171].textData",
       "field_id": "switch_256267",
       "input_type": "text",
+      "transform": "digits",
       "source_page": "settings",
       "required": true
     },
@@ -1798,6 +1810,7 @@
       "field_name": "item[179].textData",
       "field_id": "switch_256275",
       "input_type": "text",
+      "transform": "employment_insurance_office_number",
       "required": false
     },
     {
@@ -1860,6 +1873,7 @@
       "field_name": "item[187].textData",
       "field_id": "item_187_textData",
       "input_type": "text",
+      "transform": "digits",
       "required": true
     },
     {
@@ -1884,6 +1898,7 @@
       "field_name": "item[189].textData",
       "field_id": "switch_256285",
       "input_type": "text",
+      "transform": "digits",
       "required": true
     },
     {
@@ -1909,7 +1924,7 @@
       "field_name": "item[191].textData",
       "field_id": "switch_256287",
       "input_type": "text",
-      "transform": "digits",
+      "transform": "annual_sales_jpy",
       "required": true
     },
     {
@@ -1986,6 +2001,47 @@
       "field_name": "item[210].textData",
       "field_id": "switch_256306",
       "input_type": "textarea",
+      "required": true
+    },
+    {
+      "canonical_id": "receiving_method.method",
+      "value_path": "settings.receiving_method.method",
+      "form_order": 292,
+      "display_no": "",
+      "section": "受領方法等",
+      "label": "在留資格認定証明書の受領方法",
+      "field_name": "item[292].selectData",
+      "field_id": "",
+      "input_type": "radio",
+      "source_page": "settings",
+      "required": true
+    },
+    {
+      "canonical_id": "receiving_method.notification_email",
+      "value_path": "settings.receiving_method.notification_email",
+      "form_order": 293,
+      "display_no": "",
+      "section": "受領方法等",
+      "label": "通知送信用メールアドレス",
+      "field_name": "item[293].textData",
+      "field_id": "mailAddress_256389",
+      "input_type": "text",
+      "transform": "email_lower_trim",
+      "source_page": "settings",
+      "required": true
+    },
+    {
+      "canonical_id": "receiving_method.notification_email_confirmation",
+      "value_path": "settings.receiving_method.notification_email_confirmation",
+      "form_order": 294,
+      "display_no": "",
+      "section": "受領方法等",
+      "label": "通知送信用メールアドレス再入力",
+      "field_name": "item[294].textData",
+      "field_id": "mailAddress_256390",
+      "input_type": "text",
+      "transform": "email_lower_trim",
+      "source_page": "settings",
       "required": true
     }
   ]

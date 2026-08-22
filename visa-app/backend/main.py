@@ -6,6 +6,7 @@ import json
 import logging
 import mimetypes
 import os
+import re
 import subprocess
 import tempfile
 import time
@@ -27,7 +28,7 @@ from fastapi.staticfiles import StaticFiles
 from google.cloud import firestore, storage
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud import run_v2
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from auth import AuthUser, require_user
 from extractors.anchor_resolver import anchor_coverage, resolve_anchors, sync_bbox_anchors
@@ -40,6 +41,7 @@ from extractors.types import ExtractionResult
 from application_data import (
     build_display_case_data,
     build_application_data as build_application_data_response,
+    clean_application_settings,
     load_default_form_definitions,
     load_default_mapping,
 )
@@ -147,6 +149,23 @@ class ExtractRequest(BaseModel):
     scoped: bool = True  # True: スコープ別並列抽出（新方式）、False: 1回呼び出し（後方互換）
 
 
+class OrgIntermediarySettings(BaseModel):
+    name: str = ""
+    postal_code: str = ""
+    address: str = ""
+    organization: str = ""
+    phone: str = ""
+
+
+class OrgReceivingSettings(BaseModel):
+    notification_email: str = ""
+
+
+class OrgSettingsRequest(BaseModel):
+    intermediary: OrgIntermediarySettings = Field(default_factory=OrgIntermediarySettings)
+    receiving_method: OrgReceivingSettings = Field(default_factory=OrgReceivingSettings)
+
+
 def _case_summary(data: dict) -> dict:
     case_data = data.get("case_data") or {}
     applicant = case_data.get("applicant") if isinstance(case_data, dict) else {}
@@ -204,6 +223,97 @@ def _set_value_at_path(data: dict, path: str, value) -> None:
             current[part] = child
         current = child
     current[parts[-1]] = copy.deepcopy(value)
+
+
+def _require_admin(user: AuthUser) -> None:
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin role required")
+
+
+def _org_settings_ref(user: AuthUser):
+    return db.collection("org_settings").document(user.org_id)
+
+
+def _empty_org_settings(user: AuthUser) -> dict:
+    return {
+        "org_id": user.org_id,
+        "intermediary": {
+            "name": "",
+            "postal_code": "",
+            "address": "",
+            "organization": "",
+            "phone": "",
+        },
+        "receiving_method": {
+            "method": "メール Email",
+            "notification_email": "",
+        },
+        "updated_at": None,
+        "updated_by_uid": None,
+        "can_update": user.role == "admin",
+    }
+
+
+def _load_org_application_settings(user: AuthUser) -> dict:
+    doc = _org_settings_ref(user).get()
+    if not doc.exists:
+        return {}
+    return clean_application_settings(doc.to_dict())
+
+
+def _org_settings_response(user: AuthUser) -> dict:
+    doc = _org_settings_ref(user).get()
+    data = doc.to_dict() if doc.exists else None
+    response = _empty_org_settings(user)
+    if not isinstance(data, dict):
+        return response
+
+    response["updated_at"] = data.get("updated_at")
+    response["updated_by_uid"] = data.get("updated_by_uid")
+    intermediary = data.get("intermediary")
+    if isinstance(intermediary, dict):
+        response["intermediary"].update({
+            key: str(intermediary.get(key, "")).strip()
+            for key in response["intermediary"]
+        })
+    receiving = clean_application_settings(data).get("receiving_method")
+    if isinstance(receiving, dict):
+        response["receiving_method"].update({
+            "method": receiving["method"],
+            "notification_email": receiving["notification_email"],
+        })
+    elif isinstance(data.get("receiving_method"), dict):
+        email = str(data["receiving_method"].get("notification_email", "")).strip()
+        response["receiving_method"]["notification_email"] = email.lower()
+    return response
+
+
+def _validate_org_settings(body: OrgSettingsRequest) -> dict:
+    intermediary = {
+        key: str(getattr(body.intermediary, key)).strip()
+        for key in ("name", "postal_code", "address", "organization", "phone")
+    }
+    missing = [key for key, value in intermediary.items() if not value]
+    notification_email = body.receiving_method.notification_email.strip().lower()
+    if not notification_email:
+        missing.append("receiving_method.notification_email")
+    if missing:
+        raise HTTPException(status_code=400, detail=f"Missing settings: {', '.join(missing)}")
+    if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", notification_email):
+        raise HTTPException(status_code=400, detail="Invalid notification email")
+    for field in ("postal_code", "phone"):
+        if not re.fullmatch(r"[0-9]+", intermediary[field]):
+            raise HTTPException(
+                status_code=400,
+                detail=f"intermediary.{field} must contain half-width digits only",
+            )
+    return {
+        "intermediary": intermediary,
+        "receiving_method": {
+            "method": "メール Email",
+            "notification_email": notification_email,
+        },
+    }
 
 
 def _merge_extracted_case_data(
@@ -309,6 +419,35 @@ def _get_session(session_id: str, user: AuthUser) -> dict:
     if data is None or data.get("org_id") != user.org_id:
         raise HTTPException(status_code=404, detail="Session not found")
     return data
+
+
+@api.get("/me")
+def get_me(user: AuthUser = Depends(require_user)):
+    return {
+        "uid": user.uid,
+        "email": user.email,
+        "org_id": user.org_id,
+        "role": user.role,
+    }
+
+
+@api.get("/org-settings")
+def get_org_settings(user: AuthUser = Depends(require_user)):
+    return _org_settings_response(user)
+
+
+@api.patch("/org-settings")
+def update_org_settings(body: OrgSettingsRequest, user: AuthUser = Depends(require_user)):
+    _require_admin(user)
+    settings = _validate_org_settings(body)
+    payload = {
+        "org_id": user.org_id,
+        **settings,
+        "updated_at": _now_iso(),
+        "updated_by_uid": user.uid,
+    }
+    _org_settings_ref(user).set(payload)
+    return _org_settings_response(user)
 
 
 @api.post("/sessions")
@@ -562,7 +701,11 @@ def get_case(case_id: str, user: AuthUser = Depends(require_user)):
     data = _get_case(case_id, user)
     if data.get("case_data"):
         data["canonical_case_data"] = copy.deepcopy(data["case_data"])
-        data["case_data"] = build_display_case_data(data["case_data"])
+        data["case_data"] = build_display_case_data(
+            data["case_data"],
+            _load_org_application_settings(user),
+            data.get("field_metadata"),
+        )
     return data
 
 
@@ -1407,6 +1550,7 @@ def get_application_data(case_id: str, user: AuthUser = Depends(require_user)):
             data,
             load_default_mapping(),
             load_default_form_definitions(),
+            _load_org_application_settings(user),
         )
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc

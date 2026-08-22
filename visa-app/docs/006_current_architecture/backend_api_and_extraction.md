@@ -54,6 +54,7 @@ Gemini抽出は `case_data` を value-only の canonical data として保存し
 
 ```text
 Firestore case_data
+  + Firestore org_settings/{org_id}
   + backend/data/mappings/rasens_offer_mapping_v2.json
   + backend/data/form_definitions/rasens_offer_fields.json
   + 固定値/推測値
@@ -64,10 +65,11 @@ Firestore case_data
 
 ```text
 fillable = workflow_state in extracted / needs_review / ready_to_fill
-           and intermediary env is 5/5 configured
+           and intermediary org settings is 5/5 configured
+           and notification email is configured
 ```
 
-一般項目の必須不足や空欄は `fillable=false` の理由にしません。空値の mapping は rows から落ち、取得できた行だけがChrome拡張で部分入力されます。ただし取次者環境変数5件は一体で扱い、1件でも欠けている場合は `fillable=false` にします。
+一般項目の必須不足や空欄は `fillable=false` の理由にしません。空値の mapping は rows から落ち、取得できた行だけがChrome拡張で部分入力されます。ただし組織共通の取次者5項目と通知メールは一体で確認し、欠けている場合は `fillable=false` にします。受領方法は `メール Email` 固定で、通知メール再入力欄にも同じ値を生成します。`/api` 経路では Firestore `org_settings/{org_id}` だけを正本にし、未登録時にグローバル環境変数へfallbackしません。
 
 ## 保存データと表示データ
 

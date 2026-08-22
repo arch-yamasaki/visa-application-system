@@ -19,10 +19,17 @@ Firebase Authentication のユーザーと、認可に使う Firestore の users
 
     # 既存の cases / sessions に org_id を付与 (認証導入時の一回だけ)
     .venv/bin/python scripts/manage_users.py backfill --org aicx
+
+    # 組織設定を登録（実行時にFirestoreへ書き込む）
+    .venv/bin/python scripts/manage_users.py org-settings set \
+        --org chuo-business --name '<取次者氏名>' --postal-code '<半角数字>' \
+        --address '奈良県奈良市宝来4丁目13番7号' --organization '<所属機関>' \
+        --phone '<半角数字>' --notification-email 'promot1@gold.ocn.ne.jp'
 """
 
 import argparse
 import os
+import re
 from datetime import datetime, timezone
 
 import firebase_admin
@@ -74,6 +81,57 @@ def backfill(db: firestore.Client, args: argparse.Namespace) -> None:
         print(f"{name}: {count} docs backfilled with org_id={args.org}")
 
 
+def set_org_settings(db: firestore.Client, args: argparse.Namespace) -> None:
+    notification_email = args.notification_email.strip().lower()
+    values = {
+        "name": args.name.strip(),
+        "postal_code": args.postal_code.strip(),
+        "address": args.address.strip(),
+        "organization": args.organization.strip(),
+        "phone": args.phone.strip(),
+    }
+    missing = [key for key, value in values.items() if not value]
+    if not notification_email:
+        missing.append("notification_email")
+    if missing:
+        raise SystemExit(f"missing org settings: {', '.join(missing)}")
+    for field in ("postal_code", "phone"):
+        if not re.fullmatch(r"[0-9]+", values[field]):
+            raise SystemExit(f"{field} must contain half-width digits only")
+    if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", notification_email):
+        raise SystemExit("invalid notification_email")
+
+    payload = {
+        "org_id": args.org,
+        "intermediary": values,
+        "receiving_method": {
+            "method": "メール Email",
+            "notification_email": notification_email,
+        },
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "updated_by_uid": "manage_users.py",
+    }
+    db.collection("org_settings").document(args.org).set(payload)
+    print(f"org_settings set: org={args.org} notification_email={notification_email}")
+
+
+def list_org_settings(db: firestore.Client, args: argparse.Namespace) -> None:
+    if args.org:
+        docs = [db.collection("org_settings").document(args.org).get()]
+    else:
+        docs = list(db.collection("org_settings").stream())
+    for doc in docs:
+        if not doc.exists:
+            continue
+        settings = doc.to_dict()
+        receiving = settings.get("receiving_method") or {}
+        print(
+            f"{settings.get('org_id', args.org or '')}  "
+            f"organization={settings.get('intermediary', {}).get('organization', '')}  "
+            f"notification_email={receiving.get('notification_email', '')}"
+        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -91,6 +149,27 @@ def main() -> None:
     backfill_parser = subparsers.add_parser("backfill", help="既存データに org_id を付与する")
     backfill_parser.add_argument("--org", required=True)
     backfill_parser.set_defaults(func=backfill)
+
+    org_settings_parser = subparsers.add_parser("org-settings", help="組織設定を管理する")
+    org_settings_commands = org_settings_parser.add_subparsers(dest="org_settings_command", required=True)
+
+    org_settings_set = org_settings_commands.add_parser("set", help="組織設定を登録・更新する")
+    org_settings_set.add_argument("--org", required=True)
+    org_settings_set.add_argument("--name", required=True, help="取次者氏名")
+    org_settings_set.add_argument("--postal-code", required=True, help="半角数字のみ")
+    org_settings_set.add_argument("--address", required=True, help="取次者住所")
+    org_settings_set.add_argument("--organization", required=True, help="取次者所属機関")
+    org_settings_set.add_argument("--phone", required=True, help="半角数字のみ")
+    org_settings_set.add_argument(
+        "--notification-email",
+        required=True,
+        help="通知送信用メールアドレス",
+    )
+    org_settings_set.set_defaults(func=set_org_settings)
+
+    org_settings_list = org_settings_commands.add_parser("list", help="組織設定を一覧する")
+    org_settings_list.add_argument("--org")
+    org_settings_list.set_defaults(func=list_org_settings)
 
     args = parser.parse_args()
     firebase_admin.initialize_app(options={"projectId": GCP_PROJECT})

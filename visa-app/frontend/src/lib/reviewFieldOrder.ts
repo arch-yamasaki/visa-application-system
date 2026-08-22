@@ -117,6 +117,9 @@ const REVIEW_FIELD_ORDER: Record<string, number> = {
   "employment.monthly_salary": 201,
   "employment.job_category_primary": 205,
   "employment.activity_details": 210,
+  "settings.receiving_method.method": 292,
+  "settings.receiving_method.notification_email": 293,
+  "settings.receiving_method.notification_email_confirmation": 294,
 }
 
 export function getReviewFieldOrder(path: string): number {

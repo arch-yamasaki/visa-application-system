@@ -170,8 +170,17 @@ case_data のキーも必ず canonical v2 path とすること。旧path互換�
 - schemaでINTEGERに指定されている `value` は JSON number（例: `0`, `1`, `3`）で出力すること。`"0"`、`"3"` のような文字列は禁止。
 - BOOLEAN / INTEGER の値が書類から見つからない場合は、各項目の既定方針に従い `false` または `0` を出力すること。空文字やnullは使わないこと。この場合は source_ref を空にし、review に既定値であることを記録すること。
 - `employer.corporate_number`: 法人番号は13桁の数字のみ（ハイフン・スペースは除去）。元書類にハイフン付きで記載されている場合は除去して数字のみにすること。
+- `applicant.name_roman`: 旅券の顔写真側の身分事項欄(VIZ)にある氏名を、姓→名の順で半角英字大文字スペース区切りにすること。例: `BHANDARI ASHWIN`。MRZだけを正本にしないこと。
+- `applicant.birth_place`: 出生地だけを抽出し、本国住所や現住所と取り違えないこと。国名と都市・地域名が資料上で確認できる場合は `国名 都市・地域名` の順にすること。資料にない住所要素は補わないこと。
+- `applicant.home_country_address`: 本国の現住所・居住地を抽出し、出生地や日本の勤務先住所と取り違えないこと。資料にない住所要素は補わないこと。
+- `applicant.japan_contact.postal_code`, `applicant.japan_contact.phone`, `applicant.japan_contact.mobile`, `employer.postal_code`, `employer.phone`, `employer.employment_insurance_office_number`: 半角数字のみ。ハイフン、空白、括弧は除去すること。
+- `employer.employment_insurance_office_number`: 労働保険番号ではなく、11桁の雇用保険適用事業所番号を抽出すること。14桁の労働保険番号しかない場合は空文字にし、この欄へ転記しないこと。
+- `employer.name`: 日本の所属機関について日本語の商号・法人名が資料にある場合は、その漢字・かな表記を優先すること。英訳名を作らないこと。
+- `employer.annual_sales_jpy`: 円単位の金額として出力すること。資料が万円表記なら10000倍して円換算すること。
+- `entry_plan.visa_application_location`: 査証申請予定地は国名ではなく在外公館所在地の都市名にすること。例: ネパールは `Kathmandu`。
 - `applicant.family.japan_relatives_or_cohabitants`: 在日親族・同居者がいる場合だけ最大3件まで出力すること。いなければ `has_japan_relatives_or_cohabitants` は `false`、配列は空にすること。
 - `applicant.employment_history`: 職歴がある場合だけ最大3件まで出力すること。いなければ `has_employment_history` は `false`、配列は空にすること。会社名の現地語表記は `company_name_local` を使うこと。
+- `applicant.employment_history[].company_name_local`: RASENSの「漢字表記」欄に入る値なので、漢字を含む勤務先名が分かる場合だけ出力し、英字のみ・現地文字のみの場合は空文字にすること。
 - `start_month_unknown` / `end_month_unknown`: 月まで分かれば `false`、年だけ分かる場合は `true` とすること。
 
 ## 出力フォーマット
@@ -210,6 +219,10 @@ _SCOPE_INSTRUCTIONS: dict[str, str] = {
         "`applicant.name_roman` と `applicant.birth_date` は、有効な旅券身分事項ページを"
         "一意に特定できる場合、その顔写真側の身分事項欄(VIZ)の表記を優先し、"
         "source_refのdocument_idとpageを必ず同じ候補ページにしてください。"
+        "`applicant.name_roman` は姓→名の順で半角英字大文字スペース区切りにし、"
+        "例として `BHANDARI ASHWIN` の形式にしてください。"
+        "`applicant.birth_place` は出生地、`applicant.home_country_address` は本国の現住所として区別し、"
+        "資料にない住所要素を補わないでください。"
         "`applicant.birth_date.value` は原本が `02 JAN 1990` 等の表記でも必ず"
         "`1990-01-02` のようなYYYY-MM-DDに正規化し、source_ref.text_quoteは"
         "日付の英字月や区切り記号を含め原文のまま変更しないでください。"
@@ -220,6 +233,8 @@ _SCOPE_INSTRUCTIONS: dict[str, str] = {
         "以下の書類から入国・在留予定に関する情報を抽出してください。"
         "入国目的、主たる活動、入国予定日、上陸予定港、滞在予定期間、"
         "査証申請予定地、同伴者の有無、在日親族・同居者の有無と明細を抽出してください。"
+        "査証申請予定地は国名ではなく在外公館所在地の都市名で出力してください。"
+        "例として、ネパールの場合は `Kathmandu` としてください。"
         "在日親族・同居者は有無と明細を最大3件まで抽出し、いなければ無・空配列にしてください。"
         "上陸予定港は勤務先所在地から最も自然な空港を推測してください。"
         "滞在予定期間は根拠がなければ年数5、月数0を基本としてください。"
@@ -233,6 +248,11 @@ _SCOPE_INSTRUCTIONS: dict[str, str] = {
         "以下の書類から所属機関情報を抽出してください。"
         "canonical v2 の `employer.*` として、会社名、法人番号、支店名、雇用保険番号、"
         "業種、所在地、電話番号、資本金、売上高、従業員数、外国人職員数、技能実習生数を抽出してください。"
+        "`employer.employment_insurance_office_number` は11桁の雇用保険適用事業所番号だけを抽出し、"
+        "14桁の労働保険番号は転記しないでください。半角数字のみで出力してください。"
+        "日本語の商号・法人名がある場合は `employer.name` にその表記を優先し、英訳名を作らないでください。"
+        "売上高が万円表記なら `employer.annual_sales_jpy` は10000倍した円単位で出力してください。"
+        "郵便番号・電話番号も半角数字のみで出力してください。"
     ),
     "employment": (
         "以下の書類から雇用条件・活動内容を抽出してください。"
@@ -253,6 +273,8 @@ _SCOPE_INSTRUCTIONS: dict[str, str] = {
         "`applicant.employment_history[]` として抽出してください。"
         "職歴明細は最大3件まで、なければ `has_employment_history` を false、"
         "`employment_history` を空配列にしてください。"
+        "`company_name_local` は漢字を含む勤務先名が分かる場合だけ出力し、"
+        "英字のみ・現地文字のみの場合は空文字にしてください。"
     ),
     "review": (
         "以下の抽出済みデータと原本書類を照合し、レビューしてください。"
@@ -290,6 +312,14 @@ NG: `{"value": "250000", "source_ref": {"document_id": "doc_offer", "page": 1, "
 - BOOLEAN / INTEGER の値が書類から見つからない場合は、各項目の既定方針に従い `false` または `0` を出力すること。空文字やnullは使わないこと。この場合は source_ref を空にし、review に既定値であることを記録すること。
 - 生年月日（`applicant.birth_date`）: valueは必ず4桁年の`YYYY-MM-DD`。原本が`DD MMM YYYY`、`DD-MMM-YYYY`等でもvalueだけ正規化し、source_ref.text_quoteは原文表記をそのまま引用すること。2桁年や解釈が曖昧な数値日付を推測しないこと。
 - 法人番号（`employer.corporate_number`）: 13桁の数字のみ。ハイフン・スペースは除去すること。
+- 氏名（`applicant.name_roman`）: 旅券VIZの表記を優先し、姓→名の順で半角英字大文字スペース区切り。例: `BHANDARI ASHWIN`。
+- 出生地（`applicant.birth_place`）と本国住所（`applicant.home_country_address`）: 出生地と現住所を取り違えず、資料にない住所要素を補わないこと。
+- 郵便番号・電話番号・雇用保険適用事業所番号: 半角数字のみ。ハイフン・空白・括弧を除去すること。
+- 査証申請予定地（`entry_plan.visa_application_location`）: 国名ではなく在外公館所在地の都市名。ネパールは `Kathmandu`。
+- 雇用保険適用事業所番号（`employer.employment_insurance_office_number`）: 11桁だけを出力する。14桁の労働保険番号は転記しないこと。
+- 所属機関名（`employer.name`）: 日本語の商号・法人名が資料にある場合はその表記を優先し、英訳名を作らないこと。
+- 年間売上（`employer.annual_sales_jpy`）: 円単位。万円表記は10000倍して円換算すること。
+- 職歴の勤務先名称漢字表記（`applicant.employment_history[].company_name_local`）: 漢字を含む勤務先名が分かる場合だけ出力し、英字のみ・現地文字のみの場合は空文字。
 - 法人番号の有無（`employer.has_corporate_number`）: 法人番号が読み取れる場合は `true`、読み取れない場合は `false`。
 - 契約形態（`employment.contract_type`）: 雇用、委任、請負、その他のいずれかで出力すること。Offer Letter等の雇用契約は雇用とする。
 - 就労予定期間（`employment.employment_period_type`, `employment.employment_period_years`, `employment.employment_period_months`）: 今日の日付と雇用開始日・契約終了日から推測する。明確な終了日がなければ `有期`、年数 `1`、月数 `0` を基本とする。

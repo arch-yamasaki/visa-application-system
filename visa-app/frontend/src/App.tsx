@@ -4,6 +4,7 @@ import UploadPage from './pages/UploadPage'
 import ReviewPage from './pages/ReviewPage'
 import LoginPage from './pages/LoginPage'
 import ExtensionAuthPage from './pages/ExtensionAuthPage'
+import OrgSettingsPage from './pages/OrgSettingsPage'
 import { isDemoMode } from './api/client'
 import { useAuthStore } from './store/authStore'
 
@@ -26,11 +27,15 @@ function RequireAuth() {
 function HeaderUser() {
   const user = useAuthStore((s) => s.user)
   const signOut = useAuthStore((s) => s.signOut)
+  const location = useLocation()
 
   if (!user) return null
   return (
     <div className="flex items-center gap-3 text-xs text-gray-500">
       <span>{user.email}</span>
+      <Link to={`/settings${location.search}`} className="hover:text-blue-600">
+        組織設定
+      </Link>
       <button
         onClick={() => void signOut()}
         className="px-2 py-1 border border-gray-300 rounded hover:bg-gray-50"
@@ -58,6 +63,7 @@ export default function App() {
           <Route path="/extension-auth" element={<ExtensionAuthPage />} />
           <Route element={<RequireAuth />}>
             <Route path="/" element={<CaseListPage />} />
+            <Route path="/settings" element={<OrgSettingsPage />} />
             <Route path="/cases/:caseId/upload" element={<UploadPage />} />
             <Route path="/cases/:caseId/review" element={<ReviewPage />} />
           </Route>

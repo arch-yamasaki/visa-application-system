@@ -205,10 +205,13 @@ export interface ReceivingMethod {
   method?: string
   postal_code?: string
   address?: string
+  notification_email?: string
+  notification_email_confirmation?: string
 }
 
 export interface Settings {
   intermediary?: Intermediary
+  receiving_method?: ReceivingMethod
 }
 
 export interface Intermediary {

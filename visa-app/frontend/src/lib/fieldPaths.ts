@@ -56,6 +56,9 @@ export const REVIEW_FIELD_PATHS = [
   'settings.intermediary.postal_code',
   'settings.intermediary.address',
   'settings.intermediary.phone',
+  'settings.receiving_method.method',
+  'settings.receiving_method.notification_email',
+  'settings.receiving_method.notification_email_confirmation',
 ] as const
 
 const sectionRules: [RegExp, string][] = [
@@ -68,6 +71,7 @@ const sectionRules: [RegExp, string][] = [
   [/^employment\./, '雇用・活動内容'],
   [/^(proxy|receiving_method)\./, '代理人・受領方法'],
   [/^settings\.intermediary\./, '取次者'],
+  [/^settings\.receiving_method\./, '受領方法等'],
   [/^(supporting_documents|assessments)\./, '審査'],
 ]
 
@@ -81,6 +85,7 @@ export const SECTION_ORDER = [
   '雇用・活動内容',
   '代理人・受領方法',
   '取次者',
+  '受領方法等',
   '審査',
 ] as const
 
@@ -234,6 +239,9 @@ const labelOverrides: Record<string, string> = {
   'settings.intermediary.postal_code': '取次者 郵便番号',
   'settings.intermediary.address': '取次者 住所',
   'settings.intermediary.phone': '取次者 電話番号',
+  'settings.receiving_method.method': '受領方法',
+  'settings.receiving_method.notification_email': '通知送信用メールアドレス',
+  'settings.receiving_method.notification_email_confirmation': '通知送信用メールアドレス再入力',
 
   // 添付書類（配列項目）
   'supporting_documents.document_type': '書類種別',

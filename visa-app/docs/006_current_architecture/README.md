@@ -45,7 +45,7 @@ draft -> extracting -> extracted
 
 `needs_review` と `ready_to_fill` は旧データ互換として読むことがありますが、UIの正規状態として増やしません。
 
-Chrome拡張の部分入力は許可します。一般項目の必須不足、warning、レビュー未完了では `fillable=false` にせず、取得できた `rows` だけを投入します。例外として、全案件共通の取次者環境変数5件が揃っていない場合は部分的な固定情報を入力しないため `fillable=false` にします。
+Chrome拡張の部分入力は許可します。一般項目の必須不足、warning、レビュー未完了では `fillable=false` にせず、取得できた `rows` だけを投入します。例外として、組織共通の取次者5項目と通知送信用メールアドレスが揃っていない場合は部分的な固定情報を入力しないため `fillable=false` にします。`/api` 経路では Firestore `org_settings/{org_id}` を正本とし、未登録時にグローバル環境変数へfallbackしません。
 
 ## ファイル構成
 
