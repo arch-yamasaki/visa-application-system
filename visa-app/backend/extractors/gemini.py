@@ -1,4 +1,4 @@
-"""Gemini 3 Flash structured extraction for visa application documents."""
+"""Gemini 3.7 Flash structured extraction for visa application documents."""
 
 import json
 import logging
@@ -55,8 +55,9 @@ EXTRACTION_SCOPES = [
     "employment",
 ]
 
-MODEL_NAME = os.environ.get("GEMINI_MODEL", "gemini-3-flash-preview")
-BBOX_MODEL_NAME = os.environ.get("GEMINI_BBOX_MODEL", "gemini-3-flash-preview")
+DEFAULT_GEMINI_MODEL = "gemini-3.7-flash"
+MODEL_NAME = os.environ.get("GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
+BBOX_MODEL_NAME = os.environ.get("GEMINI_BBOX_MODEL", DEFAULT_GEMINI_MODEL)
 GEMINI_HTTP_TIMEOUT_MS = int(os.environ.get("GEMINI_HTTP_TIMEOUT_MS", "300000"))
 GEMINI_THINKING_LEVEL = os.environ.get("GEMINI_THINKING_LEVEL", "LOW").upper()
 PASSPORT_IDENTITY_MIN_CONFIDENCE = 0.8
@@ -147,7 +148,6 @@ def get_bboxes_for_page(
         contents=[image_part, prompt],
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
-            temperature=0.0,
             thinking_config=_thinking_config(),
         ),
     )
@@ -202,7 +202,6 @@ def select_anchor_cells(
         contents=[prompt],
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
-            temperature=0.0,
             thinking_config=_thinking_config(),
         ),
     )
@@ -236,7 +235,6 @@ def _call_gemini(
     """
     config_kwargs = dict(
         response_mime_type="application/json",
-        temperature=0.0,
         max_output_tokens=65536,
     )
     thinking_config = _thinking_config()

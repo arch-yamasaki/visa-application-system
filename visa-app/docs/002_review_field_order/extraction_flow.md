@@ -130,7 +130,7 @@ bbox locator はPDF由来の `source_refs` に対して事前実行します。`
 
 structured output は JSON Schema の subset を使います。schemaが大きい、深い、制約が多い場合は、schemaを単純化することが推奨されています。
 
-現在のコードは `max_output_tokens=65536` で、ローカル確認でも `gemini-3-flash-preview`, `gemini-3.5-flash`, `gemini-2.5-flash` の `output_token_limit` は 65536 でした。したがって、単純に設定値が小さすぎる可能性は低いです。
+現在の既定モデルは `gemini-3.7-flash` です。移行ガイドに合わせて `temperature`, `top_p`, `top_k` は送信せず、`max_output_tokens=65536` は維持しています。
 
 一方で、全フィールドに `value + source` を必須で返させるため、出力JSONは大きくなります。`finish_reason=MAX_TOKENS` や usage metadata はログで確認します。
 

@@ -35,7 +35,7 @@
 6. RASENS画面上の番号は `画面番号（参考）` として扱い、技術的なIDや一意キーにはしない。
 7. `case_data` の top-level section は増やしすぎない。申請人に属する旅券・履歴・家族・学歴・資格は `applicant.*` に寄せる。
 8. 所属機関そのものは `employer.*`、今回の契約・就労条件・活動内容は `employment.*` に分ける。
-9. `proxy` は代理人、`intermediary` は取次者として扱う。取次者は太田さん側の申請アカウントを持つ申請会社情報を固定設定値として注入する。
+9. `proxy` は代理人、`intermediary` は取次者として扱う。取次者は Firestore `org_settings/{org_id}` の組織設定から注入する。
 10. RASENS mapping は274行台帳を正とし、MVP対象だけを自動投入する。`transform` と `visible_when` は backend だけが処理する。
 11. 旧path互換は作らない。既存Firestoreデータは削除・再抽出で対応する。
 12. 実装内部の配列pathは `applicant.education.0.school_name` の dot index 形式に統一する。

@@ -6,6 +6,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from extractors.gemini import (
+    BBOX_MODEL_NAME,
+    DEFAULT_GEMINI_MODEL,
+    MODEL_NAME,
     _build_ocr_context,
     _call_gemini,
     _extract_field_metadata,
@@ -21,6 +24,8 @@ from extractors.gemini import (
     extract_pdf_direct,
     extract_text_only,
     extract_with_images,
+    get_bboxes_for_page,
+    select_anchor_cells,
 )
 from application_data import build_application_data
 from extractors.prompt_template import build_extraction_prompt, build_scoped_prompt
@@ -120,6 +125,12 @@ def _mock_gemini_response(raw: dict):
     candidate.finish_reason = "STOP"
     response.candidates = [candidate]
     return response
+
+
+def _assert_sampling_parameters_omitted(config):
+    config_values = config.model_dump(exclude_none=True)
+    for parameter in ("temperature", "top_p", "top_k"):
+        assert parameter not in config_values
 
 
 def _field_value(value, quote=None, confidence=0.95):
@@ -288,6 +299,65 @@ class TestBuildOcrContext:
 
 
 class TestCallGemini:
+    def test_default_model_is_gemini_37_flash(self):
+        assert DEFAULT_GEMINI_MODEL == "gemini-3.7-flash"
+
+    def test_omits_sampling_parameters(self):
+        client = MagicMock()
+        client.models.generate_content.return_value = _mock_gemini_response({})
+
+        _call_gemini(client, [], "prompt")
+
+        call = client.models.generate_content.call_args
+        assert call.kwargs["model"] == MODEL_NAME
+        _assert_sampling_parameters_omitted(call.kwargs["config"])
+
+    @patch("extractors.gemini.types.Part.from_bytes")
+    @patch("extractors.gemini._get_client")
+    def test_bbox_call_uses_configured_model_without_sampling_parameters(
+        self, mock_get_client, mock_from_bytes,
+    ):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.text = '{"candidate": [0, 0, 100, 100]}'
+        mock_client.models.generate_content.return_value = response
+        mock_get_client.return_value = mock_client
+        mock_from_bytes.return_value = "image_part"
+
+        get_bboxes_for_page(
+            b"image",
+            {"candidate": {"field_path": "applicant.name_roman", "locator_text": "TANAKA"}},
+        )
+
+        call = mock_client.models.generate_content.call_args
+        assert call.kwargs["model"] == BBOX_MODEL_NAME
+        _assert_sampling_parameters_omitted(call.kwargs["config"])
+
+    @patch("extractors.gemini._get_client")
+    def test_cell_selection_uses_configured_model_without_sampling_parameters(
+        self, mock_get_client,
+    ):
+        mock_client = MagicMock()
+        response = MagicMock()
+        response.text = '{"selection": null}'
+        mock_client.models.generate_content.return_value = response
+        mock_get_client.return_value = mock_client
+
+        select_anchor_cells(
+            "A1: TANAKA",
+            {
+                "selection": {
+                    "field_path": "applicant.name_roman",
+                    "text_quote": "TANAKA",
+                    "candidate_anchor_ids": ["A1"],
+                }
+            },
+        )
+
+        call = mock_client.models.generate_content.call_args
+        assert call.kwargs["model"] == BBOX_MODEL_NAME
+        _assert_sampling_parameters_omitted(call.kwargs["config"])
+
     def test_invalid_json_log_does_not_include_response_text(self, caplog):
         response = MagicMock()
         response.text = "\x00TANAKA TARO"

@@ -157,12 +157,7 @@ Chrome拡張への投入は、部分入力を基本許可します。RASENS上�
 
 `GET /org-settings` はmember/adminが参照でき、`PATCH /org-settings` はadminだけが変更できます。ケース更新APIは引き続き案件単位の `settings` 保存を拒否します。`/api` 経路では組織設定が未登録の場合は空設定として扱い、別組織の固定値が混ざらないよう `fillable=false` にします。従来の `INTERMEDIARY_*` 5環境変数fallbackは、直接 `application_data` 生成関数を呼ぶローカル検証用途だけに残します。
 
-```bash
-.venv/bin/python scripts/manage_users.py org-settings set \
-  --org chuo-business --name '<取次者氏名>' --postal-code '<半角数字>' \
-  --address '奈良県奈良市宝来4丁目13番7号' --organization '<所属機関>' \
-  --phone '<半角数字>' --notification-email 'promot1@gold.ocn.ne.jp'
-```
+`chuo-business` の現行値は `org_settings/chuo-business` を正本とし、adminがvisa-appの「組織設定」画面から変更します。以前に大阪の公開情報を基に検討した値は旧前提であり、現行設定には使用しません。実値はこの設計書へ複製せず、管理画面または `GET /org-settings` で確認します。
 
 有無系は、レビューUIやFirestore上で `true`, `"true"`, `"有"` のように表記が揺れても、`application-data` 生成時に同じ意味として扱います。これにより、`visible_when` を持つ条件付き項目が文字列/booleanの違いだけで消えないようにします。
 
@@ -216,7 +211,7 @@ Chrome拡張から削るもの:
 
 `proxy` は代理人として案件データから生成します。MVPでは勤務先会社情報を代理人欄の初期値として扱います。将来、人名の代理人担当者を分ける場合は `proxy.*` を明示保存します。
 
-`intermediary` は取次者です。太田さん側の申請アカウントを持つ申請会社情報を固定設定値として rows 生成時に注入し、Gemini抽出対象にはしません。
+`intermediary` は取次者です。Firestore `org_settings/{org_id}` の組織設定から rows 生成時に注入し、Gemini抽出対象にはしません。
 
 ## APIの扱い
 

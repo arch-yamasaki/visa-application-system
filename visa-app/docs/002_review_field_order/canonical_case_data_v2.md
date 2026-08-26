@@ -54,7 +54,7 @@ application_data rows
   "document_manifest": { "documents": [] },
   "extraction": {
     "engine": "gemini",
-    "model": "gemini-3-flash-preview",
+    "model": "gemini-3.7-flash",
     "run_id": "run_xxx",
     "raw_stored": false
   }
@@ -253,8 +253,8 @@ BOOLEAN / INTEGER の `value` には空文字やnullを使いません。書類�
 | `employer` | 所属機関そのもの | 会社属性。契約条件や職務内容とは分ける |
 | `employment` | 契約形態、就労期間、給与、役職、職種、活動内容詳細 | 今回その会社でどう働くか |
 | `proxy` | 代理人 | MVPでは勤務先会社情報を代理人欄の初期値として扱う。将来、人名の代理人担当者を分ける場合は `proxy.*` を明示保存する |
-| `intermediary` | 取次者 | 太田さん側の申請アカウントを持つ申請会社情報。固定設定値であり、Gemini抽出対象ではない |
-| `receiving_method` | 受領方法 | 初期MVPでは非表示でもよい |
+| `intermediary` | 取次者 | Firestore `org_settings/{org_id}` の組織設定。Gemini抽出対象ではない |
+| `receiving_method` | 受領方法 | Firestore `org_settings/{org_id}` の組織設定。受領方法は `メール Email` 固定 |
 
 ### entry_plan の注意
 
@@ -321,7 +321,7 @@ employment.activity_details
 
 `proxy` は在留資格認定証明書交付申請における代理人欄です。MVPでは勤務先会社情報を代理人欄の初期値として扱い、`proxy.name`, `proxy.postal_code`, `proxy.address`, `proxy.phone` を `employer.*` から生成します。人名の代理人担当者を分ける運用に変える場合は、企業マスターまたはケース入力で `proxy.*` を明示保存します。
 
-`intermediary` は取次者です。案件書類から抽出するものではなく、太田さん側の申請アカウントを持つ申請会社情報を固定設定値として使います。通常は `case_data` に保存せず、`application_data.rows` 生成時に設定から注入します。投入時点の再現性が必要な場合だけ、設定値のsnapshotを `case_data.intermediary.*` にコピーします。
+`intermediary` は取次者です。案件書類から抽出せず、Firestore `org_settings/{org_id}` の組織設定を `application_data.rows` 生成時に注入します。案件の `case_data` へコピーせず、組織設定の変更もadmin用の「組織設定」画面に集約します。
 
 ## required の扱い
 

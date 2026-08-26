@@ -81,7 +81,7 @@ canonical case_data
 | transform / visible_when | backend generator だけが処理する。Chrome拡張には残さない |
 | Chrome拡張 | `/application-data` の `rows` を取得し、RASENS DOMに入力するだけにする |
 | `proxy` | 代理人。受入企業側の担当者を案件ごとに確認する |
-| `intermediary` | 取次者。太田さん側の申請アカウントを持つ申請会社情報を固定設定値として使う |
+| `intermediary` | 取次者。Firestore `org_settings/{org_id}` の組織設定から注入する |
 | review display | Phase 1は canonical section順。Phase 2で `review_field_catalog` / RASENS順へ寄せる |
 | review scope | reviewable項目中心。移行中だけ未分類canonical項目を補助表示する |
 | golden split | `case_data.golden` は canonical v2 正解、`application_data.golden` はbackend generator期待出力として分ける |
@@ -264,7 +264,7 @@ Tasks:
 - scopeごとに渡す文書と prompt 上の書類一覧を一致させる。
 - ファイル名推測から `document_role` / 自動分類結果ベースの文書ルーティングへ移行する。
 - ローカル実データQAの手順を [real_data_extraction_runbook.md](real_data_extraction_runbook.md) に集約する。
-- `/application-data` の `fillable` 条件は原則workflow状態ベースにする。一般項目の必須不足や一部未入力は投入を止めず、人間レビューで補完する（全案件共通の取次者環境変数5件は例外として一括設定を必須とする）。
+- `/application-data` の `fillable` 条件は原則workflow状態ベースにする。一般項目の必須不足や一部未入力は投入を止めず、人間レビューで補完する（組織共通の取次者5項目と通知メールは例外として `org_settings/{org_id}` への一括設定を必須とする）。
 
 Done:
 
@@ -343,7 +343,7 @@ Tasks:
   - boolean yes/no
   - select/radio label/value mapping
 - `draft`、`extracting`、`failed` は preview可能だが `fillable: false` を返す。
-- `intermediary` は太田さん側の申請アカウントを持つ申請会社情報から注入する固定設定値として扱う。
+- `intermediary` は Firestore `org_settings/{org_id}` から注入する組織設定として扱う。
 - `proxy` は代理人として案件データに持つ。住所・電話は `employer.*` から初期化できるが、氏名は会社名ではなく受入企業側の担当者として人確認する。
 
 Done:
@@ -471,7 +471,7 @@ Done:
 | Gemini state limit | scope分割を維持し、MVP対象に絞る |
 | Schema location | Firestore正本schemaは visa-app 側へ寄せるのが自然。RASENS入力制約は rasens-autofill 側に残す |
 | RASENS physical IDs | `case_data` には入れず、generator / mapping 層だけで扱う |
-| Proxy / intermediary | `proxy` は代理人として案件ごとに人確認、`intermediary` は取次者として太田さん側の申請アカウントを持つ申請会社情報の固定設定値 |
+| Proxy / intermediary | `proxy` は代理人として案件ごとに人確認、`intermediary` は取次者として Firestore `org_settings/{org_id}` の組織設定 |
 | Review order | Phase 1は canonical section順。Phase 2でRASENS順カタログ駆動へ移行 |
 | Review scope | reviewable項目中心。移行中だけ未分類canonical項目を補助表示 |
 | Golden split | `case_data.golden` と `application_data.golden` を分け、後者はbackend generator出力で固定する |

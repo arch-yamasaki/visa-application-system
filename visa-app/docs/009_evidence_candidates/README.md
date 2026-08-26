@@ -14,7 +14,7 @@ fieldの意味で選ばせる**（selector方式）。存在しないセルを�
 - `anchor_resolver.py`: xlsx/docx の ambiguous に候補セル/ブロックを `anchor.candidates`
   （最大3件、`{anchor_id, sheet_name, cell, row, col}`）として保存
 - `gemini.py::select_anchor_cells`: シート内容（セル番地付きテキスト）+ 選択対象一覧を渡し、
-  `{selection_id: {anchor_id, reason} | null}` を返させる（temperature 0）
+  `{selection_id: {anchor_id, reason} | null}` を返させる（sampling値は指定しない）
 - `cell_selector.py`: 候補の収集・シート整形・検証。ガード:
   - **申請人シートガード**: `_preferred_sheets` で本人シートが分かる場合、候補をそのシートに限定。
     本人シート上に候補がなければ選択させず ambiguous のまま保留（他人のセルを選ばせない）

@@ -230,7 +230,7 @@ def build_extraction_prompt(case_context: dict, document_descriptions: list[dict
 
 ## 9. Gemini API呼び出し（gemini.py）
 
-モデル: `gemini-3-flash-preview`（環境変数 `GEMINI_MODEL` で変更可能）
+モデル: `gemini-3.7-flash`（環境変数 `GEMINI_MODEL` で変更可能）
 
 ### 3パターンの使い分け
 
@@ -247,13 +247,12 @@ def build_extraction_prompt(case_context: dict, document_descriptions: list[dict
 ```python
 config = types.GenerateContentConfig(
     response_mime_type="application/json",
-    temperature=0.0,
     max_output_tokens=65536,
 )
 ```
 
 - `response_mime_type="application/json"` で JSON 出力を強制
-- `temperature=0.0` で決定論的な出力
+- `temperature`, `top_p`, `top_k` は指定せず、モデル既定値を使用
 - JSON パースに失敗した場合は `json_repair` ライブラリで修復を試みる
 - `field_metadata` の正規化: `doc_id` → `document_id` への統一、`page` のデフォルト値設定
 - `case_data` の全フィールドパスに対して `field_metadata` にエントリがなければ空の `source_refs` で補完
@@ -322,7 +321,7 @@ has_text_layer(pdf_bytes) → True（テキスト合計 >= 20文字）
 
 `extract_text_only()` を使用（テキストのみで十分なため）:
 - OCR結果テキストをプロンプトに結合
-- Gemini API に送信（`temperature=0.0`, `response_mime_type="application/json"`）
+- Gemini API に送信（sampling値は指定せず、`response_mime_type="application/json"`）
 - 返却 JSON から `case_data`, `review`, `field_metadata` を取得
 - `field_metadata` を正規化（`doc_id` → `document_id` 統一、不足エントリ補完）
 

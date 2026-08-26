@@ -129,18 +129,21 @@ gcloud run services update visa-app \
 
 取次者5項目と通知送信用メールアドレスは企業（`org_id`）単位で Firestore `org_settings/{org_id}` に保存する。案件書類やGemini抽出から生成せず、案件データからも上書きしない。`GET /org-settings` は組織メンバーが参照でき、`PATCH /org-settings` はadminだけが変更できる。受領方法は `メール Email` 固定で、通知メール再入力欄にも同じ設定値を投入する。
 
-| 環境変数 | 用途 |
+`chuo-business` については、現在 Firestore に保存されている `org_settings/chuo-business` が正本であり、変更はadminがvisa-appの「組織設定」画面から行う。以前に大阪の公開情報を基に検討した値は旧前提なので、取次者設定へコピーしたり現行値の上書きに使ったりしない。下の保守用CLI例にある奈良県の住所は誤記ではないが、この文書の記載ではなく Firestore の現在値を優先する。
+
+| Firestoreフィールド | 用途 |
 |---|---|
-| `INTERMEDIARY_NAME` | 取次者 氏名 |
-| `INTERMEDIARY_POSTAL_CODE` | 取次者 郵便番号 |
-| `INTERMEDIARY_ADDRESS` | 取次者 住所 |
-| `INTERMEDIARY_ORGANIZATION` | 取次者 所属機関 |
-| `INTERMEDIARY_PHONE` | 取次者 電話番号 |
+| `intermediary.name` | 取次者 氏名 |
+| `intermediary.postal_code` | 取次者 郵便番号 |
+| `intermediary.address` | 取次者 住所 |
+| `intermediary.organization` | 取次者 所属機関 |
+| `intermediary.phone` | 取次者 電話番号 |
+| `receiving_method.notification_email` | 通知送信用メールアドレス |
 
 `/api` 経路では組織設定だけを参照し、未登録なら `fillable=false` にする。低レベルの `application_data` 生成関数には既存ローカル検証向けに `INTERMEDIARY_*` 5件のfallbackを残すが、組織設定が正本。取次者5項目と通知メールがすべて揃う場合だけ自動入力可能にする。
 
 ```bash
-# chuo-business の設定（実行するとFirestoreへ書き込む）
+# 管理画面を使えない場合の保守用CLI（実行するとFirestoreへ書き込む）
 .venv/bin/python scripts/manage_users.py org-settings set \
   --org chuo-business --name '<取次者氏名>' --postal-code '<半角数字>' \
   --address '奈良県奈良市宝来4丁目13番7号' --organization '<所属機関>' \
