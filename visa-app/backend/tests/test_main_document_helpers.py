@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from main import (
     SUPPORTED_DOCUMENT_EXTENSIONS,
     _file_extension,
+    _format_extraction_error,
     _merge_extracted_case_data,
     _merge_extracted_field_metadata,
     _xlsx_to_html,
@@ -44,6 +45,23 @@ def test_xlsx_to_html_rejects_unknown_sheet():
         _xlsx_to_html(buffer.getvalue(), sheet_name="Missing")
 
     assert exc.value.status_code == 400
+
+
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        (
+            "Gemini API key is invalid or not permitted. Check GOOGLE_API_KEY.",
+            "Gemini APIキーが無効、または権限不足です。GOOGLE_API_KEYを確認してください。",
+        ),
+        (
+            "Gemini API quota was exhausted.",
+            "API利用上限に達しました。しばらく待ってから再度お試しください。",
+        ),
+    ],
+)
+def test_format_extraction_error_handles_scoped_gemini_messages(message, expected):
+    assert _format_extraction_error(RuntimeError(message)) == expected
 
 
 def test_reextraction_preserves_human_edited_passport_identity_fields():

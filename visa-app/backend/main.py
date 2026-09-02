@@ -1117,9 +1117,13 @@ def _format_extraction_error(exc: Exception) -> str:
     error_msg = str(exc)
     if "API key was reported as leaked" in error_msg:
         return "Gemini APIキーが漏洩報告済みのため無効です。GOOGLE_API_KEYを新しいキーに差し替えてください。"
-    if "PERMISSION_DENIED" in error_msg or "API_KEY_INVALID" in error_msg:
+    if (
+        "PERMISSION_DENIED" in error_msg
+        or "API_KEY_INVALID" in error_msg
+        or "API key is invalid or not permitted" in error_msg
+    ):
         return "Gemini APIキーが無効、または権限不足です。GOOGLE_API_KEYを確認してください。"
-    if "RESOURCE_EXHAUSTED" in error_msg or "429" in error_msg:
+    if "RESOURCE_EXHAUSTED" in error_msg or "429" in error_msg or "API quota was exhausted" in error_msg:
         return "API利用上限に達しました。しばらく待ってから再度お試しください。"
     return error_msg
 
