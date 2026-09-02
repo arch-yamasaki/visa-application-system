@@ -4,10 +4,12 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import re
+import subprocess
 import sys
 import uuid
-import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -26,6 +28,7 @@ load_dotenv(BACKEND / ".env")
 
 from extractors.document_models import LoadedDocument
 from extractors.document_preprocessor import prepare_documents
+from extractors import gemini as gemini_extractor
 from extractors.gemini_pipeline import extract_documents
 
 
@@ -35,6 +38,20 @@ def read_json(path: Path) -> Any:
 
 def write_json(path: Path, data: Any) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+
+
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def git_output(*args: str) -> str:
+    return subprocess.run(
+        ["git", *args],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
 
 
 def slug(value: str) -> str:
@@ -153,6 +170,7 @@ def run(args: argparse.Namespace) -> None:
             % (prepared.total_inline_bytes / INLINE_MIB, args.max_inline_mib)
         )
 
+    extraction_run_id = f"eval_{uuid.uuid4().hex[:12]}"
     result = extract_documents(
         case_meta(scenario, manifest),
         documents,
@@ -160,21 +178,53 @@ def run(args: argparse.Namespace) -> None:
         prepared,
         pattern="auto",
         scoped=True,
-        run_id=f"eval_{uuid.uuid4().hex[:12]}",
+        run_id=extraction_run_id,
         case_id=scenario.get("case_id") or manifest.get("case_id", ""),
-        attach_bbox_refs=args.attach_bbox_refs,
+        attach_source_refs=True,
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     write_json(output_dir / "case_data.json", result.display_case_data)
     write_json(output_dir / "field_metadata.json", result.field_metadata)
     write_json(output_dir / "review.json", result.review)
+    write_json(
+        output_dir / "run_manifest.json",
+        {
+            "schema_version": "0.1.0",
+            "run_id": extraction_run_id,
+            "created_at": datetime.now().astimezone().isoformat(),
+            "script": "visa-eval/scripts/run_gemini_bytes_eval.py",
+            "model": gemini_extractor.MODEL_NAME,
+            "thinking_level": gemini_extractor.GEMINI_THINKING_LEVEL,
+            "scoped": True,
+            "pattern": "auto",
+            "attach_source_refs": True,
+            "retry": {
+                "max_attempts": gemini_extractor.GEMINI_MAX_ATTEMPTS,
+                "status_codes": sorted(gemini_extractor.GEMINI_RETRYABLE_STATUS_CODES),
+            },
+            "code_commit": git_output("rev-parse", "HEAD"),
+            "code_dirty": bool(git_output("status", "--porcelain", "--untracked-files=no")),
+            "prompt_sha256": sha256(BACKEND / "extractors" / "prompt_template.py"),
+            "schema_sha256": sha256(BACKEND / "extractors" / "schema.py"),
+            "scenario_sha256": sha256(scenario_path),
+            "input_manifest_sha256": sha256(manifest_path),
+            "document_count": len(loaded_documents),
+            "total_input_bytes": sum(len(document.content) for document in loaded_documents),
+            "output_files": [
+                "case_data.json",
+                "field_metadata.json",
+                "review.json",
+            ],
+        },
+    )
     print(
-        "wrote case_data=%s field_metadata=%s review=%s"
+        "wrote case_data=%s field_metadata=%s review=%s run_manifest=%s"
         % (
             output_dir / "case_data.json",
             output_dir / "field_metadata.json",
             output_dir / "review.json",
+            output_dir / "run_manifest.json",
         )
     )
 
@@ -192,11 +242,6 @@ def main() -> None:
         help="Eval run directory name under visa-eval/eval_runs/. Ignored when --output-dir is set.",
     )
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument(
-        "--attach-bbox-refs",
-        action="store_true",
-        help="Run the production-like anchor/bbox evidence pass after extraction.",
-    )
     parser.add_argument("--max-inline-mib", type=int, default=20)
     run(parser.parse_args())
 

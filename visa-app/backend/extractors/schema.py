@@ -376,6 +376,27 @@ _S3_APPLICANT = {
     "required": ["has_employment_history", "employment_history", "education", "qualifications"],
 }
 
+
+def _describe_field(object_schema: dict, field_name: str, description: str) -> None:
+    properties = object_schema.get("properties", {})
+    field_schema = properties.get(field_name)
+    if isinstance(field_schema, dict):
+        field_schema["description"] = description
+
+
+_describe_field(_S1_APPLICANT_BASE, "sex", "Internal value must be male or female; keep the original label in source_ref.text_quote.")
+_describe_field(_S1_APPLICANT_BASE, "marital_status", "Internal value must be single or married; keep the original label in source_ref.text_quote.")
+_describe_field(_S1_APPLICANT_BASE, "occupation", "Current occupation/status of the applicant, not the planned job category after hiring.")
+_describe_field(_S2_EMPLOYER, "corporate_number", "Accept only a 13-digit Japanese corporate number after removing symbols. Do not pad a 12-digit company registry number.")
+_describe_field(_S2_EMPLOYMENT, "joining_date", "Full YYYY-MM-DD date only. Do not infer a day when only year/month is known.")
+_describe_field(_S2_EMPLOYMENT, "has_position", "Must be true exactly when position_title is non-empty.")
+_describe_field(_S2_EMPLOYMENT, "position_title", "Job title or managerial position only; do not invent it from job duties.")
+_describe_field(_S2_EMPLOYMENT, "job_category_primary", "Exact RASENS select label for the planned job category, not the applicant's current occupation.")
+_describe_field(_S3_EDUCATION, "level", "RASENS-style education level category, not raw degree or school text.")
+_describe_field(_S3_EDUCATION, "level_detail", "Optional detail only when the category needs support; do not duplicate level.")
+_describe_field(_S3_EDUCATION, "major_field", "RASENS-style major field category, not raw faculty/major text.")
+_describe_field(_S3_EDUCATION, "major_field_other", "Raw/supporting major text only when the category is Other or insufficient.")
+
 SCOPE3_EDUCATION_SCHEMA = {
     "type": "OBJECT",
     "properties": {

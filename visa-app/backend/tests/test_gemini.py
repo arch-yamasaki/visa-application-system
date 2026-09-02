@@ -4,9 +4,11 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
+from google.genai import errors as genai_errors
 
 from extractors.gemini import (
     DEFAULT_GEMINI_MODEL,
+    GEMINI_RETRYABLE_STATUS_CODES,
     MODEL_NAME,
     _build_ocr_context,
     _attach_source_locations,
@@ -144,6 +146,18 @@ def _field_value(value, quote=None, confidence=0.95):
     }
 
 
+def _field_value_without_ref(value):
+    return {
+        "value": value,
+        "source_ref": {
+            "document_id": "",
+            "page": 0,
+            "text_quote": "",
+            "confidence": 0,
+        },
+    }
+
+
 def _passport_candidate(document_id="doc_p", page=1, confidence=0.95):
     return {
         "document_id": document_id,
@@ -252,6 +266,10 @@ class TestBuildPrompt:
         assert "JSON boolean" in prompt
         assert "JSON number" in prompt
         assert "空文字やnullは使わない" in prompt
+        assert "12桁" in prompt
+        assert "完全な日付" in prompt
+        assert "applicant.occupation" in prompt
+        assert "employment.job_category_primary" in prompt
 
     def test_scoped_prompt_accepts_new_scope(self):
         prompt = build_scoped_prompt("applicant_identity", _CASE_META, _DOCUMENTS)
@@ -260,6 +278,15 @@ class TestBuildPrompt:
         assert "applicant.birth_date.value" in prompt
         assert "YYYY-MM-DD" in prompt
         assert "source_ref.text_quote" in prompt
+        assert "内部契約で指定したfield" in prompt
+
+    def test_scoped_prompt_separates_current_occupation_from_planned_job_category(self):
+        identity_prompt = build_scoped_prompt("applicant_identity", _CASE_META, _DOCUMENTS)
+        employment_prompt = build_scoped_prompt("employment", _CASE_META, _DOCUMENTS)
+
+        assert "申請人の現在の職業・身分" in identity_prompt
+        assert "予定業務の職種区分" in employment_prompt
+        assert "position_title" in employment_prompt
 
 
 # ---------- _build_ocr_context ------------------------------------------
@@ -299,6 +326,7 @@ class TestBuildOcrContext:
 class TestCallGemini:
     def test_default_model_is_gemini_37_flash(self):
         assert DEFAULT_GEMINI_MODEL == "gemini-3.7-flash"
+        assert GEMINI_RETRYABLE_STATUS_CODES == frozenset({429, 500, 502, 503, 504})
 
     def test_omits_sampling_parameters(self):
         client = MagicMock()
@@ -320,6 +348,104 @@ class TestCallGemini:
         assert config.response_json_schema["type"] == "object"
         assert config.response_schema is None
 
+    @patch("extractors.gemini.time.sleep")
+    def test_retries_retryable_error_until_success(self, mock_sleep):
+        client = MagicMock()
+        client.models.generate_content.side_effect = [
+            genai_errors.ServerError(
+                503,
+                {"error": {"status": "UNAVAILABLE", "message": "temporary body"}},
+            ),
+            _mock_gemini_response({}),
+        ]
+
+        result = _call_gemini(client, [], "prompt")
+
+        assert result == {}
+        assert client.models.generate_content.call_count == 2
+        mock_sleep.assert_called_once_with(1.0)
+
+    @patch("extractors.gemini.time.sleep")
+    def test_retries_429_until_success(self, mock_sleep):
+        client = MagicMock()
+        client.models.generate_content.side_effect = [
+            genai_errors.ClientError(
+                429,
+                {"error": {"status": "RESOURCE_EXHAUSTED", "message": "rate limited"}},
+            ),
+            _mock_gemini_response({}),
+        ]
+
+        result = _call_gemini(client, [], "prompt")
+
+        assert result == {}
+        assert client.models.generate_content.call_count == 2
+        mock_sleep.assert_called_once_with(1.0)
+
+    @pytest.mark.parametrize("error", [TimeoutError(), ConnectionError()])
+    @patch("extractors.gemini.time.sleep")
+    def test_retries_transport_errors(self, mock_sleep, error):
+        client = MagicMock()
+        client.models.generate_content.side_effect = [
+            error,
+            _mock_gemini_response({}),
+        ]
+
+        result = _call_gemini(client, [], "prompt")
+
+        assert result == {}
+        assert client.models.generate_content.call_count == 2
+        mock_sleep.assert_called_once_with(1.0)
+
+    @patch("extractors.gemini.time.sleep")
+    def test_retryable_error_stops_after_three_attempts(self, mock_sleep):
+        client = MagicMock()
+        client.models.generate_content.side_effect = genai_errors.ServerError(
+            503,
+            {"error": {"status": "UNAVAILABLE", "message": "temporary body"}},
+        )
+
+        with pytest.raises(genai_errors.ServerError):
+            _call_gemini(client, [], "prompt")
+
+        assert client.models.generate_content.call_count == 3
+        assert [call.args[0] for call in mock_sleep.call_args_list] == [1.0, 2.0]
+
+    @patch("extractors.gemini.time.sleep")
+    def test_non_retryable_error_raises_without_retry(self, mock_sleep):
+        client = MagicMock()
+        client.models.generate_content.side_effect = genai_errors.ClientError(
+            403,
+            {"error": {"status": "PERMISSION_DENIED", "message": "do not log body"}},
+        )
+
+        with pytest.raises(genai_errors.ClientError):
+            _call_gemini(client, [], "prompt")
+
+        assert client.models.generate_content.call_count == 1
+        mock_sleep.assert_not_called()
+
+    @patch("extractors.gemini.time.sleep")
+    def test_retry_logs_do_not_include_error_body(self, mock_sleep, caplog):
+        client = MagicMock()
+        client.models.generate_content.side_effect = [
+            genai_errors.ServerError(
+                503,
+                {"error": {"status": "UNAVAILABLE", "message": "SECRET BODY"}},
+            ),
+            _mock_gemini_response({}),
+        ]
+
+        with caplog.at_level("WARNING", logger="extractors.gemini"):
+            _call_gemini(client, [], "prompt")
+
+        assert "SECRET BODY" not in caplog.text
+        assert "attempt" in caplog.text
+        assert "ServerError" in caplog.text
+        assert "503" in caplog.text
+        assert "scope" in caplog.text
+        assert "elapsed_ms" in caplog.text
+
     def test_invalid_json_log_does_not_include_response_text(self, caplog):
         response = MagicMock()
         response.text = "\x00TANAKA TARO"
@@ -339,6 +465,7 @@ class TestCallGemini:
 
         assert "TANAKA TARO" not in caplog.text
         assert "Response head" not in caplog.text
+        assert client.models.generate_content.call_count == 1
 
 
 class TestAttachSourceLocations:
@@ -542,6 +669,239 @@ class TestExtractTextOnly:
         assert result.display_case_data["employer"]["has_corporate_number"] is True
         assert result.case_data["applicant"]["immigration_history"]["entries_count"]["value"] == 0
         assert result.field_metadata["applicant.immigration_history.entries_count"]["confidence"] == 0.95
+
+    def test_build_extraction_result_normalizes_internal_identity_values_with_sources(self):
+        raw = {
+            "case_data": {
+                "applicant": {
+                    "sex": _field_value("男 Male", "男 Male"),
+                    "marital_status": _field_value("無 Single", "無 Single"),
+                },
+            },
+            "review": {},
+        }
+
+        result = _build_extraction_result(raw)
+
+        assert result.display_case_data["applicant"]["sex"] == "male"
+        assert result.display_case_data["applicant"]["marital_status"] == "single"
+        assert result.field_metadata["applicant.sex"]["source_refs"][0]["text_quote"] == "男 Male"
+        assert result.field_metadata["applicant.marital_status"]["source_refs"][0]["text_quote"] == "無 Single"
+
+    def test_build_extraction_result_accepts_only_thirteen_digit_corporate_number(self):
+        raw = {
+            "case_data": {
+                "employer": {
+                    "has_corporate_number": _field_value(False, "法人番号"),
+                    "corporate_number": _field_value("123-4567 8901 23", "123-4567 8901 23"),
+                },
+            },
+            "review": {},
+        }
+
+        result = _build_extraction_result(raw)
+
+        assert result.display_case_data["employer"]["corporate_number"] == "1234567890123"
+        assert result.display_case_data["employer"]["has_corporate_number"] is True
+        assert result.field_metadata["employer.corporate_number"]["source_refs"][0]["text_quote"] == "123-4567 8901 23"
+        has_corporate_number_meta = result.field_metadata["employer.has_corporate_number"]
+        assert has_corporate_number_meta["origin"] == "derived"
+        assert has_corporate_number_meta["source_refs"] == []
+        assert "alternatives" not in has_corporate_number_meta
+
+    def test_build_extraction_result_withholds_twelve_digit_corporate_number(self):
+        raw = {
+            "case_data": {
+                "employer": {
+                    "has_corporate_number": _field_value(True, "法人番号"),
+                    "corporate_number": _field_value("123-4567 8901 2", "123-4567 8901 2"),
+                },
+            },
+            "review": {"validation_errors": [], "missing_items": [], "findings": []},
+        }
+
+        result = _build_extraction_result(raw)
+
+        assert result.display_case_data["employer"]["corporate_number"] == ""
+        assert result.display_case_data["employer"]["has_corporate_number"] is False
+        corporate_meta = result.field_metadata["employer.corporate_number"]
+        has_corporate_number_meta = result.field_metadata["employer.has_corporate_number"]
+        assert corporate_meta["origin"] == "derived"
+        assert corporate_meta["source_refs"] == []
+        assert "alternatives" not in corporate_meta
+        assert has_corporate_number_meta["origin"] == "derived"
+        assert has_corporate_number_meta["source_refs"] == []
+        assert "alternatives" not in has_corporate_number_meta
+        assert result.review["expected_route"] == "needs_review"
+        assert any("13桁" in error for error in result.review["validation_errors"])
+
+    def test_build_extraction_result_normalizes_full_joining_date(self):
+        raw = {
+            "case_data": {
+                "employment": {
+                    "joining_date": _field_value("2026/4/5", "2026/4/5"),
+                },
+            },
+            "review": {},
+        }
+
+        result = _build_extraction_result(raw)
+
+        assert result.display_case_data["employment"]["joining_date"] == "2026-04-05"
+        assert result.field_metadata["employment.joining_date"]["source_refs"][0]["text_quote"] == "2026/4/5"
+
+    def test_build_extraction_result_withholds_month_only_joining_date(self):
+        raw = {
+            "case_data": {
+                "employment": {
+                    "joining_date": _field_value("2026-04", "2026-04"),
+                },
+            },
+            "review": {"validation_errors": [], "missing_items": [], "findings": []},
+        }
+
+        result = _build_extraction_result(raw)
+
+        assert result.display_case_data["employment"]["joining_date"] == ""
+        joining_meta = result.field_metadata["employment.joining_date"]
+        assert joining_meta["origin"] == "derived"
+        assert joining_meta["source_refs"] == []
+        assert "alternatives" not in joining_meta
+        assert any("日付補完せず" in error for error in result.review["validation_errors"])
+
+    def test_build_extraction_result_routes_position_conflict_to_review(self):
+        raw = {
+            "case_data": {
+                "employment": {
+                    "has_position": _field_value(False, "役職 無"),
+                    "position_title": _field_value("Project Manager", "Project Manager"),
+                },
+            },
+            "review": {"validation_errors": [], "missing_items": [], "findings": []},
+        }
+
+        result = _build_extraction_result(raw)
+
+        assert result.display_case_data["employment"]["has_position"] is True
+        assert result.display_case_data["employment"]["position_title"] == "Project Manager"
+        has_position_meta = result.field_metadata["employment.has_position"]
+        assert has_position_meta["origin"] == "derived"
+        assert has_position_meta["source_refs"] == []
+        assert "alternatives" not in has_position_meta
+        assert result.review["expected_route"] == "needs_review"
+        assert any("役職なしの根拠と役職名の根拠" in error for error in result.review["validation_errors"])
+
+    def test_build_extraction_result_derives_has_position_true_when_false_has_no_source(self):
+        raw = {
+            "case_data": {
+                "employment": {
+                    "has_position": _field_value_without_ref(False),
+                    "position_title": _field_value("Project Manager", "Project Manager"),
+                },
+            },
+            "review": {},
+        }
+
+        result = _build_extraction_result(raw)
+
+        assert result.display_case_data["employment"]["has_position"] is True
+        assert result.display_case_data["employment"]["position_title"] == "Project Manager"
+        has_position_meta = result.field_metadata["employment.has_position"]
+        assert has_position_meta["origin"] == "derived"
+        assert has_position_meta["source_refs"] == []
+        assert "alternatives" not in has_position_meta
+
+    def test_build_extraction_result_derives_has_position_true_from_title_without_refs(self):
+        raw = {
+            "case_data": {
+                "employment": {
+                    "has_position": _field_value(False, "役職 無"),
+                    "position_title": _field_value_without_ref("Project Manager"),
+                },
+            },
+            "review": {},
+        }
+
+        result = _build_extraction_result(raw)
+
+        assert result.display_case_data["employment"]["has_position"] is True
+        assert result.display_case_data["employment"]["position_title"] == "Project Manager"
+        has_position_meta = result.field_metadata["employment.has_position"]
+        assert has_position_meta["origin"] == "derived"
+        assert has_position_meta["source_refs"] == []
+        assert "alternatives" not in has_position_meta
+
+    def test_build_extraction_result_aligns_has_position_true_from_title(self):
+        raw = {
+            "case_data": {
+                "employment": {
+                    "has_position": _field_value_without_ref(""),
+                    "position_title": _field_value("Project Manager", "Project Manager"),
+                },
+            },
+            "review": {},
+        }
+
+        result = _build_extraction_result(raw)
+
+        assert result.display_case_data["employment"]["has_position"] is True
+        assert result.display_case_data["employment"]["position_title"] == "Project Manager"
+        has_position_meta = result.field_metadata["employment.has_position"]
+        assert has_position_meta["origin"] == "derived"
+        assert has_position_meta["source_refs"] == []
+        assert "alternatives" not in has_position_meta
+
+    def test_build_extraction_result_marks_matching_has_position_as_derived(self):
+        raw = {
+            "case_data": {
+                "employment": {
+                    "has_position": _field_value(True, "役職 有"),
+                    "position_title": _field_value("Project Manager", "Project Manager"),
+                },
+            },
+            "review": {},
+        }
+
+        result = _build_extraction_result(raw)
+
+        assert result.display_case_data["employment"]["has_position"] is True
+        has_position_meta = result.field_metadata["employment.has_position"]
+        assert has_position_meta["origin"] == "derived"
+        assert has_position_meta["source_refs"] == []
+        assert "alternatives" not in has_position_meta
+
+    def test_build_extraction_result_does_not_normalize_ambiguous_job_category_label(self):
+        raw = {
+            "case_data": {
+                "employment": {
+                    "job_category_primary": _field_value("技術者", "技術者"),
+                },
+            },
+            "review": {},
+        }
+
+        result = _build_extraction_result(raw)
+
+        assert result.display_case_data["employment"]["job_category_primary"] == "技術者"
+
+    def test_build_extraction_result_clears_has_position_source_when_deriving_false(self):
+        raw = {
+            "case_data": {
+                "employment": {
+                    "has_position": _field_value(True, "役職 有"),
+                    "position_title": _field_value("", ""),
+                },
+            },
+            "review": {"validation_errors": [], "missing_items": [], "findings": []},
+        }
+
+        result = _build_extraction_result(raw)
+
+        assert result.display_case_data["employment"]["has_position"] is False
+        assert result.field_metadata["employment.has_position"]["source_refs"] == []
+        assert result.field_metadata["employment.has_position"]["origin"] == "derived"
+        assert "alternatives" not in result.field_metadata["employment.has_position"]
+        assert result.review["expected_route"] == "needs_review"
 
     def test_build_extraction_result_allows_typed_default_without_source_ref(self):
         raw = {
@@ -1080,6 +1440,40 @@ class TestExtractAllScopes:
 
     @patch("extractors.gemini._call_gemini")
     @patch("extractors.gemini.extract_scoped")
+    def test_partial_scope_failure_does_not_expose_error_body(
+        self,
+        mock_extract_scoped,
+        mock_call_gemini,
+        caplog,
+    ):
+        secret = "SECRET RESPONSE BODY"
+
+        def scoped_result(scope, *_args, **_kwargs):
+            if scope == "applicant_identity":
+                raise genai_errors.ServerError(
+                    503,
+                    {"error": {"status": "UNAVAILABLE", "message": secret}},
+                )
+            if scope == "employer":
+                return {"case_data": {"employer": {"name": _field_value("Example Inc.")}}}
+            return {"case_data": {}}
+
+        mock_extract_scoped.side_effect = scoped_result
+        mock_call_gemini.return_value = {
+            "missing_items": [],
+            "validation_errors": [],
+            "findings": [],
+        }
+
+        with caplog.at_level("WARNING", logger="extractors.gemini"):
+            result = extract_all_scopes(MagicMock(), [], _CASE_META, _DOCUMENTS)
+
+        assert secret not in caplog.text
+        assert secret not in json.dumps(result.review, ensure_ascii=False)
+        assert any("ServerError status=503" in error for error in result.review["validation_errors"])
+
+    @patch("extractors.gemini._call_gemini")
+    @patch("extractors.gemini.extract_scoped")
     def test_runs_new_extraction_scopes(self, mock_extract_scoped, mock_call_gemini):
         mock_extract_scoped.return_value = {
             "case_data": {"applicant": {"name_roman": _field_value("TANAKA TARO")}}
@@ -1103,18 +1497,28 @@ class TestExtractAllScopes:
             raise AssertionError("extract_all_scopes should fail when all scopes fail")
 
     @patch("extractors.gemini.extract_scoped")
-    def test_preserves_leaked_api_key_error_when_all_scopes_fail(self, mock_extract_scoped):
-        mock_extract_scoped.side_effect = RuntimeError(
-            "403 PERMISSION_DENIED. Your API key was reported as leaked. Please use another API key."
+    def test_sanitizes_auth_error_when_all_scopes_fail(self, mock_extract_scoped, caplog):
+        mock_extract_scoped.side_effect = genai_errors.ClientError(
+            403,
+            {
+                "error": {
+                    "status": "PERMISSION_DENIED",
+                    "message": "Your API key was reported as leaked.",
+                },
+            },
         )
 
-        try:
-            extract_all_scopes(MagicMock(), [], _CASE_META, _DOCUMENTS)
-        except RuntimeError as exc:
-            assert "Gemini API key was reported as leaked" in str(exc)
-            assert "Replace GOOGLE_API_KEY" in str(exc)
-        else:
-            raise AssertionError("extract_all_scopes should fail when all scopes fail")
+        with caplog.at_level("WARNING", logger="extractors.gemini"):
+            try:
+                extract_all_scopes(MagicMock(), [], _CASE_META, _DOCUMENTS)
+            except RuntimeError as exc:
+                assert "Gemini API key is invalid or not permitted" in str(exc)
+                assert "reported as leaked" not in str(exc)
+            else:
+                raise AssertionError("extract_all_scopes should fail when all scopes fail")
+
+        assert "ClientError status=403" in caplog.text
+        assert "reported as leaked" not in caplog.text
 
 
 # ---------- _extract_field_metadata ------------------------------------

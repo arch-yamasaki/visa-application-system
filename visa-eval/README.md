@@ -2,7 +2,9 @@
 
 このディレクトリは、Codex や Gemini に実PDF・Excelを読ませて、在留資格申請データの抽出・正規化・申請入力生成を検証するためのローカル restricted evaluation workspace です。
 
-初期は `expected/*.golden.json` のたたき台をCodex blind runで作り、人手確認後にgolden化する。Gemini bytes eval は、指定された入力ファイルだけを backend の Gemini 抽出pipelineへ渡す検証フローとして扱う。
+Codex blind runでたたき台を作り、入力資料と申請済み出力を照合して `expected_verified/` に新しい比較用データを作る。作成時は旧goldenをコピーしてよいが、レビュー後は入力資料で確認した値へ `expected_verified/` だけを更新する。既存の `expected/` は旧データとして変更しない。
+
+比較対象の分け方、goldenの作り方、active fixtureの最新監査結果は [`docs/shared/017_data_verification_and_revision/README.md`](../docs/shared/017_data_verification_and_revision/README.md) を参照する。
 
 ## 重要: 制限付きデータ
 
@@ -23,7 +25,7 @@
 - 管理する: `README.md`, `test_cases_from_raw/README.md`, `eval_runs/README.md`, `eval_config/suites/*.json`, `docs/`
 - 管理しない: `raw/`, `archived/`, `test_cases_from_raw/<case_id>/`, `eval_runs/<run_id>/`, `blind_runs_from_test_cases/`
 
-`test_cases_from_raw/*/*/expected/*.golden.json` はJSONでも実PIIを含むため、ソースコードや設計資産とは分けて扱う。
+`test_cases_from_raw/*/*/expected*/**/*.json` はJSONでも実PIIを含むため、ソースコードや設計資産とは分けて扱う。
 
 ## リスクと対策
 
@@ -51,10 +53,10 @@ visa-eval/
         output/
           output_manifest.json
         expected/
-          case_data.golden.json
-          field_metadata.golden.json
-          application_data.golden.json
-          review.golden.json
+          case_data.golden.json       # 既存の旧golden
+        expected_verified/
+          case_data.golden.json       # 新しい比較で参照する値。レビュー後は旧goldenと異なることがある
+          golden_manifest.json        # 採点scopeと確認状態
   eval_runs/
     <run_id>/
       <case_id>/
@@ -76,20 +78,16 @@ visa-eval/
 - `test_cases_from_raw/<case_id>/<applicant_id>/...`: 申請人1人=1フォームの単票ケース。まずここでPDF/Excel読取、正規case_data生成、フォーム投入JSON生成を検証する。
 - `.../input/document_manifest.json`: そのケースでAIエージェントへ渡す入力資料リスト。
 - `.../output/output_manifest.json`: RASENS入力済み申請書など、golden作成・監査で見る資料リスト。AI入力には使わない。
-- `.../expected/case_data.golden.json`: 人手で完成させる canonical v2 `case_data` の正解データ。旧path互換は持たせない。
-- `.../expected/field_metadata.golden.json`: 抽出根拠の期待データ。現在は採点対象外で、根拠レビュー用に扱う。
-- `.../expected/application_data.golden.json`: 旧snapshot / 参照用。MVP採点の正本にはしない。
-- `.../expected/review.golden.json`: 非採点の補助データ。現状はExcel起点のscaffoldを含むため、MVP gateにはしない。
+- `.../expected/`: 既存の旧golden。内容を変更しない。
+- `.../expected_verified/case_data.golden.json`: 新しい比較で参照する canonical v2 `case_data`。旧goldenとは別管理で、確認済み範囲はmanifestで示す。
+- `.../expected_verified/golden_manifest.json`: fieldごとの採点scope、根拠種別、確認状態。
 - `eval_runs/<run_id>/<case_id>/`: AIエージェントやスクリプトが出力した結果。expectedと比較する。
 
 fixtureの入出力契約は `docs/fixture_contract.md` を正とする。
 
 ## 現在のケース
 
-現行の active fixture は、まずA社1回目申請の2ケースだけです。
-
-- `gijinkoku_a_company_round1/amit_tamang`
-- `gijinkoku_a_company_round1/kushang_subba_limbu`
+現行のactive fixtureは8ケースで、全件が `expected_verified` を持つscoring readyです。実案件由来の識別子はrestricted情報として、この文書には記載しません。
 
 旧13ケース相当の試作fixtureは `archived/` に退避しています。golden作成と比較ルールが安定してから、必要なケースだけ手動で作り直します。
 
@@ -103,7 +101,7 @@ fixtureの入出力契約は `docs/fixture_contract.md` を正とする。
 
 ## 評価の考え方
 
-eval の進め方、`expected` vs `expected` の smoke check と実Gemini比較の違い、goldenの薄さや比較正規化の扱いは `../visa-app/docs/008_eval_workflow/README.md` を正とする。
+eval の進め方、合成データのsmoke checkと実Gemini比較の違い、goldenの薄さや比較正規化の扱いは `../visa-app/docs/008_eval_workflow/README.md` を正とする。
 
 このREADMEでは、workspace構成と実行入口だけを説明する。
 
@@ -112,19 +110,19 @@ eval の進め方、`expected` vs `expected` の smoke check と実Gemini比較�
 1. `document_manifest.json` をCodex blind runまたはGemini bytes evalへ渡す。
 2. AIが `<run_output>/case_data.json`、`field_metadata.json`、`review.json` を作る。
 3. `case_data.json` を backend generator に渡して `application_data.json` を作る。
-4. 人が実行結果を確認し、必要な補正後に `expected/*.golden.json` として確定する。
+4. 人が実行結果を確認し、必要な補正後に `expected_verified/case_data.golden.json` と `golden_manifest.json` を作る。
 
 ### 評価モード
 
 1. `document_manifest.json` をCodex blind runまたはGemini bytes evalへ渡す。
 2. AIが `<run_output>/case_data.json`、`field_metadata.json`、`review.json` を作る。
 3. `case_data.json` を backend generator に渡して `application_data.json` を作る。
-4. `expected/*.golden.json` と比較する。
+4. `expected_verified/case_data.golden.json` のうちmanifestで確認済みの抽出項目と比較する。
 5. 比較は、自然文全文一致ではなく、安定キー、文書種別、必須項目、レビューコードを中心に行う。
 
 ### Codex blind run と Gemini bytes eval
 
-- Codex blind run: `prepare_blind_eval_run.py` で `expected/` を除外した作業ディレクトリを作り、Codexに資料読取とJSON作成を任せる。これは自由操作を伴う評価フロー。
+- Codex blind run: `prepare_blind_eval_run.py` でgoldenを含まない作業ディレクトリを作り、Codexに資料読取とJSON作成を任せる。これは自由操作を伴う評価フロー。
 - Gemini bytes eval: `run_gemini_bytes_eval.py` が `document_manifest.json` の `use_as_input: true` だけをローカルbytesとして読み、GCS/Firestoreを使わず backend の scoped Gemini 抽出pipelineへ渡す。
 - `application_data.json` はどちらのフローでもAIに手書きさせない。backend generator が `case_data.json` から決定論的に生成する。
 
@@ -142,14 +140,14 @@ Gemini bytes eval の通常フローは、抽出と `case_data.golden.json` 比�
 
 ## Suite解決ルール
 
-当面はAmit/Kushangの2ケースを優先します。`eval_config/suites/single_smoke.json` は旧ケース拡張用の参考として扱い、active fixture が揃うまでは標準スイートとして扱いません。
+現在は `expected_verified` 確認済みのactive 8ケースを優先します。`eval_config/suites/single_smoke.json` は旧ケース拡張用の参考で、現在の8件評価はfixtureを直接列挙して実行します。追加時の分割内容と最新集計は [`docs/dataset_expansion_20260901.md`](docs/dataset_expansion_20260901.md) を参照します。
 
 ## 注意
 
 - 実在個人情報を含むため、raw資料とeval run出力の共有範囲に注意する。
 - 実案件データをChrome拡張の同梱 `application_data.json` に入れない。
 - DevTools Consoleには値をマスクして出す。必要があっても実値ログを外部共有しない。
-- `case_data.golden.json` は人手レビュー済みの正解データを目指す。ただし、scaffoldや未確認値が残る場合は `partial` / `suspect` として扱い、モデル精度としては読まない。
+- `expected_verified/case_data.golden.json` は人手レビュー済みの正解データを目指す。未確認値が残る場合はmanifestを `partial` とし、確認済み項目の一致率をモデル全体の精度としては読まない。`reviewed` / `locked` になったものだけ暫定評価・回帰評価に使う。
 - `application_data.golden.json` は派生物。案件正本ではない。
 - `unused_resume` と分類された履歴書は、申請には添付しないが、記載情報（職歴・学歴等）はAI抽出の対象とする。
 - `not_attached_reference` は添付外資料。差分確認・参考用として扱う。

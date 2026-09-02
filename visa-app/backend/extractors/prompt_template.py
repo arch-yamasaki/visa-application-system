@@ -176,7 +176,10 @@ case_data のキーも必ず canonical v2 path とすること。旧path互換�
 - schemaでBOOLEANに指定されている `value` は JSON boolean（`true` / `false`）で出力すること。`"true"`、`"false"`、`"有"`、`"無"` のような文字列は禁止。
 - schemaでINTEGERに指定されている `value` は JSON number（例: `0`, `1`, `3`）で出力すること。`"0"`、`"3"` のような文字列は禁止。
 - BOOLEAN / INTEGER の値が書類から見つからない場合は、各項目の既定方針に従い `false` または `0` を出力すること。空文字やnullは使わないこと。この場合は source_ref の全項目を空値にし、review に既定値であることを記録すること。
-- `employer.corporate_number`: 法人番号は13桁の数字のみ（ハイフン・スペースは除去）。元書類にハイフン付きで記載されている場合は除去して数字のみにすること。
+- `employer.corporate_number`: 法人番号は13桁の数字のみ（ハイフン・スペース等の記号は除去）。記号除去後に13桁でない場合は補完せず空文字にし、reviewへ記録すること。12桁の会社法人等番号を13桁へ補完してはいけない。
+- `applicant.sex`: 内部値は `male` または `female` にすること。原文の「男 Male」「女 Female」等は source_ref.text_quote に残し、valueだけ内部値へ正規化すること。
+- `applicant.marital_status`: 内部値は `single` または `married` にすること。原文の「無 Single」「有 Married」等は source_ref.text_quote に残し、valueだけ内部値へ正規化すること。
+- `applicant.occupation`: 現在の職業・身分を抽出すること。採用後の予定業務や職種区分をここへ入れないこと。
 - `applicant.name_roman`: 旅券の顔写真側の身分事項欄(VIZ)にある氏名を、姓→名の順で半角英字大文字スペース区切りにすること。例: `BHANDARI ASHWIN`。MRZだけを正本にしないこと。
 - `applicant.birth_place`: 出生地だけを抽出し、本国住所や現住所と取り違えないこと。国名と都市・地域名が資料上で確認できる場合は `国名 都市・地域名` の順にすること。資料にない住所要素は補わないこと。
 - `applicant.home_country_address`: 本国の現住所・居住地を抽出し、出生地や日本の勤務先住所と取り違えないこと。資料にない住所要素は補わないこと。
@@ -188,6 +191,14 @@ case_data のキーも必ず canonical v2 path とすること。旧path互換�
 - `applicant.family.japan_relatives_or_cohabitants`: 在日親族・同居者がいる場合だけ最大3件まで出力すること。いなければ `has_japan_relatives_or_cohabitants` は `false`、配列は空にすること。
 - `applicant.employment_history`: 職歴がある場合だけ最大3件まで出力すること。いなければ `has_employment_history` は `false`、配列は空にすること。会社名の現地語表記は `company_name_local` を使うこと。
 - `applicant.employment_history[].company_name_local`: RASENSの「漢字表記」欄に入る値なので、漢字を含む勤務先名が分かる場合だけ出力し、英字のみ・現地文字のみの場合は空文字にすること。
+- `employment.joining_date`: valueは `YYYY-MM-DD` の完全な日付だけにすること。年月だけ、月だけ、年だけしか分からない場合は日付を補完せず空文字にし、reviewへ記録すること。
+- `employment.job_category_primary`: 申請先で従事予定の業務について、RASENSの職種区分ラベルを正確に入れること。申請人の現在職業 `applicant.occupation` と混ぜないこと。
+- `employment.has_position`: `employment.position_title` が非空なら `true`、空なら `false` に揃えること。
+- `applicant.education[].level`: RASENSで選ぶ学歴区分（大学、大学院等）を入れること。学校名や学位名の原文を混ぜないこと。
+- `applicant.education[].level_detail`: 学歴区分だけでは足りない補足が原資料に明記されている場合だけ入れること。`level` の別表記を重複して入れないこと。
+- `applicant.education[].major_field`: RASENSで選ぶ専攻分野カテゴリを入れること。原文の学部・専攻名をそのまま入れないこと。
+- `applicant.education[].major_field_other`: `major_field` が「その他」に相当し、原文の補足が必要な場合だけ入れること。
+- `employer.industry_other`: `industry_primary` が「その他」に相当する場合だけ入れること。
 - `start_month_unknown` / `end_month_unknown`: 月まで分かれば `false`、年だけ分かる場合は `true` とすること。
 
 ## 出力フォーマット
@@ -330,9 +341,12 @@ NG: `{"value": "YAMADA TARO", "source_ref": {"document_id": "", "page": 0, "text
 - schemaでINTEGERに指定されている `value` は JSON number（例: `0`, `1`, `3`）で出力すること。`"0"`、`"3"` のような文字列は禁止。
 - BOOLEAN / INTEGER の値が書類から見つからない場合は、各項目の既定方針に従い `false` または `0` を出力すること。空文字やnullは使わないこと。この場合は source_ref の全項目を空値にし、review に既定値であることを記録すること。
 - 生年月日（`applicant.birth_date`）: valueは必ず4桁年の`YYYY-MM-DD`。原本が`DD MMM YYYY`、`DD-MMM-YYYY`等でもvalueだけ正規化し、source_ref.text_quoteは原文表記をそのまま引用すること。2桁年や解釈が曖昧な数値日付を推測しないこと。
-- 法人番号（`employer.corporate_number`）: 13桁の数字のみ。ハイフン・スペースは除去すること。
+- 法人番号（`employer.corporate_number`）: 13桁の数字のみ。ハイフン・スペース等の記号は除去すること。記号除去後に13桁でなければ空文字にし、12桁を補完してはいけない。
 - 氏名（`applicant.name_roman`）: 旅券VIZの表記を優先し、姓→名の順で半角英字大文字スペース区切り。例: `BHANDARI ASHWIN`。
 - 出生地（`applicant.birth_place`）と本国住所（`applicant.home_country_address`）: 出生地と現住所を取り違えず、資料にない住所要素を補わないこと。
+- 性別（`applicant.sex`）: valueは `male` または `female`。原文の「男 Male」「女 Female」等は source_ref.text_quote に残すこと。
+- 配偶者の有無（`applicant.marital_status`）: valueは `single` または `married`。原文の「無 Single」「有 Married」等は source_ref.text_quote に残すこと。
+- 職業（`applicant.occupation`）: 申請人の現在の職業・身分。予定業務の職種区分は `employment.job_category_primary` に出力し、ここに混ぜないこと。
 - 郵便番号・電話番号・雇用保険適用事業所番号: 半角数字のみ。ハイフン・空白・括弧を除去すること。
 - 査証申請予定地（`entry_plan.visa_application_location`）: 国名ではなく在外公館所在地の都市名。ネパールは `Kathmandu`。
 - 雇用保険適用事業所番号（`employer.employment_insurance_office_number`）: 11桁だけを出力する。14桁の労働保険番号は転記しないこと。
@@ -341,11 +355,14 @@ NG: `{"value": "YAMADA TARO", "source_ref": {"document_id": "", "page": 0, "text
 - 職歴の勤務先名称漢字表記（`applicant.employment_history[].company_name_local`）: 漢字を含む勤務先名が分かる場合だけ出力し、英字のみ・現地文字のみの場合は空文字。
 - 法人番号の有無（`employer.has_corporate_number`）: 法人番号が読み取れる場合は `true`、読み取れない場合は `false`。
 - 契約形態（`employment.contract_type`）: 雇用、委任、請負、その他のいずれかで出力すること。Offer Letter等の雇用契約は雇用とする。
+- 入社日（`employment.joining_date`）: valueは `YYYY-MM-DD` の完全な日付のみ。年月・年だけしか分からない場合に `01` 日付を補完しないこと。
+- 役職（`employment.has_position`, `employment.position_title`）: 役職がある場合だけ `has_position=true` かつ `position_title` 非空にすること。`has_position=false` の場合は `position_title` を空にすること。役職名が資料にない場合は職種や業務内容を役職名として作らないこと。
+- 職種（`employment.job_category_primary`）: 予定業務のRASENS職種区分を正確な選択肢ラベルで出力すること。申請人の現在職業 `applicant.occupation` とは別物として扱うこと。
 - 就労予定期間（`employment.employment_period_type`, `employment.employment_period_years`, `employment.employment_period_months`）: 今日の日付と雇用開始日・契約終了日から推測する。明確な終了日がなければ `有期`、年数 `1`、月数 `0` を基本とする。
 - 所属機関の主たる業種（`employer.industry_primary`）: RASENSの選択肢に合う日本語名を優先し、建設会社なら `建設業`、不動産会社なら `不動産・物品賃貸業`、IT/ソフトウェア会社なら `情報通信業` とする。
 - 上陸予定港（`entry_plan.planned_port`）: 勤務先所在地から推測し、東京圏は羽田または成田、中部圏は中部国際、関西圏は関西国際、北海道は新千歳、中国地方は広島、九州は福岡を基本とする。
 - 滞在予定期間（`entry_plan.planned_period_years`, `entry_plan.planned_period_months`）: 根拠がなければ年数 `5`、月数 `0`。半年など明確な記載がある場合だけ月数 `6` 等にする。
-- 最終学歴（`applicant.education[].country_type`, `level`, `major_field`）: 本邦/外国区分、大学/大学院等、専攻分野をRASENS選択肢に近い日本語で出力する。海外大学は `country_type` を `外国` とする。
+- 最終学歴（`applicant.education[].country_type`, `level`, `level_detail`, `major_field`, `major_field_other`）: `level` と `major_field` はRASENS選択肢に近い分類値にし、原文の学校名・学位名・専攻名はそれぞれ適切なdetail/other欄にだけ入れる。分類値と原文detailを同じ欄に混ぜないこと。`major_field_other` は `major_field` が「その他」に相当する場合だけ使う。`level_detail` は `level` が十分に取れている場合は空にする。海外大学は `country_type` を `外国` とする。
 - 在日親族・同居者（`applicant.family.has_japan_relatives_or_cohabitants`, `japan_relatives_or_cohabitants[]`）: 明確な記載がなければ `false`、配列は空。明細は最大3件までとし、空の明細行は作らないこと。
 - 職歴（`applicant.has_employment_history`, `applicant.employment_history[]`）: 明確な記載がなければ `false`、配列は空。明細は最大3件までとし、空の明細行は作らないこと。
 - 職歴の月不詳（`start_month_unknown`, `end_month_unknown`）: 年月が分かる場合は `false`、年だけ分かる場合は `true`。
@@ -353,7 +370,7 @@ NG: `{"value": "YAMADA TARO", "source_ref": {"document_id": "", "page": 0, "text
 - DOCX書類からの抽出: ページ概念がないため page は 1 とすること。
 
 ### 出力言語ルール
-- 値は原本の言語をそのまま使用（例：ローマ字氏名はローマ字、日本語住所は日本語）。ただし`applicant.birth_date.value`のみYYYY-MM-DDへ正規化する。
+- 値は原本の言語を基本にする（例：ローマ字氏名はローマ字、日本語住所は日本語）。ただし上記の内部契約で指定したfieldは、valueだけ指定形式へ正規化し、source_ref.text_quoteは原文を保持する。
 - 説明テキスト（reason, message 等）は日本語で記述
 - text_quote は原文から直接引用
 

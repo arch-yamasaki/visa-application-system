@@ -17,6 +17,8 @@ import argparse
 import json
 import re
 import sys
+import unicodedata
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +33,9 @@ from build_application_data import build_rows  # noqa: E402
 
 _EMPTY_SYNONYMS = {None, "", "unknown", "n/a", "na", "null"}
 _SKIP_KEYS_CASE_DATA = {"source_refs", "field_metadata", "schema_version", "case"}
+_MANIFEST_NAME = "golden_manifest.json"
+_SCORED_SCOPE = "extraction"
+_SCORED_VERIFICATION = "verified"
 
 
 def _normalise(value: Any, path: str = "") -> Any:
@@ -38,6 +43,10 @@ def _normalise(value: Any, path: str = "") -> Any:
 
 
 def _values_match(generated: Any, expected: Any, path: str) -> bool:
+    if _requires_full_date(path):
+        generated_date = _normalise_full_date(generated)
+        expected_date = _normalise_full_date(expected)
+        return generated_date is not None and generated_date == expected_date
     if _is_country_path(path):
         generated_keys = _country_keys(generated)
         expected_keys = _country_keys(expected)
@@ -58,6 +67,8 @@ def _normalise_for_path(value: Any, path: str) -> Any:
         return _normalise_sex(value)
     if _is_country_path(path):
         return _normalise_country(value)
+    if _is_relationship_path(path):
+        return _normalise_relationship(value)
     if _is_label_path(path):
         return _normalise_label(value)
     if _is_date_path(path):
@@ -69,14 +80,19 @@ def _normalise_for_path(value: Any, path: str) -> Any:
 
 def _is_empty(value: Any) -> bool:
     if isinstance(value, str):
-        v = value.strip().lower()
+        v = _normalise_text(value)
         return v in _EMPTY_SYNONYMS
     return value is None
 
 
+def _normalise_text(value: Any) -> str:
+    text = unicodedata.normalize("NFKC", str(value))
+    return re.sub(r"\s+", " ", text).strip().casefold()
+
+
 def _normalise_string(value: Any) -> Any:
     if isinstance(value, str):
-        return value.strip().casefold()
+        return _normalise_text(value)
     return value
 
 
@@ -94,18 +110,18 @@ def _normalise_boolean(value: Any) -> Any:
     if isinstance(value, bool):
         return value
     if isinstance(value, str):
-        v = value.strip().casefold()
-        if v in {"true", "yes", "y", "有", "あり"}:
+        v = _normalise_text(value)
+        if v in {"true", "yes", "y", "有", "あり", "有 yes", "1"}:
             return True
-        if v in {"false", "no", "n", "無", "なし", "無し", "ない"}:
+        if v in {"false", "no", "n", "無", "なし", "無し", "ない", "無 no", "0"}:
             return False
     return _normalise_string(value)
 
 
 def _normalise_marital_status(value: Any) -> Any:
     if isinstance(value, str):
-        v = value.strip().casefold()
-        if v in {"single", "無", "なし", "無し", "無 single"}:
+        v = _normalise_text(value)
+        if v in {"single", "unmarried", "無", "なし", "無し", "無 single"}:
             return "single"
         if v in {"married", "有", "あり", "有 married"}:
             return "married"
@@ -114,10 +130,10 @@ def _normalise_marital_status(value: Any) -> Any:
 
 def _normalise_sex(value: Any) -> Any:
     if isinstance(value, str):
-        v = value.strip().casefold()
-        if v in {"male", "男", "男 male"}:
+        v = _normalise_text(value)
+        if v in {"male", "m", "男", "男 male"}:
             return "male"
-        if v in {"female", "女", "女 female"}:
+        if v in {"female", "f", "女", "女 female"}:
             return "female"
     return _normalise_string(value)
 
@@ -138,14 +154,23 @@ def _country_keys(value: Any) -> set[str]:
         normalized = _normalise_string(value)
         return {str(normalized)} if normalized is not None else set()
 
-    v = value.strip().casefold()
+    v = _normalise_text(value).replace("viet nam", "vietnam")
     v = re.sub(r"\s+", " ", v)
     japanese_aliases = {
         "外国": "foreign",
         "本邦": "japan",
         "日本": "japan",
+        "ネパール": "nepal",
+        "中国": "china",
+        "ベトナム": "vietnam",
+        "フィリピン": "philippines",
+        "インドネシア": "indonesia",
+        "ミャンマー": "myanmar",
+        "韓国": "korea",
+        "パキスタン": "pakistan",
+        "バングラデシュ": "bangladesh",
     }
-    keys = {alias for label, alias in japanese_aliases.items() if label in value}
+    keys = {alias for label, alias in japanese_aliases.items() if _contains_label_token(v, label)}
 
     nationality_aliases = {
         "nepali": "nepal",
@@ -160,9 +185,26 @@ def _country_keys(value: Any) -> set[str]:
         "pakistani": "pakistan",
         "bangladeshi": "bangladesh",
     }
+    country_tokens = {
+        "bangladesh",
+        "china",
+        "foreign",
+        "india",
+        "indonesia",
+        "japan",
+        "korea",
+        "myanmar",
+        "nepal",
+        "pakistan",
+        "philippines",
+        "thailand",
+        "vietnam",
+    }
     stopwords = {
         "country",
+        "nationality",
         "of",
+        "region",
         "the",
         "republic",
         "people",
@@ -172,11 +214,65 @@ def _country_keys(value: Any) -> set[str]:
         "kingdom",
         "united",
     }
+    unknown_tokens: list[str] = []
     for token in re.findall(r"[a-z]+", v):
         token = nationality_aliases.get(token, token)
-        if token not in stopwords:
+        if token in stopwords:
+            continue
+        if token in country_tokens:
             keys.add(token)
+        else:
+            unknown_tokens.append(token)
+    if keys and unknown_tokens:
+        return set()
     return keys
+
+
+def _contains_label_token(value: str, label: str) -> bool:
+    return (
+        value == label
+        or value.startswith(f"{label} ")
+        or value.endswith(f" {label}")
+        or f" {label} " in value
+    )
+
+
+def _is_relationship_path(path: str) -> bool:
+    return path.endswith("relationship")
+
+
+def _normalise_relationship(value: Any) -> Any:
+    if not isinstance(value, str):
+        return _normalise_string(value)
+
+    v = _normalise_text(value)
+    aliases = {
+        "wife": "wife",
+        "妻": "wife",
+        "妻 wife": "wife",
+        "wife 妻": "wife",
+        "husband": "husband",
+        "夫": "husband",
+        "夫 husband": "husband",
+        "husband 夫": "husband",
+        "father": "father",
+        "父": "father",
+        "父 father": "father",
+        "father 父": "father",
+        "mother": "mother",
+        "母": "mother",
+        "母 mother": "mother",
+        "mother 母": "mother",
+        "child": "child",
+        "子": "child",
+        "子 child": "child",
+        "child 子": "child",
+        "spouse": "spouse",
+        "配偶者": "spouse",
+        "配偶者 spouse": "spouse",
+        "spouse 配偶者": "spouse",
+    }
+    return aliases.get(v, _normalise_label(value))
 
 
 def _is_label_path(path: str) -> bool:
@@ -196,7 +292,8 @@ def _normalise_label(value: Any) -> Any:
     if not isinstance(value, str):
         return _normalise_string(value)
 
-    v = value.strip()
+    v = unicodedata.normalize("NFKC", value)
+    v = re.sub(r"\s+", " ", v).strip()
     aliases = {
         "有期": "定めあり",
         "定めあり Fixed": "定めあり",
@@ -217,10 +314,37 @@ def _is_date_path(path: str) -> bool:
     return path.endswith("date") or path.endswith("graduation_date") or path.endswith("expiry_date")
 
 
+def _requires_full_date(path: str) -> bool:
+    return path.lower().endswith("joining_date")
+
+
+def _normalise_full_date(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = unicodedata.normalize("NFKC", value).strip()
+    if not text:
+        return None
+    digits = re.sub(r"\D", "", text)
+    if re.fullmatch(r"\d{8}", digits) and re.fullmatch(r"\d{8}", text):
+        parts = (int(digits[:4]), int(digits[4:6]), int(digits[6:8]))
+    else:
+        match = re.fullmatch(
+            r"(\d{4})\s*(?:[-/.]|年)\s*(\d{1,2})\s*(?:[-/.]|月)\s*(\d{1,2})\s*(?:日)?",
+            text,
+        )
+        if not match:
+            return None
+        parts = tuple(int(part) for part in match.groups())
+    try:
+        return date(*parts).isoformat()
+    except ValueError:
+        return None
+
+
 def _normalise_date(value: Any) -> Any:
     if not isinstance(value, str):
         return value
-    digits = re.sub(r"\D", "", value)
+    digits = re.sub(r"\D", "", unicodedata.normalize("NFKC", value))
     if len(digits) == 8:
         return digits
     if len(digits) == 6:
@@ -247,7 +371,7 @@ def _normalise_digits(value: Any) -> Any:
     if isinstance(value, int):
         return str(value)
     if isinstance(value, str):
-        digits = re.sub(r"\D", "", value)
+        digits = re.sub(r"\D", "", unicodedata.normalize("NFKC", value))
         return digits if digits else _normalise_string(value)
     return value
 
@@ -260,6 +384,11 @@ def _display(value: Any, max_len: int = 60) -> str:
     if len(s) > max_len:
         return s[:max_len - 3] + "..."
     return s
+
+
+def _canonical_compare_path(path: str) -> str:
+    """Normalize manifest dot-index paths to the compare report's bracket style."""
+    return re.sub(r"\.(\d+)(?=\.|$)", r"[\1]", path)
 
 
 # ---------------------------------------------------------------------------
@@ -357,23 +486,126 @@ def _build_golden_rows(gen_flat: dict, exp_flat: dict) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 
-def compare_case_data(gen: dict, exp: dict) -> dict:
+def _load_golden_manifest(expected_dir: Path) -> dict | None:
+    manifest_path = expected_dir / _MANIFEST_NAME
+    if not manifest_path.exists():
+        return None
+    manifest = _load_json(manifest_path)
+    if not isinstance(manifest, dict):
+        print(f"ERROR: {_MANIFEST_NAME} must be a JSON object", file=sys.stderr)
+        sys.exit(1)
+    return manifest
+
+
+def _case_data_manifest_stats(exp_flat: dict[str, Any], manifest: dict | None) -> dict[str, Any]:
+    if manifest is None:
+        return {
+            "comparison_mode": "legacy_all_fields",
+            "golden_manifest_present": False,
+            "manifest_status": None,
+            "manifest_revision_id": None,
+            "application_only_count": 0,
+            "excluded_count": 0,
+            "needs_review_count": 0,
+            "unclassified_count": 0,
+            "manifest_unknown_path_count": 0,
+            "manifest_unknown_paths": [],
+        }
+
+    field_rules = manifest.get("field_rules", {})
+    if not isinstance(field_rules, dict):
+        print(f"ERROR: {_MANIFEST_NAME}.field_rules must be a JSON object", file=sys.stderr)
+        sys.exit(1)
+
+    expected_paths = set(exp_flat.keys())
+    expected_compare_paths = {_canonical_compare_path(path) for path in expected_paths}
+    field_rules_by_path = {_canonical_compare_path(path): rule for path, rule in field_rules.items()}
+    scored_paths: set[str] = set()
+    application_only = 0
+    excluded = 0
+    needs_review = 0
+    unclassified = 0
+
+    for path in expected_paths:
+        rule = field_rules_by_path.get(_canonical_compare_path(path))
+        if not isinstance(rule, dict):
+            unclassified += 1
+            continue
+
+        scope = rule.get("scope")
+        verification = rule.get("verification")
+        if scope == _SCORED_SCOPE and verification == _SCORED_VERIFICATION:
+            scored_paths.add(path)
+        elif scope == _SCORED_SCOPE:
+            needs_review += 1
+        elif scope == "application_only":
+            application_only += 1
+            if verification != _SCORED_VERIFICATION:
+                needs_review += 1
+        elif scope == "excluded":
+            excluded += 1
+            if verification != _SCORED_VERIFICATION:
+                needs_review += 1
+        else:
+            unclassified += 1
+
+    unknown_paths = sorted(
+        path for path in field_rules.keys()
+        if _canonical_compare_path(path) not in expected_compare_paths
+    )
+    return {
+        "comparison_mode": "manifest_scoped",
+        "golden_manifest_present": True,
+        "manifest_status": manifest.get("status"),
+        "manifest_revision_id": manifest.get("revision_id"),
+        "scored_paths": scored_paths,
+        "application_only_count": application_only,
+        "excluded_count": excluded,
+        "needs_review_count": needs_review,
+        "unclassified_count": unclassified,
+        "manifest_unknown_path_count": len(unknown_paths),
+        "manifest_unknown_paths": unknown_paths,
+    }
+
+
+def compare_case_data(gen: dict, exp: dict, manifest: dict | None = None) -> dict:
     gen_flat = _flatten(gen, skip_keys=_SKIP_KEYS_CASE_DATA)
     exp_flat = _flatten(exp, skip_keys=_SKIP_KEYS_CASE_DATA)
 
-    rows = _build_golden_rows(gen_flat, exp_flat)
+    manifest_stats = _case_data_manifest_stats(exp_flat, manifest)
+    if manifest is None:
+        scored_exp_flat = exp_flat
+    else:
+        scored_exp_flat = {path: exp_flat[path] for path in manifest_stats["scored_paths"]}
+
+    rows = _build_golden_rows(gen_flat, scored_exp_flat)
     match = sum(1 for r in rows if r["status"] == ROW_MATCH)
     mismatch = sum(1 for r in rows if r["status"] == ROW_MISMATCH)
     missing = sum(1 for r in rows if r["status"] == ROW_MISSING)
 
-    # Extra: in generated but not in expected (non-empty only)
+    # Extra values do not change the golden-based accuracy denominator, but
+    # must stay visible in both modes. They can be an AI hallucination or a
+    # missing field in the golden and therefore always need review.
     extra_keys = sorted(set(gen_flat.keys()) - set(exp_flat.keys()))
     extra = [k for k in extra_keys if _normalise(gen_flat[k], k) is not None]
 
     golden_total = match + mismatch + missing
+    config_errors: list[str] = []
+    if manifest is not None and not golden_total:
+        config_errors.append("golden_manifest has no verified extraction fields")
+    if manifest_stats["manifest_unknown_path_count"]:
+        config_errors.append("golden_manifest contains path(s) not present in case_data.golden.json")
+
+    if config_errors:
+        status = "CONFIG_ERROR"
+    elif not mismatch and not missing and not extra:
+        status = "MATCH"
+    else:
+        status = "MISMATCH"
+
     return {
         "file": "case_data",
-        "status": "MATCH" if not mismatch and not missing and not extra else "MISMATCH",
+        "status": status,
         "golden_total": golden_total,
         "match_count": match,
         "mismatch_count": mismatch,
@@ -381,6 +613,8 @@ def compare_case_data(gen: dict, exp: dict) -> dict:
         "only_generated_count": len(extra),
         "rows": rows,
         "only_generated": extra,
+        "config_errors": config_errors,
+        **{k: v for k, v in manifest_stats.items() if k != "scored_paths"},
     }
 
 
@@ -637,7 +871,10 @@ def run_comparison(generated_dir: Path, expected_dir: Path, targets: list[str]) 
 
         gen_data = _load_json(gen_path)
         exp_data = _load_json(exp_path)
-        results.append(compare_fn(gen_data, exp_data))
+        if label == "case_data":
+            results.append(compare_fn(gen_data, exp_data, _load_golden_manifest(expected_dir)))
+        else:
+            results.append(compare_fn(gen_data, exp_data))
     return results
 
 
@@ -659,8 +896,14 @@ def format_markdown(results: list[dict]) -> str:
     agg_mismatch = 0
     agg_missing = 0
     agg_extra = 0
+    agg_application_only = 0
+    agg_excluded = 0
+    agg_needs_review = 0
+    agg_unclassified = 0
+    agg_manifest_unknown = 0
 
     problem_rows: list[tuple[str, dict]] = []
+    config_errors: list[tuple[str, str]] = []
     for r in results:
         if r["status"] not in ("SKIP", "MISSING"):
             agg_match += r["match_count"]
@@ -668,9 +911,16 @@ def format_markdown(results: list[dict]) -> str:
             agg_mismatch += r["mismatch_count"]
             agg_missing += r["only_expected_count"]
             agg_extra += r["only_generated_count"]
+            agg_application_only += r.get("application_only_count", 0)
+            agg_excluded += r.get("excluded_count", 0)
+            agg_needs_review += r.get("needs_review_count", 0)
+            agg_unclassified += r.get("unclassified_count", 0)
+            agg_manifest_unknown += r.get("manifest_unknown_path_count", 0)
             for row in r.get("rows", []):
                 if row["status"] != ROW_MATCH:
                     problem_rows.append((r["file"], row))
+            for error in r.get("config_errors", []):
+                config_errors.append((r["file"], error))
             for path in r.get("only_generated", []):
                 major, minor = _split_path(path)
                 problem_rows.append((
@@ -686,7 +936,7 @@ def format_markdown(results: list[dict]) -> str:
                 ))
 
     lines.append("## 判定\n")
-    lines.append(("OK" if not problem_rows and not agg_extra else "NG") + "\n")
+    lines.append(("OK" if not problem_rows and not agg_extra and not agg_manifest_unknown and not config_errors else "NG") + "\n")
     lines.append("## 問題サマリ\n")
     lines.append("| 指標 | 件数 |")
     lines.append("|---|---:|")
@@ -694,6 +944,12 @@ def format_markdown(results: list[dict]) -> str:
     lines.append(f"| ❌ 値の間違い | {agg_mismatch} |")
     lines.append(f"| ⚠️ 抽出漏れ | {agg_missing} |")
     lines.append(f"| ➕ 過剰抽出 | {agg_extra} |")
+    if agg_application_only or agg_excluded or agg_needs_review or agg_unclassified or agg_manifest_unknown:
+        lines.append(f"| 採点対象外: application_only | {agg_application_only} |")
+        lines.append(f"| 採点対象外: excluded | {agg_excluded} |")
+        lines.append(f"| 採点対象外: needs_review | {agg_needs_review} |")
+        lines.append(f"| 採点対象外: unclassified | {agg_unclassified} |")
+        lines.append(f"| manifest pathエラー | {agg_manifest_unknown} |")
     lines.append("")
 
     if problem_rows:
@@ -709,6 +965,12 @@ def format_markdown(results: list[dict]) -> str:
             lines.append(f"| {file_name} | {item} | {major} | {minor} | {exp_val} | {gen_val} | {row['status']} |")
         lines.append("")
 
+    if config_errors:
+        lines.append("## 設定エラー\n")
+        for file_name, error in config_errors:
+            lines.append(f"- `{file_name}`: {_escape_md(error)}")
+        lines.append("")
+
     lines.append("---\n")
 
     for r in results:
@@ -717,6 +979,8 @@ def format_markdown(results: list[dict]) -> str:
         if r["status"] in ("SKIP", "MISSING"):
             lines.append(f"> {r.get('reason', '')}\n")
             continue
+        if r["status"] == "CONFIG_ERROR":
+            lines.append("> manifest設定に問題があります。採点結果として扱わず、設定を修正してください。\n")
 
         m_count = r["match_count"]
         mm_count = r["mismatch_count"]
@@ -726,13 +990,35 @@ def format_markdown(results: list[dict]) -> str:
 
         accuracy = (m_count / g_total * 100) if g_total else 0
         lines.append(f"**Golden正答率: {accuracy:.1f}%** ({m_count}/{g_total} 項目)\n")
+        mode = r.get("comparison_mode")
+        if mode == "manifest_scoped":
+            revision = r.get("manifest_revision_id") or "(none)"
+            status = r.get("manifest_status") or "(none)"
+            lines.append(f"比較モード: manifest scoped / revision: {revision} / status: {status}\n")
+        elif mode == "legacy_all_fields":
+            lines.append("比較モード: legacy all fields / manifestなし\n")
+        for config_error in r.get("config_errors", []):
+            lines.append(f"> CONFIG_ERROR: {_escape_md(config_error)}\n")
         lines.append(f"| 指標 | 件数 |")
         lines.append(f"|---|---|")
         lines.append(f"| ✅ 一致 | {m_count} |")
         lines.append(f"| ❌ 値の間違い | {mm_count} |")
         lines.append(f"| ⚠️ 抽出漏れ | {oe_count} |")
         lines.append(f"| ➕ 過剰抽出 | {og_count} |")
+        if mode == "manifest_scoped":
+            lines.append(f"| 採点対象外: application_only | {r.get('application_only_count', 0)} |")
+            lines.append(f"| 採点対象外: excluded | {r.get('excluded_count', 0)} |")
+            lines.append(f"| 採点対象外: needs_review | {r.get('needs_review_count', 0)} |")
+            lines.append(f"| 採点対象外: unclassified | {r.get('unclassified_count', 0)} |")
+            lines.append(f"| manifest pathエラー | {r.get('manifest_unknown_path_count', 0)} |")
         lines.append("")
+
+        unknown_paths = r.get("manifest_unknown_paths") or []
+        if unknown_paths:
+            lines.append("### manifest pathエラー\n")
+            for path in unknown_paths:
+                lines.append(f"- `{_escape_md(path)}`")
+            lines.append("")
 
         # Full detail table for golden fields
         has_form_field = any(row.get("form_field") for row in r.get("rows", []))
@@ -771,6 +1057,12 @@ def format_markdown(results: list[dict]) -> str:
     lines.append(f"| ❌ 値の間違い | {agg_mismatch} |")
     lines.append(f"| ⚠️ 抽出漏れ | {agg_missing} |")
     lines.append(f"| ➕ 過剰抽出 | {agg_extra} |")
+    if agg_application_only or agg_excluded or agg_needs_review or agg_unclassified or agg_manifest_unknown:
+        lines.append(f"| 採点対象外: application_only | {agg_application_only} |")
+        lines.append(f"| 採点対象外: excluded | {agg_excluded} |")
+        lines.append(f"| 採点対象外: needs_review | {agg_needs_review} |")
+        lines.append(f"| 採点対象外: unclassified | {agg_unclassified} |")
+        lines.append(f"| manifest pathエラー | {agg_manifest_unknown} |")
 
     return "\n".join(lines) + "\n"
 
@@ -822,7 +1114,10 @@ def main() -> None:
     print(f"Golden正答率: {rate:.1f}% ({agg_match}/{agg_total})")
     print(f"レポート保存先: {output_path}")
 
-    has_issues = any(r["status"] in ("MISMATCH", "MISSING") for r in results)
+    has_config_errors = any(r["status"] == "CONFIG_ERROR" for r in results)
+    has_issues = any(r["status"] in ("MISMATCH", "MISSING", "CONFIG_ERROR") for r in results)
+    if has_config_errors:
+        sys.exit(2)
     sys.exit(1 if has_issues else 0)
 
 

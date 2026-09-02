@@ -195,6 +195,7 @@ def prepare(fixture_dir: Path) -> Path:
         "blind_run_policy": {
             "forbidden_globs": [
                 "visa-eval/test_cases_from_raw/**/expected/**",
+                "visa-eval/test_cases_from_raw/**/expected_verified/**",
                 "**/*.golden.json",
                 "visa-eval/blind_runs_from_test_cases/*/generated/**",
             ],
