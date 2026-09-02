@@ -1,4 +1,4 @@
-"""Gemini API response_schema for structured extraction.
+"""Gemini API schemas for structured extraction.
 
 Defines EXTRACTION_SCHEMA — a JSON Schema dict using Gemini's type
 conventions (uppercase type names: STRING, OBJECT, ARRAY, INTEGER, NUMBER,
@@ -6,10 +6,12 @@ BOOLEAN).
 
 Design: every data field is wrapped in FieldValue = {value, source_ref}.
 source_ref is a single primary evidence object. Downstream code in gemini.py
-normalizes source_ref into field_metadata.source_refs[] for UI compatibility.
+normalizes source_ref into field_metadata.source_refs[] and derives origin.
 
 The top-level review section keeps its own shape (not FieldValue-wrapped).
 """
+
+import copy
 
 # ---------------------------------------------------------------------------
 # FieldValue — the common wrapper for every extracted field
@@ -22,8 +24,33 @@ SOURCE_REF_SCHEMA = {
         "page": {"type": "INTEGER"},
         "text_quote": {"type": "STRING"},
         "confidence": {"type": "NUMBER"},
+        "locations": {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "type": {
+                        "type": "STRING",
+                        "enum": ["pdf_bbox", "xlsx_cell", "docx_block"],
+                    },
+                    "anchor_id": {"type": "STRING"},
+                    "page": {"type": "INTEGER"},
+                    "bbox": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "y_min": {"type": "NUMBER"},
+                            "x_min": {"type": "NUMBER"},
+                            "y_max": {"type": "NUMBER"},
+                            "x_max": {"type": "NUMBER"},
+                        },
+                        "required": ["y_min", "x_min", "y_max", "x_max"],
+                    },
+                },
+                "required": ["type"],
+            },
+        },
     },
-    "required": ["document_id", "page", "text_quote", "confidence"],
+    "required": ["document_id", "page", "text_quote", "confidence", "locations"],
 }
 
 STRING_VALUE_SCHEMA = {"type": "STRING"}
@@ -53,8 +80,6 @@ FIELD_VALUE_SCHEMA = {
 
 def _fv(value_schema: dict | None = None) -> dict:
     """Return a fresh FieldValue schema with the requested value type."""
-    import copy
-
     schema = copy.deepcopy(FIELD_VALUE_SCHEMA)
     copied_value_schema = copy.deepcopy(value_schema or STRING_VALUE_SCHEMA)
     schema["properties"]["value"] = copied_value_schema
@@ -577,3 +602,234 @@ EXTRACTION_SCHEMA = {
     },
     "required": ["case_data", "review"],
 }
+
+
+# ---------------------------------------------------------------------------
+# Gemini response_json_schema support
+# ---------------------------------------------------------------------------
+
+_JSON_TYPE_NAMES = {
+    "OBJECT": "object",
+    "ARRAY": "array",
+    "STRING": "string",
+    "INTEGER": "integer",
+    "NUMBER": "number",
+    "BOOLEAN": "boolean",
+}
+
+_JSON_BBOX_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "y_min": {"type": "number"},
+        "x_min": {"type": "number"},
+        "y_max": {"type": "number"},
+        "x_max": {"type": "number"},
+    },
+    "required": ["y_min", "x_min", "y_max", "x_max"],
+}
+
+_JSON_SOURCE_REF_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "document_id": {"type": "string"},
+        "page": {"type": "integer"},
+        "text_quote": {"type": "string"},
+        "confidence": {"type": "number"},
+    },
+    "required": ["document_id", "page", "text_quote", "confidence"],
+}
+
+_JSON_SOURCE_LOCATION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "field_path": {"type": "string"},
+        "alternative_index": {"type": "integer"},
+        "type": {
+            "type": "string",
+            "enum": ["pdf_bbox", "xlsx_cell", "docx_block"],
+        },
+        "anchor_id": {"type": "string"},
+        "page": {"type": "integer"},
+        "bbox": {"$ref": "#/$defs/pdfBbox"},
+    },
+    "required": ["field_path", "alternative_index", "type"],
+}
+
+_JSON_SOURCE_LOCATIONS_SCHEMA = {
+    "type": "array",
+    "items": {"$ref": "#/$defs/sourceLocation"},
+}
+
+_JSON_FIELD_VALUE_DEFS = {
+    "fieldValueString": {
+        "type": "object",
+        "properties": {
+            "value": {"type": "string"},
+            "source_ref": {"$ref": "#/$defs/sourceRef"},
+            "alternatives": {
+                "type": "array",
+                "items": {"$ref": "#/$defs/alternativeString"},
+            },
+        },
+        "required": ["value", "source_ref"],
+    },
+    "fieldValueBoolean": {
+        "type": "object",
+        "properties": {
+            "value": {"type": "boolean"},
+            "source_ref": {"$ref": "#/$defs/sourceRef"},
+            "alternatives": {
+                "type": "array",
+                "items": {"$ref": "#/$defs/alternativeBoolean"},
+            },
+        },
+        "required": ["value", "source_ref"],
+    },
+    "fieldValueInteger": {
+        "type": "object",
+        "properties": {
+            "value": {"type": "integer"},
+            "source_ref": {"$ref": "#/$defs/sourceRef"},
+            "alternatives": {
+                "type": "array",
+                "items": {"$ref": "#/$defs/alternativeInteger"},
+            },
+        },
+        "required": ["value", "source_ref"],
+    },
+    "fieldValueNumber": {
+        "type": "object",
+        "properties": {
+            "value": {"type": "number"},
+            "source_ref": {"$ref": "#/$defs/sourceRef"},
+            "alternatives": {
+                "type": "array",
+                "items": {"$ref": "#/$defs/alternativeNumber"},
+            },
+        },
+        "required": ["value", "source_ref"],
+    },
+    "alternativeString": {
+        "type": "object",
+        "properties": {
+            "value": {"type": "string"},
+            "source_ref": {"$ref": "#/$defs/sourceRef"},
+        },
+        "required": ["value", "source_ref"],
+    },
+    "alternativeBoolean": {
+        "type": "object",
+        "properties": {
+            "value": {"type": "boolean"},
+            "source_ref": {"$ref": "#/$defs/sourceRef"},
+        },
+        "required": ["value", "source_ref"],
+    },
+    "alternativeInteger": {
+        "type": "object",
+        "properties": {
+            "value": {"type": "integer"},
+            "source_ref": {"$ref": "#/$defs/sourceRef"},
+        },
+        "required": ["value", "source_ref"],
+    },
+    "alternativeNumber": {
+        "type": "object",
+        "properties": {
+            "value": {"type": "number"},
+            "source_ref": {"$ref": "#/$defs/sourceRef"},
+        },
+        "required": ["value", "source_ref"],
+    },
+}
+
+_JSON_DEFS = {
+    "sourceRef": _JSON_SOURCE_REF_SCHEMA,
+    "sourceLocation": _JSON_SOURCE_LOCATION_SCHEMA,
+    "pdfBbox": _JSON_BBOX_SCHEMA,
+    **_JSON_FIELD_VALUE_DEFS,
+}
+
+
+def _is_field_value_schema(schema: dict) -> bool:
+    properties = schema.get("properties")
+    required = schema.get("required")
+    return (
+        isinstance(properties, dict)
+        and isinstance(required, list)
+        and "value" in properties
+        and "source_ref" in properties
+        and "value" in required
+        and "source_ref" in required
+    )
+
+
+def _schema_has_field_values(schema) -> bool:
+    if isinstance(schema, dict):
+        if _is_field_value_schema(schema):
+            return True
+        return any(_schema_has_field_values(value) for value in schema.values())
+    if isinstance(schema, list):
+        return any(_schema_has_field_values(value) for value in schema)
+    return False
+
+
+def _field_value_ref(schema: dict) -> dict:
+    value_type = schema.get("properties", {}).get("value", {}).get("type")
+    ref_name = {
+        "BOOLEAN": "fieldValueBoolean",
+        "INTEGER": "fieldValueInteger",
+        "NUMBER": "fieldValueNumber",
+    }.get(value_type, "fieldValueString")
+    return {"$ref": f"#/$defs/{ref_name}"}
+
+
+def _to_lowercase_json_schema(schema):
+    if isinstance(schema, list):
+        return [_to_lowercase_json_schema(item) for item in schema]
+    if not isinstance(schema, dict):
+        return schema
+    if _is_field_value_schema(schema):
+        return _field_value_ref(schema)
+    if schema.get("nullable") is True:
+        non_nullable = {
+            key: value
+            for key, value in schema.items()
+            if key != "nullable"
+        }
+        return {
+            "anyOf": [
+                _to_lowercase_json_schema(non_nullable),
+                {"type": "null"},
+            ]
+        }
+
+    converted = {}
+    for key, value in schema.items():
+        if key == "type" and isinstance(value, str):
+            converted[key] = _JSON_TYPE_NAMES.get(value, value.lower())
+        else:
+            converted[key] = _to_lowercase_json_schema(value)
+    return converted
+
+
+def to_response_json_schema(schema: dict) -> dict:
+    """Return a compact response_json_schema with shared FieldValue refs.
+
+    The canonical SOURCE_REF_SCHEMA stays location-rich for downstream
+    compatibility.  Gemini receives SourceRef without per-field locations and
+    one root-level source_locations list that backend code can merge back into
+    each field's source_ref.
+    """
+    has_field_values = _schema_has_field_values(schema)
+    response_schema = _to_lowercase_json_schema(copy.deepcopy(schema))
+    if not has_field_values:
+        return response_schema
+
+    properties = response_schema.setdefault("properties", {})
+    required = response_schema.setdefault("required", [])
+    properties["source_locations"] = copy.deepcopy(_JSON_SOURCE_LOCATIONS_SCHEMA)
+    if "source_locations" not in required:
+        required.append("source_locations")
+    response_schema["$defs"] = copy.deepcopy(_JSON_DEFS)
+    return response_schema

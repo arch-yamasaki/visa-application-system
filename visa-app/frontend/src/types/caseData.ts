@@ -257,12 +257,24 @@ export interface SourceRef {
   page: number
   text_quote: string
   confidence: number
+  locations?: SourceLocation[]
   bbox?: { y_min: number; x_min: number; y_max: number; x_max: number }
   anchor?: SourceAnchor
 }
 
+export type SourceLocation =
+  | {
+      type: 'pdf_bbox'
+      page: number
+      bbox: { y_min: number; x_min: number; y_max: number; x_max: number }
+    }
+  | { type: 'xlsx_cell' | 'docx_block'; anchor_id: string }
+
+export type FieldOrigin = 'document' | 'derived' | 'setting' | 'human'
+
 export interface FieldAlternative {
   value: string | number | boolean
+  origin?: FieldOrigin
   source_refs?: SourceRef[]
 }
 
@@ -276,7 +288,14 @@ export interface SourceAnchor {
   match_count?: number
   candidates?: {
     page?: number
-    bbox: { y_min: number; x_min: number; y_max: number; x_max: number }
+    anchor_id?: string
+    bbox?: { y_min: number; x_min: number; y_max: number; x_max: number }
+    sheet_name?: string
+    cell?: string
+    paragraph_index?: number
+    table_index?: number
+    row?: number
+    col?: number
   }[]
   sheet_name?: string
   cell?: string
@@ -288,6 +307,7 @@ export interface SourceAnchor {
 
 export interface FieldMeta {
   source_refs: SourceRef[]
+  origin?: FieldOrigin
   alternatives?: FieldAlternative[]
   human_reviewed?: boolean
   human_edited?: boolean

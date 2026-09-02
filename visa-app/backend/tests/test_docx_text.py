@@ -4,7 +4,7 @@ import io
 
 import docx
 
-from extractors.docx_text import extract_docx
+from extractors.docx_text import build_docx_block_index, extract_docx
 from extractors.types import OcrResult
 
 
@@ -45,6 +45,7 @@ class TestExtractDocx:
         assert result.pages[0].page_number == 1
         assert "Hello World" in result.pages[0].text
         assert "Second paragraph" in result.pages[0].text
+        assert "[p-0] Hello World" in result.pages[0].text
 
     def test_table_extraction(self):
         data = _make_docx(tables=[[
@@ -59,6 +60,17 @@ class TestExtractDocx:
         assert "Age" in text
         assert "Taro" in text
         assert "30" in text
+        assert "[t-0-r-1-c-0] Taro" in text
+
+    def test_block_index_matches_extracted_anchor_ids(self):
+        data = _make_docx(
+            paragraphs=["Header text"],
+            tables=[[["Name", "Taro"]]],
+        )
+        blocks = build_docx_block_index(data, document_id="doc_d02")
+
+        assert blocks[0]["anchor_id"] == "p-0"
+        assert blocks[1]["anchor_id"] == "t-0-r-0-c-0"
 
     def test_paragraphs_and_tables_combined(self):
         data = _make_docx(

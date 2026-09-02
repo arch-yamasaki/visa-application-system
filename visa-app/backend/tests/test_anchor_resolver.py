@@ -1,206 +1,355 @@
-"""anchor_resolver のユニットテスト。"""
+"""anchor_resolver unit tests."""
 
 import pymupdf
 
-from extractors.anchor_resolver import anchor_coverage, resolve_anchors, sync_bbox_anchors
+from extractors.anchor_resolver import anchor_coverage, resolve_source_locations, sync_bbox_anchors
 
 
-def _pdf_with_text(lines: list[str]) -> bytes:
+def _pdf_with_pages(page_count: int) -> bytes:
     doc = pymupdf.open()
-    page = doc.new_page(width=300, height=200)
-    y = 40
-    for line in lines:
-        page.insert_text((40, y), line, fontsize=12)
-        y += 30
+    for _ in range(page_count):
+        doc.new_page(width=300, height=200)
     pdf_bytes = doc.tobytes()
     doc.close()
     return pdf_bytes
 
 
-def _pdf_with_pages(pages: list[list[str]], width: int = 300) -> bytes:
-    # 注意: insert_text の標準フォントはCJKを描画できないため、
-    # 検索対象の文字列はASCIIにする(日本語はtext layerに残らない)。
-    doc = pymupdf.open()
-    for lines in pages:
-        page = doc.new_page(width=width, height=200)
-        y = 40
-        for line in lines:
-            page.insert_text((40, y), line, fontsize=12)
-            y += 30
-    pdf_bytes = doc.tobytes()
-    doc.close()
-    return pdf_bytes
+def _xlsx_cell(sheet: str, cell: str, row: int, col: int, text: str) -> dict:
+    return {
+        "type": "xlsx_cell",
+        "sheet_name": sheet,
+        "cell": cell,
+        "row": row,
+        "col": col,
+        "text": text,
+        "anchor_id": f"{sheet}!{cell}",
+    }
 
 
-def test_resolve_anchors_adds_pdf_text_layer_bbox():
+def test_resolves_explicit_xlsx_location_without_text_match():
+    field_metadata = {
+        "employment.monthly_salary": {
+            "source_refs": [
+                {
+                    "document_id": "doc_xlsx",
+                    "page": 1,
+                    "text_quote": "different quote",
+                    "confidence": 0.9,
+                    "locations": [{"type": "xlsx_cell", "anchor_id": "Applicant!B2"}],
+                }
+            ]
+        }
+    }
+    xlsx_index = {"doc_xlsx": [_xlsx_cell("Applicant", "B2", 2, 2, "260000")]}
+
+    result = resolve_source_locations(field_metadata, {}, xlsx_index, {})
+    anchor = result["employment.monthly_salary"]["source_refs"][0]["anchor"]
+
+    assert anchor == {
+        "type": "xlsx_cell",
+        "status": "resolved",
+        "resolver_type": "source_ref_location",
+        "match_count": 1,
+        "anchor_id": "Applicant!B2",
+        "sheet_name": "Applicant",
+        "cell": "B2",
+        "row": 2,
+        "col": 2,
+    }
+
+
+def test_invalid_explicit_xlsx_location_does_not_fallback_to_quote_match():
+    field_metadata = {
+        "employment.monthly_salary": {
+            "source_refs": [
+                {
+                    "document_id": "doc_xlsx",
+                    "page": 1,
+                    "text_quote": "260000",
+                    "confidence": 0.9,
+                    "locations": [{"type": "xlsx_cell", "anchor_id": "Applicant!Z9"}],
+                }
+            ]
+        }
+    }
+    xlsx_index = {"doc_xlsx": [_xlsx_cell("Applicant", "B2", 2, 2, "260000")]}
+
+    result = resolve_source_locations(field_metadata, {}, xlsx_index, {})
+    anchor = result["employment.monthly_salary"]["source_refs"][0]["anchor"]
+
+    assert anchor == {
+        "type": "source_location",
+        "status": "not_found",
+        "resolver_type": "source_ref_location",
+        "match_count": 0,
+    }
+
+
+def test_legacy_ref_without_locations_is_left_unchanged():
+    field_metadata = {
+        "employment.monthly_salary": {
+            "source_refs": [
+                {
+                    "document_id": "doc_xlsx",
+                    "page": 1,
+                    "text_quote": "260000",
+                    "confidence": 0.9,
+                }
+            ]
+        }
+    }
+    xlsx_index = {"doc_xlsx": [_xlsx_cell("Applicant", "B2", 2, 2, "260000")]}
+
+    result = resolve_source_locations(field_metadata, {}, xlsx_index, {})
+    ref = result["employment.monthly_salary"]["source_refs"][0]
+
+    assert "anchor" not in ref
+
+
+def test_legacy_existing_anchor_is_preserved():
+    existing_anchor = {
+        "type": "xlsx_cell",
+        "status": "resolved",
+        "anchor_id": "Applicant!B2",
+    }
+    field_metadata = {
+        "employment.monthly_salary": {
+            "source_refs": [
+                {
+                    "document_id": "doc_xlsx",
+                    "page": 1,
+                    "text_quote": "260000",
+                    "confidence": 0.9,
+                    "anchor": existing_anchor,
+                }
+            ]
+        }
+    }
+
+    result = resolve_source_locations(field_metadata, {}, {}, {})
+
+    assert result["employment.monthly_salary"]["source_refs"][0]["anchor"] is existing_anchor
+
+
+def test_resolves_explicit_docx_location():
+    field_metadata = {
+        "applicant.name_roman": {
+            "source_refs": [
+                {
+                    "document_id": "doc_docx",
+                    "page": 1,
+                    "text_quote": "TANAKA TARO",
+                    "confidence": 0.9,
+                    "locations": [{"type": "docx_block", "anchor_id": "p-0"}],
+                }
+            ]
+        }
+    }
+    docx_index = {
+        "doc_docx": [
+            {
+                "type": "docx_block",
+                "block_kind": "paragraph",
+                "paragraph_index": 0,
+                "text": "TANAKA TARO",
+                "anchor_id": "p-0",
+            }
+        ]
+    }
+
+    result = resolve_source_locations(field_metadata, {}, {}, docx_index)
+    anchor = result["applicant.name_roman"]["source_refs"][0]["anchor"]
+
+    assert anchor["status"] == "resolved"
+    assert anchor["anchor_id"] == "p-0"
+    assert anchor["paragraph_index"] == 0
+
+
+def test_resolves_explicit_pdf_bbox_location():
     field_metadata = {
         "applicant.name_roman": {
             "source_refs": [
                 {
                     "document_id": "doc_pdf",
                     "page": 1,
-                    "text_quote": "AMIT TAMANG",
+                    "text_quote": "TANAKA TARO",
                     "confidence": 0.9,
+                    "locations": [
+                        {
+                            "type": "pdf_bbox",
+                            "page": 2,
+                            "bbox": {"y_min": 100, "x_min": 200, "y_max": 130, "x_max": 260},
+                        }
+                    ],
                 }
             ]
         }
     }
 
-    result = resolve_anchors(field_metadata, {"doc_pdf": _pdf_with_text(["AMIT TAMANG"])})
+    result = resolve_source_locations(field_metadata, {"doc_pdf": _pdf_with_pages(2)})
     ref = result["applicant.name_roman"]["source_refs"][0]
 
+    assert ref["bbox"] == {"y_min": 100.0, "x_min": 200.0, "y_max": 130.0, "x_max": 260.0}
     assert ref["anchor"]["status"] == "resolved"
-    assert ref["anchor"]["resolver_type"] == "pdf_text_layer"
-    assert ref["anchor"]["page"] == 1
-    assert ref["anchor"]["bbox"] == ref["bbox"]
-    assert ref["bbox"]["x_min"] < ref["bbox"]["x_max"]
-    assert ref["bbox"]["y_min"] < ref["bbox"]["y_max"]
+    assert ref["anchor"]["page"] == 2
 
 
-def test_resolve_anchors_adds_pdf_text_layer_bbox_to_alternative_ref():
+def test_rejects_pdf_bbox_outside_page_or_coordinate_bounds():
     field_metadata = {
-        "employment.monthly_salary": {
+        "applicant.name_roman": {
             "source_refs": [
                 {
                     "document_id": "doc_pdf",
                     "page": 1,
-                    "text_quote": "250000",
+                    "text_quote": "TANAKA TARO",
                     "confidence": 0.9,
+                    "locations": [
+                        {
+                            "type": "pdf_bbox",
+                            "page": 2,
+                            "bbox": {"y_min": 100, "x_min": 200, "y_max": 130, "x_max": 1001},
+                        },
+                        {
+                            "type": "pdf_bbox",
+                            "page": 3,
+                            "bbox": {"y_min": 100, "x_min": 200, "y_max": 130, "x_max": 260},
+                        },
+                    ],
                 }
-            ],
+            ]
+        }
+    }
+
+    result = resolve_source_locations(field_metadata, {"doc_pdf": _pdf_with_pages(2)})
+    anchor = result["applicant.name_roman"]["source_refs"][0]["anchor"]
+
+    assert anchor["status"] == "not_found"
+
+
+def test_invalid_explicit_pdf_location_drops_stale_bbox_without_fallback():
+    field_metadata = {
+        "applicant.name_roman": {
+            "source_refs": [
+                {
+                    "document_id": "doc_pdf",
+                    "page": 1,
+                    "text_quote": "TANAKA TARO",
+                    "confidence": 0.9,
+                    "bbox": {"y_min": 10, "x_min": 10, "y_max": 20, "x_max": 20},
+                    "locations": [
+                        {
+                            "type": "pdf_bbox",
+                            "page": 0,
+                            "bbox": {"y_min": 100, "x_min": 200, "y_max": 130, "x_max": 260},
+                        }
+                    ],
+                }
+            ]
+        }
+    }
+
+    result = resolve_source_locations(field_metadata, {"doc_pdf": _pdf_with_pages(1)})
+    ref = result["applicant.name_roman"]["source_refs"][0]
+
+    assert "bbox" not in ref
+    assert ref["anchor"]["status"] == "not_found"
+
+
+def test_rejects_non_finite_pdf_bbox():
+    field_metadata = {
+        "applicant.name_roman": {
+            "source_refs": [
+                {
+                    "document_id": "doc_pdf",
+                    "page": 1,
+                    "text_quote": "TANAKA TARO",
+                    "confidence": 0.9,
+                    "locations": [
+                        {
+                            "type": "pdf_bbox",
+                            "page": 1,
+                            "bbox": {"y_min": float("nan"), "x_min": 200, "y_max": 130, "x_max": 260},
+                        }
+                    ],
+                }
+            ]
+        }
+    }
+
+    result = resolve_source_locations(field_metadata, {"doc_pdf": _pdf_with_pages(1)})
+
+    assert result["applicant.name_roman"]["source_refs"][0]["anchor"]["status"] == "not_found"
+
+
+def test_multiple_explicit_locations_are_kept_as_candidates():
+    field_metadata = {
+        "applicant.name_roman": {
+            "source_refs": [
+                {
+                    "document_id": "doc_docx",
+                    "page": 1,
+                    "text_quote": "TANAKA TARO",
+                    "confidence": 0.9,
+                    "locations": [
+                        {"type": "docx_block", "anchor_id": "p-0"},
+                        {"type": "docx_block", "anchor_id": "p-1"},
+                    ],
+                }
+            ]
+        }
+    }
+    docx_index = {
+        "doc_docx": [
+            {"type": "docx_block", "paragraph_index": 0, "text": "TANAKA TARO", "anchor_id": "p-0"},
+            {"type": "docx_block", "paragraph_index": 1, "text": "TANAKA TARO", "anchor_id": "p-1"},
+        ]
+    }
+
+    result = resolve_source_locations(field_metadata, {}, {}, docx_index)
+    anchor = result["applicant.name_roman"]["source_refs"][0]["anchor"]
+
+    assert anchor == {
+        "type": "docx_block",
+        "status": "ambiguous",
+        "resolver_type": "source_ref_location",
+        "match_count": 2,
+        "candidates": [
+            {"anchor_id": "p-0", "paragraph_index": 0},
+            {"anchor_id": "p-1", "paragraph_index": 1},
+        ],
+    }
+
+
+def test_alternative_source_location_is_resolved():
+    field_metadata = {
+        "employment.monthly_salary": {
+            "source_refs": [],
             "alternatives": [
                 {
                     "value": "230000",
+                    "origin": "document",
                     "source_refs": [
                         {
-                            "document_id": "doc_pdf",
+                            "document_id": "doc_xlsx",
                             "page": 1,
                             "text_quote": "230000",
                             "confidence": 0.8,
+                            "locations": [
+                                {"type": "xlsx_cell", "anchor_id": "Applicant!B3"}
+                            ],
                         }
                     ],
                 }
             ],
         }
     }
+    xlsx_index = {"doc_xlsx": [_xlsx_cell("Applicant", "B3", 3, 2, "230000")]}
 
-    result = resolve_anchors(
-        field_metadata,
-        {"doc_pdf": _pdf_with_text(["Offer salary 250000", "Resume salary 230000"])},
-    )
-    alt_ref = result["employment.monthly_salary"]["alternatives"][0]["source_refs"][0]
-
-    assert alt_ref["anchor"]["status"] == "resolved"
-    assert alt_ref["anchor"]["resolver_type"] == "pdf_text_layer"
-    assert alt_ref["anchor"]["bbox"] == alt_ref["bbox"]
-
-
-def test_resolve_anchors_uses_unique_pdf_match_on_other_page():
-    field_metadata = {
-        "employer.postal_code": {
-            "source_refs": [
-                {
-                    "document_id": "doc_pdf",
-                    "page": 2,
-                    "text_quote": "151-8570",
-                    "confidence": 0.9,
-                }
-            ]
-        }
-    }
-
-    result = resolve_anchors(
-        field_metadata,
-        {"doc_pdf": _pdf_with_pages([["会社概要 151-8570"], ["支店一覧"]])},
-    )
-    ref = result["employer.postal_code"]["source_refs"][0]
+    result = resolve_source_locations(field_metadata, {}, xlsx_index, {})
+    ref = result["employment.monthly_salary"]["alternatives"][0]["source_refs"][0]
 
     assert ref["anchor"]["status"] == "resolved"
-    assert ref["anchor"]["page"] == 1
-    assert ref["anchor"]["resolver_type"] == "pdf_text_layer"
-
-
-def test_resolve_anchors_marks_duplicate_pdf_text_as_ambiguous():
-    field_metadata = {
-        "employment.monthly_salary": {
-            "source_refs": [
-                {
-                    "document_id": "doc_pdf",
-                    "page": 1,
-                    "text_quote": "260000",
-                    "confidence": 0.9,
-                }
-            ]
-        }
-    }
-
-    result = resolve_anchors(
-        field_metadata,
-        {"doc_pdf": _pdf_with_text(["基本給 260000", "月額合計 260000"])},
-    )
-    ref = result["employment.monthly_salary"]["source_refs"][0]
-
-    assert "bbox" not in ref
-    anchor = ref["anchor"]
-    assert anchor["type"] == "pdf_bbox"
-    assert anchor["status"] == "ambiguous"
-    assert anchor["resolver_type"] == "pdf_text_layer"
-    assert anchor["match_count"] == 2
-    candidates = anchor["candidates"]
-    assert len(candidates) == 2
-    for candidate in candidates:
-        assert candidate["page"] == 1
-        assert set(candidate["bbox"]) == {"y_min", "x_min", "y_max", "x_max"}
-    assert candidates[0]["bbox"] != candidates[1]["bbox"]
-
-
-def test_resolve_anchors_matches_quote_across_parentheses():
-    field_metadata = {
-        "applicant.employment_history.0.end_date": {
-            "source_refs": [
-                {
-                    "document_id": "doc_pdf",
-                    "page": 1,
-                    "text_quote": "October 2024",
-                    "confidence": 0.9,
-                }
-            ]
-        }
-    }
-
-    result = resolve_anchors(
-        field_metadata,
-        {"doc_pdf": _pdf_with_text(["Engineer (May 2024 - October 2024)"])},
-    )
-    ref = result["applicant.employment_history.0.end_date"]["source_refs"][0]
-
-    assert ref["anchor"]["status"] == "resolved"
-    assert ref["anchor"]["resolver_type"] == "pdf_text_layer"
-
-
-def test_resolve_anchors_caps_ambiguous_candidates_at_three():
-    field_metadata = {
-        "employment.monthly_salary": {
-            "source_refs": [
-                {
-                    "document_id": "doc_pdf",
-                    "page": 1,
-                    "text_quote": "260000",
-                    "confidence": 0.9,
-                }
-            ]
-        }
-    }
-
-    result = resolve_anchors(
-        field_metadata,
-        {"doc_pdf": _pdf_with_text([f"項目{i} 260000" for i in range(5)])},
-    )
-    anchor = result["employment.monthly_salary"]["source_refs"][0]["anchor"]
-
-    assert anchor["status"] == "ambiguous"
-    assert anchor["match_count"] == 5
-    assert len(anchor["candidates"]) == 3
+    assert ref["anchor"]["anchor_id"] == "Applicant!B3"
 
 
 def test_sync_bbox_anchors_preserves_legacy_bbox():
@@ -224,648 +373,10 @@ def test_sync_bbox_anchors_preserves_legacy_bbox():
     assert ref["anchor"] == {
         "type": "pdf_bbox",
         "status": "resolved",
-        "resolver_type": "gemini_bbox",
-        "bbox": {"y_min": 100, "x_min": 200, "y_max": 130, "x_max": 260},
-        "match_count": 1,
-        "page": 1,
-    }
-
-
-def test_sync_bbox_anchors_preserves_alternative_legacy_bbox():
-    field_metadata = {
-        "employment.monthly_salary": {
-            "source_refs": [],
-            "alternatives": [
-                {
-                    "value": "230000",
-                    "source_refs": [
-                        {
-                            "document_id": "doc_pdf",
-                            "page": 2,
-                            "text_quote": "230000",
-                            "confidence": 0.8,
-                            "bbox": {"y_min": 100, "x_min": 200, "y_max": 130, "x_max": 260},
-                        }
-                    ],
-                }
-            ],
-        }
-    }
-
-    result = sync_bbox_anchors(field_metadata)
-    ref = result["employment.monthly_salary"]["alternatives"][0]["source_refs"][0]
-
-    assert ref["anchor"] == {
-        "type": "pdf_bbox",
-        "status": "resolved",
-        "resolver_type": "gemini_bbox",
-        "bbox": {"y_min": 100, "x_min": 200, "y_max": 130, "x_max": 260},
-        "match_count": 1,
-        "page": 2,
-    }
-
-
-def test_sync_bbox_anchors_does_not_promote_ambiguous_anchor():
-    field_metadata = {
-        "employment.monthly_salary": {
-            "source_refs": [
-                {
-                    "document_id": "doc_pdf",
-                    "page": 1,
-                    "text_quote": "260000",
-                    "confidence": 0.9,
-                    "bbox": {"y_min": 100, "x_min": 200, "y_max": 130, "x_max": 260},
-                    "anchor": {
-                        "type": "pdf_bbox",
-                        "status": "ambiguous",
-                        "resolver_type": "pdf_text_layer",
-                        "match_count": 2,
-                    },
-                }
-            ]
-        }
-    }
-
-    result = sync_bbox_anchors(field_metadata)
-    ref = result["employment.monthly_salary"]["source_refs"][0]
-
-    assert ref["anchor"] == {
-        "type": "pdf_bbox",
-        "status": "ambiguous",
-        "resolver_type": "pdf_text_layer",
-        "match_count": 2,
-    }
-
-
-def test_resolve_anchors_does_not_promote_ambiguous_anchor_with_bbox():
-    field_metadata = {
-        "employment.monthly_salary": {
-            "source_refs": [
-                {
-                    "document_id": "doc_pdf",
-                    "page": 1,
-                    "text_quote": "260000",
-                    "confidence": 0.9,
-                    "bbox": {"y_min": 100, "x_min": 200, "y_max": 130, "x_max": 260},
-                    "anchor": {
-                        "type": "pdf_bbox",
-                        "status": "ambiguous",
-                        "resolver_type": "pdf_text_layer",
-                        "match_count": 2,
-                    },
-                }
-            ]
-        }
-    }
-
-    result = resolve_anchors(field_metadata, {"doc_pdf": _pdf_with_text(["260000"])})
-    ref = result["employment.monthly_salary"]["source_refs"][0]
-
-    assert ref["anchor"] == {
-        "type": "pdf_bbox",
-        "status": "ambiguous",
-        "resolver_type": "pdf_text_layer",
-        "match_count": 2,
-    }
-
-
-def test_resolve_anchors_adds_xlsx_cell_anchor():
-    field_metadata = {
-        "employment.monthly_salary": {
-            "source_refs": [
-                {
-                    "document_id": "doc_xlsx",
-                    "page": 1,
-                    "text_quote": "260000",
-                    "confidence": 0.9,
-                }
-            ]
-        }
-    }
-    xlsx_index = {
-        "doc_xlsx": [
-            {
-                "type": "xlsx_cell",
-                "sheet_name": "Sheet1",
-                "cell": "B2",
-                "row": 2,
-                "col": 2,
-                "text": "260000",
-                "anchor_id": "Sheet1!B2",
-            }
-        ]
-    }
-
-    result = resolve_anchors(field_metadata, {}, xlsx_index, {})
-    ref = result["employment.monthly_salary"]["source_refs"][0]
-
-    assert ref["anchor"] == {
-        "type": "xlsx_cell",
-        "status": "resolved",
-        "resolver_type": "xlsx_cell_index",
-        "match_count": 1,
-        "anchor_id": "Sheet1!B2",
-        "sheet_name": "Sheet1",
-        "cell": "B2",
-        "row": 2,
-        "col": 2,
-    }
-
-
-def _xlsx_cell(sheet: str, cell: str, row: int, col: int, text: str) -> dict:
-    return {
-        "type": "xlsx_cell",
-        "sheet_name": sheet,
-        "cell": cell,
-        "row": row,
-        "col": col,
-        "text": text,
-        "anchor_id": f"{sheet}!{cell}",
-    }
-
-
-def test_resolve_anchors_resolves_multi_cell_quote_with_tab():
-    """質問セル+回答セルがタブ連結されたquoteは、回答セルで解決する。"""
-    field_metadata = {
-        "applicant.birth_place": {
-            "source_refs": [
-                {
-                    "document_id": "doc_xlsx",
-                    "page": 5,
-                    "text_quote": "Place of birth　出生地\tArghakhanchi",
-                    "confidence": 0.9,
-                }
-            ]
-        }
-    }
-    xlsx_index = {
-        "doc_xlsx": [
-            _xlsx_cell("Bhawana Khanal", "C3", 3, 3, "Place of birth　出生地"),
-            _xlsx_cell("Bhawana Khanal", "D3", 3, 4, "Arghakhanchi"),
-        ]
-    }
-
-    result = resolve_anchors(field_metadata, {}, xlsx_index, {})
-    anchor = result["applicant.birth_place"]["source_refs"][0]["anchor"]
-
-    assert anchor["status"] == "resolved"
-    assert anchor["anchor_id"] == "Bhawana Khanal!D3"
-
-
-def test_resolve_anchors_narrows_multi_cell_quote_by_question_row():
-    """回答セルが複数シートに一致しても、同じ行に質問セルがある方へ絞り込む。"""
-    field_metadata = {
-        "applicant.birth_place": {
-            "source_refs": [
-                {
-                    "document_id": "doc_xlsx",
-                    "page": 5,
-                    "text_quote": "Place of birth　出生地\tDhankuta",
-                    "confidence": 0.9,
-                }
-            ]
-        }
-    }
-    xlsx_index = {
-        "doc_xlsx": [
-            # 出身地(別の質問)の行にも同じ値がある
-            _xlsx_cell("Kushang", "C6", 6, 3, "Hometown city 出身地"),
-            _xlsx_cell("Kushang", "D6", 6, 4, "Dhankuta"),
-            _xlsx_cell("Kushang", "C3", 3, 3, "Place of birth　出生地"),
-            _xlsx_cell("Kushang", "D3", 3, 4, "Dhankuta"),
-        ]
-    }
-
-    result = resolve_anchors(field_metadata, {}, xlsx_index, {})
-    anchor = result["applicant.birth_place"]["source_refs"][0]["anchor"]
-
-    assert anchor["status"] == "resolved"
-    assert anchor["anchor_id"] == "Kushang!D3"
-
-
-def test_resolve_anchors_prefers_applicant_sheet_for_ambiguous_xlsx():
-    """全シートに存在する回答値は、resolved anchorが集中するシートへ絞り込む。"""
-    field_metadata = {
-        "applicant.passport.number": {
-            "source_refs": [
-                {
-                    "document_id": "doc_xlsx",
-                    "page": 5,
-                    "text_quote": "PA9999999",
-                    "confidence": 0.9,
-                }
-            ]
-        },
-        "applicant.marital_status": {
-            "source_refs": [
-                {
-                    "document_id": "doc_xlsx",
-                    "page": 5,
-                    "text_quote": "Single",
-                    "confidence": 0.9,
-                }
-            ]
-        },
-    }
-    xlsx_index = {
-        "doc_xlsx": [
-            # 2シートに同じ回答値があるが、passport番号はBhawanaシートで一意
-            _xlsx_cell("Kushang", "D4", 4, 4, "Single"),
-            _xlsx_cell("Bhawana", "D4", 4, 4, "Single"),
-            _xlsx_cell("Bhawana", "D7", 7, 4, "PA9999999"),
-        ]
-    }
-
-    result = resolve_anchors(field_metadata, {}, xlsx_index, {})
-
-    marital = result["applicant.marital_status"]["source_refs"][0]["anchor"]
-    assert marital["status"] == "resolved"
-    assert marital["resolver_type"] == "xlsx_cell_index_sheet_preference"
-    assert marital["anchor_id"] == "Bhawana!D4"
-
-
-def test_resolve_anchors_keeps_ambiguous_when_no_sheet_majority():
-    """resolvedの集中シートが決まらない場合は昇格しない。"""
-    field_metadata = {
-        "applicant.marital_status": {
-            "source_refs": [
-                {
-                    "document_id": "doc_xlsx",
-                    "page": 5,
-                    "text_quote": "Single",
-                    "confidence": 0.9,
-                }
-            ]
-        },
-    }
-    xlsx_index = {
-        "doc_xlsx": [
-            _xlsx_cell("Kushang", "D4", 4, 4, "Single"),
-            _xlsx_cell("Bhawana", "D4", 4, 4, "Single"),
-        ]
-    }
-
-    result = resolve_anchors(field_metadata, {}, xlsx_index, {})
-    anchor = result["applicant.marital_status"]["source_refs"][0]["anchor"]
-
-    assert anchor["status"] == "ambiguous"
-    # 候補セルは後段の選択器・UI用に保存される
-    assert [c["anchor_id"] for c in anchor["candidates"]] == ["Kushang!D4", "Bhawana!D4"]
-    assert anchor["candidates"][0]["cell"] == "D4"
-
-
-def test_resolve_anchors_does_not_substring_match_short_quote():
-    field_metadata = {
-        "employer.has_corporate_number": {
-            "source_refs": [
-                {
-                    "document_id": "doc_xlsx",
-                    "page": 1,
-                    "text_quote": "有",
-                    "confidence": 0.9,
-                }
-            ]
-        }
-    }
-    xlsx_index = {
-        "doc_xlsx": [
-            {
-                "type": "xlsx_cell",
-                "sheet_name": "Sheet1",
-                "cell": "A1",
-                "row": 1,
-                "col": 1,
-                "text": "有効期限",
-                "anchor_id": "Sheet1!A1",
-            }
-        ]
-    }
-
-    result = resolve_anchors(field_metadata, {}, xlsx_index, {})
-    ref = result["employer.has_corporate_number"]["source_refs"][0]
-
-    assert ref["anchor"] == {
-        "type": "xlsx_cell",
-        "status": "not_found",
-        "resolver_type": "xlsx_cell_index",
-        "match_count": 0,
-    }
-
-
-def test_resolve_anchors_allows_exact_short_quote():
-    field_metadata = {
-        "employer.has_corporate_number": {
-            "source_refs": [
-                {
-                    "document_id": "doc_xlsx",
-                    "page": 1,
-                    "text_quote": "有",
-                    "confidence": 0.9,
-                }
-            ]
-        }
-    }
-    xlsx_index = {
-        "doc_xlsx": [
-            {
-                "type": "xlsx_cell",
-                "sheet_name": "Sheet1",
-                "cell": "B2",
-                "row": 2,
-                "col": 2,
-                "text": "有",
-                "anchor_id": "Sheet1!B2",
-            }
-        ]
-    }
-
-    result = resolve_anchors(field_metadata, {}, xlsx_index, {})
-    ref = result["employer.has_corporate_number"]["source_refs"][0]
-
-    assert ref["anchor"]["status"] == "resolved"
-    assert ref["anchor"]["cell"] == "B2"
-
-
-def test_resolve_anchors_is_idempotent_after_cross_page_resolution():
-    pdf_bytes = _pdf_with_pages([["AMIT TAMANG"], ["支店一覧"]])
-    field_metadata = {
-        "applicant.name_roman": {
-            "source_refs": [
-                {
-                    "document_id": "doc_pdf",
-                    "page": 2,
-                    "text_quote": "AMIT TAMANG",
-                    "confidence": 0.9,
-                }
-            ]
-        }
-    }
-
-    first = resolve_anchors(field_metadata, {"doc_pdf": pdf_bytes})
-    ref = first["applicant.name_roman"]["source_refs"][0]
-    assert ref["anchor"]["status"] == "resolved"
-    assert ref["anchor"]["page"] == 1
-    first_anchor = dict(ref["anchor"])
-    first_bbox = dict(ref["bbox"])
-
-    second = resolve_anchors(first, {"doc_pdf": pdf_bytes})
-    ref = second["applicant.name_roman"]["source_refs"][0]
-
-    # 再実行しても anchor.page が ref.page(=2) に巻き戻らない
-    assert ref["anchor"] == first_anchor
-    assert ref["bbox"] == first_bbox
-    # source_ref.page は抽出根拠としてそのまま残る
-    assert ref["page"] == 2
-
-
-def test_resolve_anchors_mirrors_legacy_bbox_with_ref_page():
-    field_metadata = {
-        "applicant.name_roman": {
-            "source_refs": [
-                {
-                    "document_id": "doc_pdf",
-                    "page": 3,
-                    "text_quote": "AMIT TAMANG",
-                    "confidence": 0.9,
-                    "bbox": {"y_min": 100, "x_min": 200, "y_max": 130, "x_max": 260},
-                }
-            ]
-        }
-    }
-
-    result = resolve_anchors(field_metadata, {})
-    ref = result["applicant.name_roman"]["source_refs"][0]
-
-    assert ref["anchor"] == {
-        "type": "pdf_bbox",
-        "status": "resolved",
         "resolver_type": "existing_bbox",
         "bbox": {"y_min": 100, "x_min": 200, "y_max": 130, "x_max": 260},
         "match_count": 1,
-        "page": 3,
-    }
-
-
-def test_resolve_anchors_prefers_full_quote_on_other_page_over_number_fallback():
-    # 指定ページには quote 内の数値パターンだけが別文脈で存在し、
-    # フル quote は別ページに一意に存在する。
-    pdf_bytes = _pdf_with_pages([["BRANCH 151-8570"], ["HEADOFFICE 151-8570"]])
-    field_metadata = {
-        "employer.postal_code": {
-            "source_refs": [
-                {
-                    "document_id": "doc_pdf",
-                    "page": 1,
-                    "text_quote": "HEADOFFICE 151-8570",
-                    "confidence": 0.9,
-                }
-            ]
-        }
-    }
-
-    result = resolve_anchors(field_metadata, {"doc_pdf": pdf_bytes})
-    ref = result["employer.postal_code"]["source_refs"][0]
-
-    # 数値パターンfallbackが指定ページの別の151-8570に付くのではなく、
-    # フル quote のクロスページ一意一致が勝つ
-    assert ref["anchor"]["status"] == "resolved"
-    assert ref["anchor"]["page"] == 2
-    assert ref["anchor"]["resolver_type"] == "pdf_text_layer"
-
-
-def test_resolve_anchors_keeps_ambiguous_full_quote_without_weaker_fallback():
-    pdf_bytes = _pdf_with_pages(
-        [["SHIBUYA 151-8570", "SHIBUYA 151-8570"], ["151-8570"]]
-    )
-    field_metadata = {
-        "employer.postal_code": {
-            "source_refs": [
-                {
-                    "document_id": "doc_pdf",
-                    "page": 1,
-                    "text_quote": "SHIBUYA 151-8570",
-                    "confidence": 0.9,
-                }
-            ]
-        }
-    }
-
-    result = resolve_anchors(field_metadata, {"doc_pdf": pdf_bytes})
-    ref = result["employer.postal_code"]["source_refs"][0]
-
-    # フル quote が指定ページで複数一致なら、弱いtargetや他ページで無理に確定しない
-    assert ref["anchor"]["status"] == "ambiguous"
-    assert ref["anchor"]["match_count"] == 2
-    assert "bbox" not in ref
-
-
-def _long_quote_words(count: int) -> list[str]:
-    return [f"SEGMENT{i:02d}XYZ" for i in range(count)]
-
-
-def test_resolve_anchors_matches_long_quote_exactly():
-    # 80文字超の quote でもフル quote の完全一致で解決できる
-    words = _long_quote_words(8)  # 12文字 x 8語 + 空白7 = 103文字
-    quote = " ".join(words)
-    assert len(quote) > 80
-    pdf_bytes = _pdf_with_pages(
-        [[" ".join(words[0:3]), " ".join(words[3:6]), " ".join(words[6:8])]],
-        width=800,
-    )
-    field_metadata = {
-        "employment.activity_details": {
-            "source_refs": [
-                {
-                    "document_id": "doc_pdf",
-                    "page": 1,
-                    "text_quote": quote,
-                    "confidence": 0.9,
-                }
-            ]
-        }
-    }
-
-    result = resolve_anchors(field_metadata, {"doc_pdf": pdf_bytes})
-    ref = result["employment.activity_details"]["source_refs"][0]
-
-    assert ref["anchor"]["status"] == "resolved"
-    assert ref["anchor"]["page"] == 1
-
-
-def test_resolve_anchors_falls_back_to_word_boundary_prefix_for_long_quote():
-    # フル quote が原本と一致しない場合(quote末尾に余計な語がある等)でも、
-    # 単語境界で切った80文字プレフィックスで解決できる
-    words = _long_quote_words(8)
-    quote = " ".join(words) + " TRAILING_NOT_IN_PDF"
-    pdf_bytes = _pdf_with_pages(
-        [[" ".join(words[0:3]), " ".join(words[3:6]), " ".join(words[6:8])]],
-        width=800,
-    )
-    field_metadata = {
-        "employment.activity_details": {
-            "source_refs": [
-                {
-                    "document_id": "doc_pdf",
-                    "page": 1,
-                    "text_quote": quote,
-                    "confidence": 0.9,
-                }
-            ]
-        }
-    }
-
-    result = resolve_anchors(field_metadata, {"doc_pdf": pdf_bytes})
-    ref = result["employment.activity_details"]["source_refs"][0]
-
-    assert ref["anchor"]["status"] == "resolved"
-    assert ref["anchor"]["page"] == 1
-
-
-def test_resolve_anchors_searches_all_pages_when_page_missing():
-    pdf_bytes = _pdf_with_pages([["会社概要"], ["AMIT TAMANG"]])
-    field_metadata = {
-        "applicant.name_roman": {
-            "source_refs": [
-                {
-                    "document_id": "doc_pdf",
-                    "text_quote": "AMIT TAMANG",
-                    "confidence": 0.9,
-                }
-            ]
-        }
-    }
-
-    result = resolve_anchors(field_metadata, {"doc_pdf": pdf_bytes})
-    ref = result["applicant.name_roman"]["source_refs"][0]
-
-    assert ref["anchor"]["status"] == "resolved"
-    assert ref["anchor"]["page"] == 2
-
-
-def test_resolve_anchors_parses_pdf_once_per_document(monkeypatch):
-    pdf_bytes = _pdf_with_pages([["page one"], ["AMIT TAMANG"], ["page three"]])
-    field_metadata = {
-        "applicant.name_roman": {
-            "source_refs": [
-                {
-                    "document_id": "doc_pdf",
-                    "page": 1,
-                    "text_quote": "AMIT TAMANG",
-                    "confidence": 0.9,
-                }
-            ]
-        },
-        "employer.name": {
-            "source_refs": [
-                {
-                    "document_id": "doc_pdf",
-                    "page": 3,
-                    "text_quote": "AMIT TAMANG",
-                    "confidence": 0.9,
-                }
-            ]
-        },
-        "employment.position_title": {
-            "source_refs": [
-                {
-                    "document_id": "doc_pdf",
-                    "page": 2,
-                    "text_quote": "MISSING VALUE",
-                    "confidence": 0.9,
-                }
-            ]
-        },
-    }
-
-    open_calls = []
-    original_open = pymupdf.open
-
-    def counting_open(*args, **kwargs):
-        open_calls.append(1)
-        return original_open(*args, **kwargs)
-
-    monkeypatch.setattr(pymupdf, "open", counting_open)
-    result = resolve_anchors(field_metadata, {"doc_pdf": pdf_bytes})
-
-    # クロスページ探索を含む複数refでも、同一文書のPDFパースは1回
-    assert len(open_calls) == 1
-    assert result["applicant.name_roman"]["source_refs"][0]["anchor"]["page"] == 2
-    assert result["employer.name"]["source_refs"][0]["anchor"]["page"] == 2
-    assert result["employment.position_title"]["source_refs"][0]["anchor"]["status"] == "not_found"
-
-
-def test_resolve_anchors_marks_duplicate_docx_blocks_as_ambiguous():
-    field_metadata = {
-        "applicant.name_roman": {
-            "source_refs": [
-                {
-                    "document_id": "doc_docx",
-                    "page": 1,
-                    "text_quote": "AMIT TAMANG",
-                    "confidence": 0.9,
-                }
-            ]
-        }
-    }
-    docx_index = {
-        "doc_docx": [
-            {"type": "docx_block", "paragraph_index": 0, "text": "AMIT TAMANG", "anchor_id": "p-0"},
-            {"type": "docx_block", "paragraph_index": 1, "text": "AMIT TAMANG", "anchor_id": "p-1"},
-        ]
-    }
-
-    result = resolve_anchors(field_metadata, {}, {}, docx_index)
-    ref = result["applicant.name_roman"]["source_refs"][0]
-
-    assert ref["anchor"] == {
-        "type": "docx_block",
-        "status": "ambiguous",
-        "resolver_type": "docx_block_index",
-        "match_count": 2,
-        "candidates": [
-            {"anchor_id": "p-0", "paragraph_index": 0},
-            {"anchor_id": "p-1", "paragraph_index": 1},
-        ],
+        "page": 1,
     }
 
 
@@ -881,7 +392,10 @@ def test_anchor_coverage_counts_resolved_candidates_and_unresolved():
                 {
                     "document_id": "d1",
                     "text_quote": "y",
-                    "anchor": {"type": "pdf_bbox", "status": "ambiguous", "candidates": [{"page": 1, "bbox": {}}]},
+                    "anchor": {
+                        "status": "ambiguous",
+                        "candidates": [{"anchor_id": "Sheet1!B2"}],
+                    },
                 }
             ]
         },
@@ -901,4 +415,19 @@ def test_anchor_coverage_counts_resolved_candidates_and_unresolved():
         "total_fields": 3,
         "resolved_fields": 1,
         "displayable_fields": 2,
+    }
+
+
+def test_anchor_coverage_counts_only_document_fields_with_values():
+    field_metadata = {
+        "a.document": {"origin": "document", "has_value": True, "source_refs": []},
+        "a.empty": {"origin": "document", "has_value": False, "source_refs": []},
+        "a.derived": {"origin": "derived", "has_value": True, "source_refs": []},
+        "a.setting": {"origin": "setting", "has_value": True, "source_refs": []},
+    }
+
+    assert anchor_coverage(field_metadata) == {
+        "total_fields": 1,
+        "resolved_fields": 0,
+        "displayable_fields": 0,
     }

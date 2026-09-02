@@ -11,9 +11,9 @@ PIIを含む値そのものではなく、件数、scope、状態、path の有�
 1. 書類から canonical `case_data` / `field_metadata` / `review` を作る。
 2. レビュー画面で不足・矛盾・手入力項目を確認する。
 3. `/application-data` rows を生成し、Chrome拡張へ渡す。レビュー画面での確認・編集は必ず人が行う。
-4. PDF由来の根拠について bbox を事前取得し、証跡ハイライトを改善する。
+4. Geminiが抽出値と同時に返した `source_ref.locations` をレビュー画面の証跡ハイライトに使う。
 
-bbox取得は値抽出の成功条件に含めません。bboxが遅い、または失敗しても、値抽出結果を保存できる設計にします。`ENABLE_BBOX_LOCATOR=false` を明示した場合だけ bbox 事前取得を止めます。
+位置を特定できない場合も値抽出結果は保存し、人が原本を確認します。backendは後段の文字一致や追加Gemini APIで位置を補完しません。
 
 ## 成功条件
 

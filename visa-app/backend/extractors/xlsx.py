@@ -45,7 +45,8 @@ def extract_xlsx(file_bytes: bytes, document_id: str, sheet_name: str | None = N
             cells = []
             for cell in row:
                 if cell.value is not None:
-                    cells.append(str(cell.value))
+                    cell_ref = f"{get_column_letter(cell.column)}{cell.row}"
+                    cells.append(f"[{ws.title}!{cell_ref}] {cell.value}")
             if cells:
                 lines.append("\t".join(cells))
         text = "\n".join(lines)

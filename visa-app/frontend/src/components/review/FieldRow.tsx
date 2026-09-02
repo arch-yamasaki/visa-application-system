@@ -54,10 +54,6 @@ export default function FieldRow({ label, fieldPath, value, input, meta, onUpdat
   const displayValue = rawValue === '' ? '(未入力)' : getDisplayValue(rawValue) || rawValue
   const primarySourceRef = pickPrimarySourceRef(meta?.source_refs)
   const hasSource = Boolean(primarySourceRef)
-  const positionCandidateCount =
-    primarySourceRef?.anchor?.status === 'ambiguous'
-      ? primarySourceRef.anchor.candidates?.length ?? 0
-      : 0
   const alternatives = meta?.alternatives?.filter((alternative) => alternative.source_refs?.length) ?? []
   const hasAlternatives = alternatives.length > 0
   const isActive = activeFieldPath === fieldPath
@@ -99,8 +95,8 @@ export default function FieldRow({ label, fieldPath, value, input, meta, onUpdat
       ?? '書類不明'
   }
 
-  const sourceLine = (ref: SourceRef | undefined): string => {
-    if (!ref) return '証跡なし'
+  const sourceLine = (ref: SourceRef | undefined): string | undefined => {
+    if (!ref) return undefined
     const page = ref.page ? `p.${ref.page}` : 'p.-'
     return `${documentName(ref)} / ${page}`
   }
@@ -155,7 +151,7 @@ export default function FieldRow({ label, fieldPath, value, input, meta, onUpdat
         onClick={handleClick}
         onDoubleClick={startEditing}
         onKeyDown={handleKeyDown}
-        title={hasSource ? 'クリックで証跡を表示' : undefined}
+        title={hasSource ? 'クリックで根拠を表示' : undefined}
       >
         <span className="w-44 shrink-0 text-gray-500 truncate text-xs">{label}</span>
 
@@ -216,15 +212,6 @@ export default function FieldRow({ label, fieldPath, value, input, meta, onUpdat
         ) : (
           <span className={`flex-1 truncate ${displayValue === '(未入力)' ? 'text-gray-300 italic' : 'text-gray-800'}`}>
             {displayValue}
-          </span>
-        )}
-
-        {positionCandidateCount > 1 && (
-          <span
-            className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-300"
-            title="証跡の位置が複数見つかっています。PDFビューアで候補を確認できます"
-          >
-            位置候補{positionCandidateCount}
           </span>
         )}
 
@@ -305,7 +292,7 @@ export default function FieldRow({ label, fieldPath, value, input, meta, onUpdat
 interface EvidenceOptionProps {
   label: string
   value: string
-  sourceLine: string
+  sourceLine?: string
   quote?: string
   onNavigate: () => void
   action?: ReactNode
@@ -322,7 +309,7 @@ function EvidenceOption({ label, value, sourceLine, quote, onNavigate, action }:
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
           <span className="font-medium text-rose-700">{label}</span>
           <span className="font-medium text-gray-900 break-all">{value}</span>
-          <span className="text-gray-500">{sourceLine}</span>
+          {sourceLine && <span className="text-gray-500">{sourceLine}</span>}
         </div>
         {quote && (
           <div className="mt-0.5 text-gray-500 break-all">

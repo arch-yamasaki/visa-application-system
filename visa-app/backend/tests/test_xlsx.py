@@ -4,7 +4,7 @@ import io
 
 import openpyxl
 
-from extractors.xlsx import extract_xlsx
+from extractors.xlsx import build_xlsx_cell_index, extract_xlsx
 from extractors.types import OcrResult
 
 
@@ -47,6 +47,20 @@ class TestExtractXlsx:
         data = _make_xlsx({"申請人情報": [["氏名", "田中太郎"]]})
         result = extract_xlsx(data, document_id="doc_x03")
         assert "[Sheet: 申請人情報]" in result.pages[0].text
+
+    def test_cell_anchor_ids_are_in_extracted_text(self):
+        data = _make_xlsx({"Applicant": [["Name", "TANAKA TARO"]]})
+        result = extract_xlsx(data, document_id="doc_x03")
+
+        assert "[Applicant!A1] Name" in result.pages[0].text
+        assert "[Applicant!B1] TANAKA TARO" in result.pages[0].text
+
+    def test_cell_index_matches_extracted_anchor_ids(self):
+        data = _make_xlsx({"Applicant": [["Name", "TANAKA TARO"]]})
+        cells = build_xlsx_cell_index(data, document_id="doc_x03")
+
+        assert cells[1]["anchor_id"] == "Applicant!B1"
+        assert cells[1]["text"] == "TANAKA TARO"
 
     def test_multiple_sheets(self):
         data = _make_xlsx({

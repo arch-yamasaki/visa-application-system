@@ -5,7 +5,6 @@ interface ViewerState {
   documents: DocumentEntry[]
   currentDocumentId: string | null
   currentPage: number
-  highlightText: string | null
   highlightSourceRef: SourceRef | null
   activeFieldPath: string | null
   activeCandidateIndex: number
@@ -23,7 +22,6 @@ export const useViewerStore = create<ViewerState>((set) => ({
   documents: [],
   currentDocumentId: null,
   currentPage: 1,
-  highlightText: null,
   highlightSourceRef: null,
   activeFieldPath: null,
   activeCandidateIndex: 0,
@@ -36,7 +34,6 @@ export const useViewerStore = create<ViewerState>((set) => ({
       return {
         currentDocumentId: ref.document_id,
         currentPage: ref.anchor?.page || ref.anchor?.candidates?.[0]?.page || ref.page || 1,
-        highlightText: ref.text_quote || null,
         highlightSourceRef: ref,
         activeCandidateIndex: 0,
       }
@@ -58,14 +55,13 @@ export const useViewerStore = create<ViewerState>((set) => ({
     set({
       currentDocumentId: docId,
       currentPage: 1,
-      highlightText: null,
       highlightSourceRef: null,
       activeFieldPath: null,
     }),
 
-  setPage: (page) => set({ currentPage: page, highlightText: null, highlightSourceRef: null }),
+  setPage: (page) => set({ currentPage: page, highlightSourceRef: null }),
 
-  clearHighlight: () => set({ highlightText: null, highlightSourceRef: null }),
+  clearHighlight: () => set({ highlightSourceRef: null }),
 
   setActiveFieldPath: (path) => set({ activeFieldPath: path }),
 }))

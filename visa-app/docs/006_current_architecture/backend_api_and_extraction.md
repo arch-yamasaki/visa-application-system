@@ -2,7 +2,7 @@
 
 ## 役割
 
-`visa-app/backend` は FastAPI サービスです。ケース管理、書類管理、Gemini抽出、PDF bbox取得、Chrome拡張向け `application-data` 生成を担当します。
+`visa-app/backend` は FastAPI サービスです。ケース管理、書類管理、Gemini抽出、証跡位置の検証、Chrome拡張向け `application-data` 生成を担当します。
 
 | 領域 | 主なファイル |
 |---|---|
@@ -11,7 +11,7 @@
 | Gemini抽出 | `backend/extractors/gemini.py` |
 | Gemini schema | `backend/extractors/schema.py` |
 | Gemini prompt | `backend/extractors/prompt_template.py` |
-| anchor / PDF bbox | `backend/extractors/anchor_resolver.py`, `backend/extractors/bbox_locator.py` |
+| 証跡位置 anchor | `backend/extractors/anchor_resolver.py` |
 | DOCX/XLSX/PDF処理 | `backend/extractors/docx_text.py`, `xlsx.py`, `pdf_text.py` |
 
 ## 主要API
@@ -35,16 +35,23 @@
 1. ユーザーが書類をアップロード
 2. backend が GCS に保存し、Firestore の document_manifest を更新
 3. `POST /extract` で workflow_state を extracting にする
-4. PDFはGeminiへ直接送信、DOCX/XLSXはテキスト化してpromptへ入れる
-5. Geminiが FieldValue (`value`, `source_ref`, optional `alternatives`) 形式で抽出する
-6. backend が表示用 value-only `case_data` と、証跡用 `field_metadata` (`source_refs`, optional `alternatives`) に正規化する
-7. anchor resolver / bbox locator が primary refs と alternatives refs の位置を補完する
-8. Firestoreへ保存し、workflow_state を extracted にする
+4. PDFはGeminiへ直接送信、DOCX/XLSXはanchor ID付きでテキスト化してpromptへ入れる
+5. Geminiが `case_data` の各FieldValue (`value`, `source_ref`) と、原本に直接記載された値の `source_locations[]` を同一応答で返す。推測・計算・既定値は空の `source_ref` とし、位置を付けない
+6. backend が `source_locations[]` を `field_path` / `alternative_index` で既存 `source_ref` に単純結合する
+7. backend が `source_ref` と値の型から `origin` を付与し、表示用 value-only `case_data` と証跡用 `field_metadata` (`source_refs`, optional `alternatives`) に正規化する
+8. anchor resolver が primary refs と alternatives refs に結合されたlocationを検証し、viewer用 `anchor` に変換する
+9. Firestoreへ保存し、workflow_state を extracted にする
 ```
 
 Gemini抽出は `case_data` を value-only の canonical data として保存します。フォーム入力用の `field_id` や select value は `case_data` には保存せず、`application-data` 生成時に mapping と form definitions から作ります。
 
-値が書類間で食い違う場合は、primary value 以外の候補を `field_metadata[path].alternatives[]` に保持します。各 alternative は `value` と `source_refs[]` を持ち、primary `source_refs[]` と同じ anchor / bbox 解決対象です。表示用 `case_data` には alternatives を混ぜません。
+値が書類間で食い違う場合は、primary value 以外の候補を `field_metadata[path].alternatives[]` に保持します。各 alternative は `value` と `source_refs[]` を持ち、primary `source_refs[]` と同じ anchor 変換対象です。表示用 `case_data` には alternatives を混ぜません。
+
+Gemini APIのschema制約により、位置情報は各FieldValue内ではなくscope直下の
+`source_locations[]` に分離します。各locationは `field_path` と `alternative_index` で紐付け、
+primaryは `-1`、alternativesは0始まりのindexとします。backendは文字一致や意味推測をせず、
+同一応答内の `source_locations[]` を該当 `source_ref` へ結合し、原本上のIDまたはPDF bboxの
+有効性だけを検証します。
 
 抽出結果の保存時は、既存の `case_data` を土台にしてGemini結果を deep merge します。これにより、ケース作成時や人手編集で持っている `case.*`、`proxy`、`receiving_method` など、Geminiが責任を持たない領域を抽出結果で消さないようにします。`review` と `field_metadata` は最新抽出結果で置き換えます。
 

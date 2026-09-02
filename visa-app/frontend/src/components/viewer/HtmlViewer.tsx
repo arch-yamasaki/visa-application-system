@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { authHeaders } from '../../auth/firebase'
 import type { SourceRef } from '../../types/caseData'
+import { useViewerStore } from '../../store/viewerStore'
 
 interface Props {
   url: string
-  highlightText?: string | null
   sourceRef?: SourceRef | null
   sheets?: string[]
   onSheetChange?: (sheet: string) => void
@@ -24,10 +24,33 @@ function anchorId(sourceRef: SourceRef | null | undefined): string | null {
   return null
 }
 
-export default function HtmlViewer({ url, highlightText, sourceRef, sheets, onSheetChange }: Props) {
+type SourceAnchorCandidate = NonNullable<NonNullable<SourceRef['anchor']>['candidates']>[number]
+
+function candidateAnchorId(candidate: SourceAnchorCandidate): string | null {
+  if (candidate.anchor_id) return candidate.anchor_id
+  if (candidate.sheet_name && candidate.cell) return `${candidate.sheet_name}!${candidate.cell}`
+  return null
+}
+
+function activeSheetName(sourceRef: SourceRef | null | undefined, activeCandidateIndex: number): string | undefined {
+  const anchor = sourceRef?.anchor
+  if (anchor?.status === 'resolved') return anchor.sheet_name
+  if (anchor?.status !== 'ambiguous') return undefined
+  return anchor.candidates?.[activeCandidateIndex]?.sheet_name
+}
+
+export default function HtmlViewer({ url, sourceRef, sheets, onSheetChange }: Props) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const [activeSheet, setActiveSheet] = useState(sheets?.[0] ?? '')
   const [html, setHtml] = useState('')
+  const activeCandidateIndex = useViewerStore((s) => s.activeCandidateIndex)
+  const goToCandidate = useViewerStore((s) => s.goToCandidate)
+
+  const candidates = useMemo(
+    () => sourceRef?.anchor?.status === 'ambiguous' ? sourceRef.anchor.candidates ?? [] : [],
+    [sourceRef],
+  )
+  const candidateCount = candidates.length
 
   // preview API は認証必須のため、iframe src ではなく fetch + srcDoc で読み込む
   useEffect(() => {
@@ -49,14 +72,14 @@ export default function HtmlViewer({ url, highlightText, sourceRef, sheets, onSh
   }, [activeSheet, sheets])
 
   useEffect(() => {
-    const sheetName = sourceRef?.anchor?.status === 'resolved' ? sourceRef.anchor.sheet_name : undefined
+    const sheetName = activeSheetName(sourceRef, activeCandidateIndex)
     if (sheetName && sheetName !== activeSheet) {
       setActiveSheet(sheetName)
       onSheetChange?.(sheetName)
     }
-  }, [activeSheet, onSheetChange, sourceRef])
+  }, [activeCandidateIndex, activeSheet, onSheetChange, sourceRef])
 
-  // iframe ロード後にハイライトテキストを検索
+  // iframe ロード後にbackendが検証済みのanchorだけをハイライトする
   useEffect(() => {
     const iframe = iframeRef.current
     if (!iframe) return
@@ -99,31 +122,26 @@ export default function HtmlViewer({ url, highlightText, sourceRef, sheets, onSh
           }
         }
 
-        const text = highlightText?.trim()
-        if (!text) return
-
-        const walker = document.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT)
-        const normalizedSearch = text.replace(/\s+/g, '').toLowerCase()
-        let node: Text | null
-
-        while ((node = walker.nextNode() as Text | null)) {
-          // td 祖先があればそのセル全体のテキストで完全一致判定
-          const td = node.parentElement?.closest('td')
-          const compareText = (td ?? node).textContent?.replace(/\s+/g, '').toLowerCase() ?? ''
-          if (compareText.indexOf(normalizedSearch) === -1) continue
-
-          // td 内テキスト全体が一致 → そのセルだけハイライトして終了
-          const parent = node.parentElement
-          if (parent) {
-            const mark = doc.createElement('mark')
-            mark.style.backgroundColor = 'rgba(255, 160, 0, 0.45)'
-            mark.style.border = '1px solid rgba(255, 140, 0, 0.7)'
-            mark.style.borderRadius = '2px'
-            parent.replaceChild(mark, node)
-            mark.appendChild(node)
-            mark.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        if (sourceRef?.anchor?.status === 'ambiguous') {
+          let activeTarget: HTMLElement | null = null
+          for (const [index, candidate] of candidates.entries()) {
+            const targetAnchorId = candidateAnchorId(candidate)
+            if (!targetAnchorId) continue
+            const target = doc.querySelector<HTMLElement>(`[data-anchor="${anchorSelectorValue(targetAnchorId)}"]`)
+            if (!target) continue
+            target.dataset.anchorHighlight = 'true'
+            target.style.backgroundColor = index === activeCandidateIndex
+              ? 'rgba(255, 160, 0, 0.35)'
+              : 'rgba(255, 160, 0, 0.2)'
+            target.style.outline = index === activeCandidateIndex
+              ? '2px solid rgba(234, 88, 12, 1)'
+              : '2px dashed rgba(255, 140, 0, 0.8)'
+            target.style.borderRadius = '2px'
+            if (index === activeCandidateIndex) {
+              activeTarget = target
+            }
           }
-          break
+          activeTarget?.scrollIntoView({ behavior: 'smooth', block: 'center' })
         }
       } catch {
         // cross-origin の場合は無視（ハイライトなしで表示）
@@ -135,7 +153,7 @@ export default function HtmlViewer({ url, highlightText, sourceRef, sheets, onSh
       handleLoad()
     }
     return () => iframe.removeEventListener('load', handleLoad)
-  }, [url, highlightText, sourceRef])
+  }, [activeCandidateIndex, candidates, sourceRef, url])
 
   const handleSheetClick = (sheet: string) => {
     setActiveSheet(sheet)
@@ -143,7 +161,30 @@ export default function HtmlViewer({ url, highlightText, sourceRef, sheets, onSh
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="relative flex flex-col h-full">
+      {candidateCount > 1 && (
+        <div className="absolute top-12 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1 bg-white/95 border border-amber-300 rounded-full shadow px-2 py-1 text-xs text-amber-800">
+          <button
+            onClick={() => goToCandidate((activeCandidateIndex - 1 + candidateCount) % candidateCount)}
+            className="px-1.5 py-0.5 rounded-full hover:bg-amber-100"
+            aria-label="前の根拠位置へ"
+            title="前の根拠位置へ"
+          >
+            ←
+          </button>
+          <span className="whitespace-nowrap" aria-live="polite">
+            根拠 {Math.min(activeCandidateIndex + 1, candidateCount)}/{candidateCount}
+          </span>
+          <button
+            onClick={() => goToCandidate((activeCandidateIndex + 1) % candidateCount)}
+            className="px-1.5 py-0.5 rounded-full hover:bg-amber-100"
+            aria-label="次の根拠位置へ"
+            title="次の根拠位置へ"
+          >
+            →
+          </button>
+        </div>
+      )}
       {sheets && sheets.length > 1 && (
         <div className="flex border-b border-gray-200 bg-gray-50 px-2 pt-1 overflow-x-auto shrink-0">
           {sheets.map((s) => (

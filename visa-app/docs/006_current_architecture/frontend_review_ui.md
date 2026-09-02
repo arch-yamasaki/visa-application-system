@@ -31,7 +31,9 @@
 
 レビューUIは、RASENSフォーム順に近い順序で `case_data` を表示します。順序の正本は `reviewFieldOrder.ts` です。設計上の対応表は `visa-app/docs/005_case_navigation_and_review_order/form_order_detail_design.md` を参照します。
 
-フィールドをクリックすると、`source_refs` から primary ref（`anchor.status === "resolved"` → `bbox` あり → anchor なし → 先頭、の優先順）を選んで証跡へ移動します。PDFの場合は `anchor.bbox`（なければ legacy `bbox`）で座標ハイライト、`anchor.status` が `ambiguous` なら保存済みの候補位置（`anchor.candidates`、最大3件）を破線で全件表示し、ビューア上部のナビで候補間を移動できます。どちらも無ければ text quote の検索ハイライトにフォールバックします。DOCX/XLSXはHTMLプレビュー上でテキスト検索します。詳細は `../009_evidence_candidates/README.md` を参照。
+フィールドをクリックすると、`source_refs` から表示に使う根拠を選んで原本の位置へ移動します。内部的には `anchor.status` を使って表示位置や複数位置を判定しますが、`resolved` / `ambiguous` / `not_found` / 未確認候補といった確認状態名は通常UIに出しません。人が原本上の根拠位置を自然に確認する体験を優先します。詳細は `../009_evidence_candidates/README.md` を参照。
+
+PDFはbboxで座標ハイライトします。XLSX/DOCXはHTMLプレビュー上の `data-anchor` 要素をハイライトします。複数位置がある場合は、内部状態名を表示せず、根拠位置を移動して確認できる操作だけを提供します。
 
 `field_metadata[path].alternatives` があるフィールドは、赤系の `別候補N` バッジを表示します。これは同じ値の位置候補ではなく、書類間・箇所間で値そのものが食い違う候補です。バッジを開くと現在値と別候補を比較でき、候補行クリックでその証跡へ移動し、`採用` で既存の編集保存フロー (`onUpdate`) に乗せて値を置き換えます。採用後も alternatives は判断履歴として `field_metadata` に残します。
 

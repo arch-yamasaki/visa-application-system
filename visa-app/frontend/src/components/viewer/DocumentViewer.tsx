@@ -13,7 +13,6 @@ export default function DocumentViewer({ caseId }: Props) {
   const documents = useViewerStore((s) => s.documents)
   const currentDocumentId = useViewerStore((s) => s.currentDocumentId)
   const currentPage = useViewerStore((s) => s.currentPage)
-  const highlightText = useViewerStore((s) => s.highlightText)
   const highlightSourceRef = useViewerStore((s) => s.highlightSourceRef)
   const selectDocument = useViewerStore((s) => s.selectDocument)
 
@@ -109,13 +108,12 @@ export default function DocumentViewer({ caseId }: Props) {
             書類を読み込み中...
           </div>
         ) : isPdf ? (
-          <PdfViewer url={url} page={currentPage} highlightText={highlightText} sourceRef={highlightSourceRef} />
+          <PdfViewer url={url} page={currentPage} sourceRef={highlightSourceRef} />
         ) : isImage ? (
           <ImageViewer url={url} />
         ) : isOfficeDoc ? (
           <HtmlViewer
             url={url}
-            highlightText={highlightText}
             sourceRef={highlightSourceRef}
             sheets={isXlsx ? sheets : undefined}
             onSheetChange={isXlsx ? handleSheetChange : undefined}

@@ -4,7 +4,14 @@ import { apiClient } from '../api/client'
 import FieldPanel from '../components/review/FieldPanel'
 import DocumentViewer from '../components/viewer/DocumentViewer'
 import ReviewBanner from '../components/review/ReviewBanner'
-import type { CaseData, CaseDocument, FieldMetadataMap, SourceRef } from '../types/caseData'
+import type {
+  CaseData,
+  CaseDocument,
+  FieldMetadataMap,
+  FieldOrigin,
+  SourceLocation,
+  SourceRef,
+} from '../types/caseData'
 import { useViewerStore } from '../store/viewerStore'
 
 function normalizeSourceRef(ref: Record<string, unknown>): SourceRef {
@@ -13,6 +20,7 @@ function normalizeSourceRef(ref: Record<string, unknown>): SourceRef {
     page: Number(ref.page) || 1,
     text_quote: String(ref.text_quote ?? ''),
     confidence: Number(ref.confidence) || 0,
+    locations: ref.locations as SourceLocation[] | undefined,
     bbox: ref.bbox as SourceRef['bbox'],
     anchor: ref.anchor as SourceRef['anchor'],
   }
@@ -28,8 +36,10 @@ function normalizeFieldMetadata(raw: unknown): FieldMetadataMap {
     if (!path) continue
     map[path] = {
       source_refs: (item.source_refs ?? []).map(normalizeSourceRef),
+      origin: item.origin as FieldOrigin | undefined,
       alternatives: (item.alternatives ?? []).map((alternative: Record<string, unknown>) => ({
         value: alternative.value as string | number | boolean,
+        origin: alternative.origin as FieldOrigin | undefined,
         source_refs: ((alternative.source_refs as Record<string, unknown>[] | undefined) ?? []).map(normalizeSourceRef),
       })),
       human_reviewed: item.human_reviewed,

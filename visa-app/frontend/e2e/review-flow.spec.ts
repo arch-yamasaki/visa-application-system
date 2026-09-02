@@ -50,6 +50,8 @@ test.describe('ReviewPage demo mode', () => {
     await expect(page.getByText('要対応')).not.toBeVisible()
     await expect(page.getByText('編集済')).not.toBeVisible()
     await expect(page.getByText('要レビュー')).not.toBeVisible()
+    await expect(page.getByText('位置候補')).not.toBeVisible()
+    await expect(page.getByText('未確認候補')).not.toBeVisible()
     await expect(page.getByRole('button', { name: '全て確認済み' })).not.toBeVisible()
     await expect(page.getByRole('button', { name: '確認して完了' })).not.toBeVisible()
     await expect(page.getByRole('button', { name: '保存' })).toBeVisible()
@@ -102,12 +104,12 @@ test.describe('ReviewPage demo mode', () => {
     await expect(input).not.toBeVisible()
   })
 
-  test('intermediary settings are displayed as fixed and cannot be edited', async ({ page }) => {
-    const intermediaryRows = page.locator('[data-field-row][data-read-only="true"]')
-    await expect(intermediaryRows).toHaveCount(5)
-    await expect(intermediaryRows.getByText('固定設定')).toHaveCount(5)
+  test('organization settings are displayed as fixed and cannot be edited', async ({ page }) => {
+    const fixedSettingRows = page.locator('[data-field-row][data-read-only="true"]')
+    await expect(fixedSettingRows).toHaveCount(8)
+    await expect(fixedSettingRows.getByText('固定設定')).toHaveCount(8)
 
-    const nameRow = intermediaryRows.filter({ hasText: '取次者 氏名' })
+    const nameRow = fixedSettingRows.filter({ hasText: '取次者 氏名' })
     await expect(nameRow).toBeVisible()
 
     await nameRow.dblclick()

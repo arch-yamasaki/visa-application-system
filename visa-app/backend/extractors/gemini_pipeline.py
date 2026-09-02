@@ -1,15 +1,12 @@
 """Shared Gemini extraction pipeline for GCS and local file inputs."""
 
 import logging
-import os
 import time
 from collections.abc import Callable
 
 from google.genai import types as genai_types
 
-from .anchor_resolver import resolve_anchors, sync_bbox_anchors
-from .bbox_locator import locate_bboxes
-from .cell_selector import select_ambiguous_cells
+from .anchor_resolver import resolve_source_locations
 from .document_models import LoadedDocument, PreparedDocuments
 from .gemini import (
     EXTRACTION_SCOPES,
@@ -79,7 +76,7 @@ def _log_event(
         event_logger(event, fields)
 
 
-def attach_bboxes(
+def attach_source_anchors(
     result: ExtractionResult,
     prepared: PreparedDocuments,
     *,
@@ -89,11 +86,11 @@ def attach_bboxes(
     event_logger: PipelineEventLogger | None = None,
 ) -> ExtractionResult:
     if not enabled:
-        logger.info("Anchor resolver skipped case_id=%s reason=disabled", case_id)
+        logger.info("Source anchor resolver skipped case_id=%s reason=disabled", case_id)
         return result
 
     logger.info(
-        "Anchor resolver started case_id=%s pdfs=%d xlsx_indexes=%d docx_indexes=%d metadata_fields=%d",
+        "Source anchor resolver started case_id=%s pdfs=%d xlsx_indexes=%d docx_indexes=%d metadata_fields=%d",
         case_id,
         len(prepared.pdf_contents),
         len(prepared.xlsx_cell_indexes),
@@ -102,35 +99,22 @@ def attach_bboxes(
     )
     started_at = time.monotonic()
     try:
-        result.field_metadata = resolve_anchors(
+        result.field_metadata = resolve_source_locations(
             result.field_metadata,
             prepared.pdf_bytes_map,
             prepared.xlsx_cell_indexes,
             prepared.docx_block_indexes,
         )
-        if prepared.xlsx_cell_indexes and os.environ.get("ENABLE_CELL_SELECTOR", "true").lower() == "true":
-            result.field_metadata = select_ambiguous_cells(
-                result.field_metadata,
-                prepared.xlsx_cell_indexes,
-            )
-        if prepared.pdf_contents and os.environ.get("ENABLE_BBOX_LOCATOR", "true").lower() == "true":
-            result.field_metadata = locate_bboxes(
-                result.field_metadata,
-                prepared.pdf_bytes_map,
-            )
-            result.field_metadata = sync_bbox_anchors(result.field_metadata)
-        elif prepared.pdf_contents:
-            logger.info("Bbox locator skipped case_id=%s reason=disabled", case_id)
     except Exception as exc:
         logger.warning(
-            "Anchor resolver failed case_id=%s error_type=%s",
+            "Source anchor resolver failed case_id=%s error_type=%s",
             case_id,
             type(exc).__name__,
             exc_info=True,
         )
         _log_event(
             event_logger,
-            "bbox_failed",
+            "source_location_failed",
             run_id=run_id,
             case_id=case_id,
             pdfs=len(prepared.pdf_contents),
@@ -140,11 +124,11 @@ def attach_bboxes(
         )
         return result
 
-    bbox_refs = sum(
+    located_refs = sum(
         1
         for meta in result.field_metadata.values()
         for ref in meta.get("source_refs", [])
-        if ref.get("bbox")
+        if ref.get("anchor", {}).get("status") in {"resolved", "ambiguous"}
     )
     resolved_anchors = sum(
         1
@@ -154,16 +138,16 @@ def attach_bboxes(
     )
     _log_event(
         event_logger,
-        "bbox_complete",
+        "source_location_complete",
         run_id=run_id,
         case_id=case_id,
         pdfs=len(prepared.pdf_contents),
         metadata_fields=len(result.field_metadata),
-        bbox_refs=bbox_refs,
+        located_refs=located_refs,
         resolved_anchors=resolved_anchors,
         elapsed_ms=round((time.monotonic() - started_at) * 1000),
     )
-    logger.info("Anchor resolver completed case_id=%s", case_id)
+    logger.info("Source anchor resolver completed case_id=%s", case_id)
     return result
 
 
@@ -177,7 +161,7 @@ def extract_documents(
     scoped: bool = True,
     run_id: str | None = None,
     case_id: str | None = None,
-    attach_bbox_refs: bool = True,
+    attach_source_refs: bool = True,
     event_logger: PipelineEventLogger | None = None,
 ) -> ExtractionResult:
     case_id = case_id or case_meta.get("case_id", "")
@@ -223,12 +207,12 @@ def extract_documents(
             run_id=run_id,
             case_id=case_id,
         )
-        return attach_bboxes(
+        return attach_source_anchors(
             result,
             prepared,
             case_id=case_id,
             run_id=run_id,
-            enabled=attach_bbox_refs,
+            enabled=attach_source_refs,
             event_logger=event_logger,
         )
 
@@ -259,12 +243,12 @@ def extract_documents(
             manifest_documents,
             text_contents=prepared.text_contents or None,
         )
-        return attach_bboxes(
+        return attach_source_anchors(
             result,
             prepared,
             case_id=case_id,
             run_id=run_id,
-            enabled=attach_bbox_refs,
+            enabled=attach_source_refs,
             event_logger=event_logger,
         )
 
@@ -280,11 +264,11 @@ def extract_documents(
         manifest_documents,
         text_contents=prepared.text_contents or None,
     )
-    return attach_bboxes(
+    return attach_source_anchors(
         result,
         prepared,
         case_id=case_id,
         run_id=run_id,
-        enabled=attach_bbox_refs,
+        enabled=attach_source_refs,
         event_logger=event_logger,
     )

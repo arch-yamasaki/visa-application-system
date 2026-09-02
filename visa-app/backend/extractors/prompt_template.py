@@ -17,10 +17,11 @@ _TEMPLATE = """\
 
 ## 指示
 
-提供された書類から以下の2つのJSONオブジェクトを含む単一のJSONを出力してください。
+提供された書類から以下の3つのJSONオブジェクトを含む単一のJSONを出力してください。
 
 1. **case_data**: 申請人の身元情報、出入国歴、家族、学歴、職歴、資格、雇用主情報、雇用条件、活動内容詳細を抽出。各フィールドは `{{"value": "...", "source_ref": {{"document_id": "...", "page": 1, "text_quote": "...", "confidence": 0.95}}}}` の形式で出力すること。値が食い違う別候補がある場合のみ `alternatives` を付けてよい。
 2. **review**: 欠損項目、根拠の弱い項目、矛盾点、人の判断が必要な理由を記録。reason/message/summaryは日本語で記述。
+3. **source_locations**: case_data の値を取得した位置を、field_path とともにまとめて出力。
 
 ## 抽出の優先順位
 
@@ -49,16 +50,20 @@ _TEMPLATE = """\
 
 根拠となる資料が不足している場合、OCR精度が低い場合、法的・実務的な判断が必要な場合は needs_review を付与すること。
 
-## 証跡要件（case_data 内の各フィールドに埋め込み）
+## 証跡要件
 
-**case_data の各末端フィールドは `{{"value": "...", "source_ref": {{"document_id": "...", "page": 1, "text_quote": "...", "confidence": 0.95}}}}` の形式で出力すること。**
+**case_data の各末端フィールドは `{{"value": "...", "source_ref": {{"document_id": "...", "page": 1, "text_quote": "...", "confidence": 0.95}}}}` の形式で出力し、位置はJSON直下の source_locations にまとめること。**
 
 ### ルール
 
 - DOCX書類からの抽出値にも必ず証跡を付与すること。DOCXにはページ概念がないため page は 1 とすること。
 - 雇用条件の詳細項目（昇給、賞与、勤務時間、休日、入社日等）にも必ず証跡を付与すること。
-- 値を出力する場合は、必ずどの書類（document_id）のどの箇所から取得したか記録すること。証跡なしで値だけ返すことは禁止。
+- 原本に直接記載された値を出力する場合は、必ずどの書類（document_id）のどの箇所から取得したか記録すること。
+- 推測・計算・業務ルール・既定値で作った値は、source_ref を空値にして source_locations を出力しないこと。関係のない書類や近いだけの箇所を根拠にしてはならない。
 - text_quote は原文の**連続した一箇所**をそのまま引用すること。Excelでは値が書かれた**1セルの内容だけ**を引用し、質問セル（項目名）と回答セルをタブや空白で連結しないこと。複数の箇所の文字列を組み合わせたquoteや、原文に存在しない補完（国名の追加等）は禁止。
+- source_locations は、値を取得した箇所をviewerが直接表示するための位置候補。field_path は case_data 内のpathを `applicant.education.0.school_name` のように示し、最有力値は alternative_index を -1、alternatives は0始まりのindexにする。Excel/DOCXは抽出テキストのIDをanchor_idへそのまま入れ、PDFは値が見える領域を1000分率のbboxで入れること。
+- source_ref.document_id があり原本から直接取得したフィールドは、source_ref.text_quoteが示す箇所と一致する source_locations を最低1件必ず出力すること。primaryだけでなくalternativesも同様。値または値を直接判断できるラベルと回答が見えない位置は禁止。同じ書類・同じページにある、内容が関連しているというだけでは根拠にしない。
+- 業種分類、活動内容の要約など、原文を分類・合成して作った値は、原本に同じ回答が明記されていない限り derived とする。
 - 複数の根拠があり値が一致している場合は、最も信頼度の高いものを1つ選んで記載すること。
 - 同一フィールドについて、複数の書類・箇所が互いに異なる値を示している場合のみ、最有力の値を `value` に、それ以外の候補を `alternatives` に入れること。
 - `alternatives` の各候補も `{{"value": "...", "source_ref": {{...}}}}` 形式で、証跡を必ず付けること。
@@ -72,18 +77,16 @@ source_ref のフィールド:
   - confidence (number): 0.0〜1.0 の範囲
     - 0.9以上=明瞭、0.7-0.9=やや不明瞭、0.5-0.7=複数解釈可能、0.5未満=推測
 - STRING項目の値が見つからない場合は value を空文字、source_ref は `{{"document_id": "", "page": 0, "text_quote": "", "confidence": 0}}` とし review の missing_items に記録
-- **source_ref が空のまま value が非空であることは禁止。** 値を出力するなら source_ref は必ず根拠書類を示すこと。
-- 例外: BOOLEAN / INTEGER項目で、明確な記載がないため既定値 `false` / `0` を出す場合は、source_ref を空にしてよい。ただし review の findings または missing_items に「記載なしのため既定値」と分かる内容を記録すること。
+- **原本に直接記載された値で、source_ref が空のまま value が非空であることは禁止。** 推測・計算・業務ルール・既定値は上記のとおり空の source_ref とすること。
+- 例外: BOOLEAN / INTEGER項目で、明確な記載がないため既定値 `false` / `0` を出す場合は、source_ref を `{{"document_id": "", "page": 0, "text_quote": "", "confidence": 0}}` とする。ただし review の findings または missing_items に「記載なしのため既定値」と分かる内容を記録すること。
 
 ### OK / NG 例
 
 OK: `{{"value": "YAMADA TARO", "source_ref": {{"document_id": "doc_abc123", "page": 1, "text_quote": "YAMADA TARO", "confidence": 0.95}}}}`
 OK: `{{"value": "", "source_ref": {{"document_id": "", "page": 0, "text_quote": "", "confidence": 0}}}}` （STRING項目の値が見つからない場合）
-OK: `{{"value": "250000", "source_ref": {{"document_id": "doc_offer", "page": 1, "text_quote": "Monthly salary: JPY 250,000", "confidence": 0.92}}, "alternatives": [{{"value": "230000", "source_ref": {{"document_id": "doc_resume", "page": 2, "text_quote": "Salary 230,000 JPY", "confidence": 0.82}}}}]}}` （給与が書類間で異なる場合）
+OK: `{{"field_path": "applicant.name_roman", "alternative_index": -1, "type": "pdf_bbox", "page": 1, "bbox": {{"y_min": 120, "x_min": 100, "y_max": 160, "x_max": 420}}}}` （source_locationsの要素）
 NG: `{{"value": "YAMADA TARO", "source_ref": {{"document_id": "", "page": 0, "text_quote": "", "confidence": 0}}}}` （値があるのに証跡が空 — 禁止）
-NG: `{{"value": "無", "source_ref": {{"document_id": "", "page": 0, "text_quote": "", "confidence": 0}}}}` （否定的な値でも証跡は必須）
 NG: `{{"value": "Arghakhanchi", "source_ref": {{"document_id": "doc_xlsx", "page": 5, "text_quote": "Place of birth　出生地\tArghakhanchi", "confidence": 0.9}}}}` （質問セルと回答セルを連結したquote — 禁止。回答セルの `Arghakhanchi` のみ引用する）
-NG: `{{"value": "250000", "source_ref": {{"document_id": "doc_offer", "page": 1, "text_quote": "JPY 250,000", "confidence": 0.92}}, "alternatives": [{{"value": "250,000", "source_ref": {{"document_id": "doc_resume", "page": 2, "text_quote": "250,000 JPY", "confidence": 0.86}}}}]}}` （同じ値・表記ゆれを別候補にしている）
 
 ### case_data 出力例
 
@@ -110,7 +113,11 @@ NG: `{{"value": "250000", "source_ref": {{"document_id": "doc_offer", "page": 1,
         }}
       }}
     }}
-  }}
+  }},
+  "source_locations": [
+    {{"field_path": "applicant.name_roman", "alternative_index": -1, "type": "pdf_bbox", "page": 1, "bbox": {{"y_min": 120, "x_min": 100, "y_max": 160, "x_max": 420}}}},
+    {{"field_path": "applicant.birth_date", "alternative_index": -1, "type": "pdf_bbox", "page": 1, "bbox": {{"y_min": 170, "x_min": 100, "y_max": 210, "x_max": 300}}}}
+  ]
 }}
 ```
 
@@ -168,7 +175,7 @@ case_data のキーも必ず canonical v2 path とすること。旧path互換�
 
 - schemaでBOOLEANに指定されている `value` は JSON boolean（`true` / `false`）で出力すること。`"true"`、`"false"`、`"有"`、`"無"` のような文字列は禁止。
 - schemaでINTEGERに指定されている `value` は JSON number（例: `0`, `1`, `3`）で出力すること。`"0"`、`"3"` のような文字列は禁止。
-- BOOLEAN / INTEGER の値が書類から見つからない場合は、各項目の既定方針に従い `false` または `0` を出力すること。空文字やnullは使わないこと。この場合は source_ref を空にし、review に既定値であることを記録すること。
+- BOOLEAN / INTEGER の値が書類から見つからない場合は、各項目の既定方針に従い `false` または `0` を出力すること。空文字やnullは使わないこと。この場合は source_ref の全項目を空値にし、review に既定値であることを記録すること。
 - `employer.corporate_number`: 法人番号は13桁の数字のみ（ハイフン・スペースは除去）。元書類にハイフン付きで記載されている場合は除去して数字のみにすること。
 - `applicant.name_roman`: 旅券の顔写真側の身分事項欄(VIZ)にある氏名を、姓→名の順で半角英字大文字スペース区切りにすること。例: `BHANDARI ASHWIN`。MRZだけを正本にしないこと。
 - `applicant.birth_place`: 出生地だけを抽出し、本国住所や現住所と取り違えないこと。国名と都市・地域名が資料上で確認できる場合は `国名 都市・地域名` の順にすること。資料にない住所要素は補わないこと。
@@ -286,6 +293,9 @@ _SCOPED_COMMON_RULES = """\
 
 各フィールドは `{"value": "...", "source_ref": {"document_id": "...", "page": 1, "text_quote": "...", "confidence": 0.95}}` の形式で出力すること。値が食い違う別候補がある場合のみ `alternatives` を付けてよい。
 
+値を取得した位置は、各フィールドの中ではなく、出力JSON直下の `source_locations` にまとめて出力すること。
+`source_locations` の各要素は `{"field_path": "applicant.name_roman", "alternative_index": -1, "type": "xlsx_cell", "anchor_id": "Applicant!B2"}` の形式とする。
+
 ### source_ref フォーマット
 - document_id: 書類一覧の document_id と一致
 - page: ページ番号（1始まり）
@@ -293,23 +303,32 @@ _SCOPED_COMMON_RULES = """\
 - text_quote は原文の**連続した一箇所**をそのまま引用すること。Excelでは値が書かれた**1セルの内容だけ**を引用し、質問セル（項目名）と回答セルをタブや空白で連結しないこと。複数の箇所の文字列を組み合わせたquoteや、原文に存在しない補完（国名の追加等）は禁止。
 - confidence: 0.0〜1.0（0.9以上=明瞭、0.7-0.9=やや不明瞭、0.5-0.7=複数解釈可能、0.5未満=推測）
 - STRING項目の値が見つからない場合は value を空文字、source_ref を `{"document_id": "", "page": 0, "text_quote": "", "confidence": 0}` とすること
-- **source_ref が空のまま value が非空であることは禁止。** 値を出力するなら source_ref は必ず根拠書類を示すこと。
-- 例外: BOOLEAN / INTEGER項目で、明確な記載がないため既定値 `false` / `0` を出す場合は、source_ref を空にしてよい。ただし review の findings または missing_items に「記載なしのため既定値」と分かる内容を記録すること。
+- **原本に直接記載された値で、source_ref が空のまま value が非空であることは禁止。** 推測・計算・業務ルール・既定値は上記のとおり空の source_ref とすること。
+- 例外: BOOLEAN / INTEGER項目で、明確な記載がないため既定値 `false` / `0` を出す場合は、source_ref を `{"document_id": "", "page": 0, "text_quote": "", "confidence": 0}` とする。ただし review の findings または missing_items に「記載なしのため既定値」と分かる内容を記録すること。
 - 同一フィールドについて、複数の書類・箇所が互いに異なる値を示している場合のみ、最有力の値を `value` に、それ以外の候補を `alternatives` に入れること。
 - `alternatives` の各候補も `{"value": "...", "source_ref": {...}}` 形式で、証跡を必ず付けること。
 - 値が一致している場合や候補が1つしかない場合、`alternatives` は省略すること。空配列は出力しないこと。
 - `alternatives` は最大2件。同じ値の重複や、表記ゆれだけで実質同じ値の候補は入れないこと。
 
-OK: `{"value": "YAMADA TARO", "source_ref": {"document_id": "doc_abc123", "page": 1, "text_quote": "YAMADA TARO", "confidence": 0.95}}`
+### source_locations フォーマット
+- field_path: このscopeの出力内でのフィールドpath。`case_data.` は付けない。配列要素は `applicant.education.0.school_name` のように0始まりの番号で示す
+- alternative_index: 最有力の value は `-1`、alternatives は配列の順に `0` または `1`
+- type: Excelは `xlsx_cell`、DOCXは `docx_block`、PDFは `pdf_bbox`
+- anchor_id: Excelは抽出テキストの `Sheet!A1`、DOCXは `p-0` または `t-0-r-0-c-1` のようなIDをそのまま使う
+- PDFは page と、1000分率の bbox `{"y_min": 120, "x_min": 100, "y_max": 160, "x_max": 420}` を付ける
+- 同じ根拠に位置候補が複数ある場合は、同じ field_path と alternative_index で最大3件まで出力する
+- source_ref.document_id があり原本から直接取得したフィールドは、source_ref.text_quoteが示す箇所と一致する source_locations を最低1件必ず出力する。値または値を直接判断できるラベルと回答が見えない位置は禁止。同じ書類・同じページにある、内容が関連しているというだけでは根拠にしない
+- 推測・計算・業務ルール・既定値で作った値は、source_ref を空値にして source_locations を出力しない。関係のない書類や近いだけの箇所を根拠にしてはならない
+- 業種分類、活動内容の要約など、原文を分類・合成して作った値は、原本に同じ回答が明記されていない限り derived とする
+
+OK: `{"applicant": {"name_roman": {"value": "YAMADA TARO", "source_ref": {"document_id": "doc_abc123", "page": 1, "text_quote": "YAMADA TARO", "confidence": 0.95}}}, "source_locations": [{"field_path": "applicant.name_roman", "alternative_index": -1, "type": "pdf_bbox", "page": 1, "bbox": {"y_min": 120, "x_min": 100, "y_max": 160, "x_max": 420}}]}`
 OK: `{"value": "", "source_ref": {"document_id": "", "page": 0, "text_quote": "", "confidence": 0}}` （STRING項目の値が見つからない場合）
-OK: `{"value": "250000", "source_ref": {"document_id": "doc_offer", "page": 1, "text_quote": "Monthly salary: JPY 250,000", "confidence": 0.92}, "alternatives": [{"value": "230000", "source_ref": {"document_id": "doc_resume", "page": 2, "text_quote": "Salary 230,000 JPY", "confidence": 0.82}}]}` （給与が書類間で異なる場合）
 NG: `{"value": "YAMADA TARO", "source_ref": {"document_id": "", "page": 0, "text_quote": "", "confidence": 0}}` （値があるのに証跡が空 — 禁止）
-NG: `{"value": "250000", "source_ref": {"document_id": "doc_offer", "page": 1, "text_quote": "JPY 250,000", "confidence": 0.92}, "alternatives": [{"value": "250,000", "source_ref": {"document_id": "doc_resume", "page": 2, "text_quote": "250,000 JPY", "confidence": 0.86}}]}` （同じ値・表記ゆれを別候補にしている）
 
 ### 正規化ルール
 - schemaでBOOLEANに指定されている `value` は JSON boolean（`true` / `false`）で出力すること。`"true"`、`"false"`、`"有"`、`"無"` のような文字列は禁止。
 - schemaでINTEGERに指定されている `value` は JSON number（例: `0`, `1`, `3`）で出力すること。`"0"`、`"3"` のような文字列は禁止。
-- BOOLEAN / INTEGER の値が書類から見つからない場合は、各項目の既定方針に従い `false` または `0` を出力すること。空文字やnullは使わないこと。この場合は source_ref を空にし、review に既定値であることを記録すること。
+- BOOLEAN / INTEGER の値が書類から見つからない場合は、各項目の既定方針に従い `false` または `0` を出力すること。空文字やnullは使わないこと。この場合は source_ref の全項目を空値にし、review に既定値であることを記録すること。
 - 生年月日（`applicant.birth_date`）: valueは必ず4桁年の`YYYY-MM-DD`。原本が`DD MMM YYYY`、`DD-MMM-YYYY`等でもvalueだけ正規化し、source_ref.text_quoteは原文表記をそのまま引用すること。2桁年や解釈が曖昧な数値日付を推測しないこと。
 - 法人番号（`employer.corporate_number`）: 13桁の数字のみ。ハイフン・スペースは除去すること。
 - 氏名（`applicant.name_roman`）: 旅券VIZの表記を優先し、姓→名の順で半角英字大文字スペース区切り。例: `BHANDARI ASHWIN`。
@@ -338,8 +357,9 @@ NG: `{"value": "250000", "source_ref": {"document_id": "doc_offer", "page": 1, "
 - 説明テキスト（reason, message 等）は日本語で記述
 - text_quote は原文から直接引用
 
-### 証跡必須ルール
-- 値を出力する場合は、必ず source_ref も出力すること。証跡なしで値だけ返すことは禁止。
+### 証跡ルール
+- 原本に直接記載された値を出力する場合は、必ず source_ref と対応する source_locations を出力すること。
+- 推測・計算・業務ルール・既定値で作った値は、空の source_ref を出力し、source_locations は出力しないこと。
 - 値が "無" や "No" など否定的な内容であっても、書類に記載されているなら source_ref を付けること。
 
 正しい出力例:
@@ -353,7 +373,8 @@ NG: `{"value": "250000", "source_ref": {"document_id": "doc_offer", "page": 1, "
       "text_quote": "犯罪を理由とする処分を受けたことの有無 無",
       "confidence": 0.95
     }
-  }
+  },
+  "source_locations": [{"field_path": "criminal_record", "alternative_index": -1, "type": "pdf_bbox", "page": 1, "bbox": {"y_min": 100, "x_min": 100, "y_max": 140, "x_max": 500}}]
 }
 ```
 """
@@ -426,7 +447,8 @@ def build_scoped_prompt(
         parts.append(_json.dumps(extra_context, ensure_ascii=False, indent=2))
         parts.append("```\n")
 
-    parts.append(_SCOPED_COMMON_RULES)
+    if scope != "review":
+        parts.append(_SCOPED_COMMON_RULES)
 
     return "\n".join(parts)
 

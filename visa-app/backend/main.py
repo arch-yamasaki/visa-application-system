@@ -31,9 +31,7 @@ from google.cloud import run_v2
 from pydantic import BaseModel, Field
 
 from auth import AuthUser, require_user
-from extractors.anchor_resolver import anchor_coverage, resolve_anchors, sync_bbox_anchors
-from extractors.bbox_locator import locate_bboxes
-from extractors.cell_selector import select_ambiguous_cells
+from extractors.anchor_resolver import anchor_coverage, resolve_source_locations
 from extractors.document_models import LoadedDocument
 from extractors.document_preprocessor import prepare_documents
 from extractors.gemini_pipeline import extract_documents
@@ -1451,9 +1449,9 @@ def _start_codex_extraction(
 
 @api.post("/cases/{case_id}/reanchor")
 def reanchor_case(case_id: str, user: AuthUser = Depends(require_user)):
-    """保存済みの抽出結果に対して、最新resolverでanchor/bboxだけ再計算する。
+    """保存済みの抽出結果にある明示位置を最新形式のanchorへ変換する。
 
-    Gemini再抽出はしない(quoteはそのまま)。resolver改善を過去ケースに反映する用途。
+    Gemini再抽出やquoteからの位置推測は行わない。
     """
     data = _get_case(case_id, user)
     field_metadata = data.get("field_metadata") or {}
@@ -1479,17 +1477,12 @@ def reanchor_case(case_id: str, user: AuthUser = Depends(require_user)):
     prepared = prepare_documents(loaded_documents)
 
     before = anchor_coverage(field_metadata)
-    field_metadata = resolve_anchors(
+    field_metadata = resolve_source_locations(
         field_metadata,
         prepared.pdf_bytes_map,
         prepared.xlsx_cell_indexes,
         prepared.docx_block_indexes,
     )
-    if prepared.xlsx_cell_indexes and os.environ.get("ENABLE_CELL_SELECTOR", "true").lower() == "true":
-        field_metadata = select_ambiguous_cells(field_metadata, prepared.xlsx_cell_indexes)
-    if prepared.pdf_contents and os.environ.get("ENABLE_BBOX_LOCATOR", "true").lower() == "true":
-        field_metadata = locate_bboxes(field_metadata, prepared.pdf_bytes_map)
-        field_metadata = sync_bbox_anchors(field_metadata)
     coverage = anchor_coverage(field_metadata)
 
     db.collection("cases").document(case_id).update({

@@ -22,9 +22,10 @@ from .types import ExtractionResult, OcrResult
 # schema.py がまだ完成していない場合はコメントを外す
 # from .schema import EXTRACTION_SCHEMA
 try:
-    from .schema import EXTRACTION_SCHEMA
+    from .schema import EXTRACTION_SCHEMA, to_response_json_schema
 except ImportError:
     EXTRACTION_SCHEMA = None
+    to_response_json_schema = None
     logger.info("schema.py not found; response_schema will not be used")
 
 try:
@@ -57,7 +58,6 @@ EXTRACTION_SCOPES = [
 
 DEFAULT_GEMINI_MODEL = "gemini-3.7-flash"
 MODEL_NAME = os.environ.get("GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
-BBOX_MODEL_NAME = os.environ.get("GEMINI_BBOX_MODEL", DEFAULT_GEMINI_MODEL)
 GEMINI_HTTP_TIMEOUT_MS = int(os.environ.get("GEMINI_HTTP_TIMEOUT_MS", "300000"))
 GEMINI_THINKING_LEVEL = os.environ.get("GEMINI_THINKING_LEVEL", "LOW").upper()
 PASSPORT_IDENTITY_MIN_CONFIDENCE = 0.8
@@ -116,107 +116,6 @@ def _thinking_config() -> types.ThinkingConfig | None:
     return types.ThinkingConfig(thinking_level=level)
 
 
-def get_bboxes_for_page(
-    page_image_bytes: bytes,
-    bbox_candidates: dict[str, dict],
-) -> dict[str, list[int] | None]:
-    """Gemini にページ画像を渡し、各candidateの bbox を取得。
-
-    Returns: {candidate_id: [y_min, x_min, y_max, x_max]} (0-1000正規化座標)
-    """
-    if not bbox_candidates:
-        return {}
-
-    client = _get_client()
-
-    prompt = (
-        "この画像内で以下の候補テキストの位置を特定してください。\n"
-        "各テキストについて、bounding box を [y_min, x_min, y_max, x_max] の形式で返してください。\n"
-        "座標は 0-1000 の正規化座標です。\n"
-        "見つからない場合は null を返してください。\n\n"
-        "候補リスト:\n"
-    )
-    for candidate_id, candidate in bbox_candidates.items():
-        field_path = candidate.get("field_path", "")
-        quote = candidate.get("locator_text") or candidate.get("text_quote", "")
-        prompt += f'- "{candidate_id}" ({field_path}): "{quote}"\n'
-    prompt += '\nJSON形式で返してください: {"candidate_id": [y_min, x_min, y_max, x_max] or null}'
-
-    image_part = types.Part.from_bytes(data=page_image_bytes, mime_type="image/png")
-    response = client.models.generate_content(
-        model=BBOX_MODEL_NAME,
-        contents=[image_part, prompt],
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            thinking_config=_thinking_config(),
-        ),
-    )
-
-    try:
-        return json.loads(response.text)
-    except json.JSONDecodeError:
-        logger.warning(
-            "Gemini bbox response parse error response_chars=%d",
-            len(response.text or ""),
-        )
-        return {}
-
-
-def select_anchor_cells(
-    context_text: str,
-    selection_candidates: dict[str, dict],
-) -> dict[str, dict | None]:
-    """曖昧なフィールドごとに、候補セルから最適な1つをGeminiに選ばせる。
-
-    selection_candidates: {selection_id: {"field_path": ..., "text_quote": ...,
-                                          "candidate_anchor_ids": [...]}}
-    Returns: {selection_id: {"anchor_id": ..., "reason": ...} | None}
-    """
-    if not selection_candidates:
-        return {}
-
-    client = _get_client()
-
-    prompt = (
-        "スプレッドシートのセル内容(セル番地付き)と、位置が曖昧なフィールドの一覧を渡します。\n"
-        "各フィールドについて、フィールド名の意味と、候補セルと同じ行にある質問ラベルなどの文脈から、\n"
-        "そのフィールドの値の出どころとして最も適切な候補セルを1つ選んでください。\n"
-        "必ず candidates に列挙された anchor_id の中から選ぶこと。判断できない場合は null を返すこと。\n\n"
-        "=== シート内容 ===\n"
-        f"{context_text}\n\n"
-        "=== 選択対象 ===\n"
-    )
-    for selection_id, selection in selection_candidates.items():
-        prompt += (
-            f'- "{selection_id}" field={selection.get("field_path", "")} '
-            f'quote="{selection.get("text_quote", "")}" '
-            f'candidates={selection.get("candidate_anchor_ids", [])}\n'
-        )
-    prompt += (
-        '\nJSON形式で返してください: '
-        '{"<selection_id>": {"anchor_id": "...", "reason": "選択理由を30字以内"} または null}'
-    )
-
-    response = client.models.generate_content(
-        model=BBOX_MODEL_NAME,
-        contents=[prompt],
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            thinking_config=_thinking_config(),
-        ),
-    )
-
-    try:
-        parsed = json.loads(response.text)
-    except json.JSONDecodeError:
-        logger.warning(
-            "Gemini cell select response parse error response_chars=%d",
-            len(response.text or ""),
-        )
-        return {}
-    return parsed if isinstance(parsed, dict) else {}
-
-
 def _call_gemini(
     client: genai.Client,
     contents: list,
@@ -230,7 +129,7 @@ def _call_gemini(
     """Call Gemini API for structured extraction.
 
     Args:
-        schema: JSON Schema for response_schema. Pass None to disable schema.
+        schema: Extraction schema. Pass None to disable structured output.
                 Defaults to _SENTINEL which uses the legacy EXTRACTION_SCHEMA.
     """
     config_kwargs = dict(
@@ -243,9 +142,9 @@ def _call_gemini(
     if schema is _SENTINEL:
         # Legacy path: use EXTRACTION_SCHEMA if available
         if EXTRACTION_SCHEMA is not None:
-            config_kwargs["response_schema"] = EXTRACTION_SCHEMA
+            config_kwargs["response_json_schema"] = to_response_json_schema(EXTRACTION_SCHEMA)
     elif schema is not None:
-        config_kwargs["response_schema"] = schema
+        config_kwargs["response_json_schema"] = to_response_json_schema(schema)
 
     started_at = time.monotonic()
     logger.info(
@@ -396,15 +295,22 @@ def _extract_field_metadata(case_data: dict) -> dict:
     def walk(obj, prefix=""):
         if isinstance(obj, dict):
             if "value" in obj and "source_refs" in obj:
+                alternatives = obj.get("alternatives")
                 entry = {
                     "source_refs": obj.get("source_refs", []),
                     "confidence": max(
                         (r.get("confidence", 0) for r in obj.get("source_refs", [])),
                         default=None,
                     ),
+                    "has_value": obj.get("value") not in (None, "") or any(
+                        isinstance(alternative, dict)
+                        and alternative.get("value") not in (None, "")
+                        for alternative in alternatives or []
+                    ),
                     "human_edited": False,
                 }
-                alternatives = obj.get("alternatives")
+                if obj.get("origin"):
+                    entry["origin"] = obj["origin"]
                 if alternatives:
                     entry["alternatives"] = alternatives
                 metadata[prefix] = entry
@@ -564,7 +470,7 @@ def _normalize_passport_identity_candidates(
 
 
 def _empty_source_ref() -> dict:
-    return {"document_id": "", "page": 0, "text_quote": "", "confidence": 0}
+    return {"document_id": "", "page": 0, "text_quote": "", "confidence": 0, "locations": []}
 
 
 def _withhold_field_value(field_value: dict) -> bool:
@@ -579,7 +485,10 @@ def _withhold_field_value(field_value: dict) -> bool:
     alternatives = field_value.get("alternatives")
     retained = []
     if isinstance(source_ref, dict):
-        retained.append({"value": value, "source_ref": copy.deepcopy(source_ref)})
+        retained_value = {"value": value, "source_ref": copy.deepcopy(source_ref)}
+        if field_value.get("origin"):
+            retained_value["origin"] = field_value["origin"]
+        retained.append(retained_value)
     if isinstance(alternatives, list):
         retained.extend(copy.deepcopy(alternatives))
 
@@ -833,12 +742,54 @@ def _normalize_source_ref(source_ref) -> dict | None:
         confidence = float(source_ref.get("confidence", 0))
     except (ValueError, TypeError):
         confidence = 0.0
-    return {
+    ref = {
         "document_id": document_id,
         "page": page,
         "text_quote": text_quote,
         "confidence": confidence,
     }
+    locations = _normalize_source_locations(source_ref.get("locations"))
+    if locations:
+        ref["locations"] = locations
+    elif isinstance(source_ref.get("locations"), list):
+        ref["locations"] = []
+    return ref
+
+
+def _normalize_source_locations(locations) -> list[dict]:
+    if not isinstance(locations, list):
+        return []
+
+    normalized = []
+    for location in locations:
+        if not isinstance(location, dict):
+            continue
+        location_type = str(location.get("type") or "").strip()
+        if not location_type:
+            continue
+        normalized_location = {"type": location_type}
+        anchor_id = str(location.get("anchor_id") or "").strip()
+        if anchor_id:
+            normalized_location["anchor_id"] = anchor_id
+        try:
+            page = int(location.get("page"))
+        except (TypeError, ValueError):
+            page = None
+        if page is not None:
+            normalized_location["page"] = page
+        bbox = location.get("bbox")
+        if isinstance(bbox, dict):
+            normalized_bbox = {}
+            for key in ("y_min", "x_min", "y_max", "x_max"):
+                try:
+                    normalized_bbox[key] = float(bbox[key])
+                except (KeyError, TypeError, ValueError):
+                    normalized_bbox = {}
+                    break
+            if normalized_bbox:
+                normalized_location["bbox"] = normalized_bbox
+        normalized.append(normalized_location)
+    return normalized
 
 
 def _normalize_alternative_value(value) -> str:
@@ -882,13 +833,93 @@ def _normalize_alternatives(primary_value, alternatives, counts: dict[str, int])
             if not isinstance(source_ref, dict) or not str(source_ref.get("text_quote") or "").strip():
                 counts["empty_quote"] += 1
             continue
-        normalized_alternatives.append({"value": value, "source_refs": [ref]})
+        normalized_alternative = {
+            "value": value,
+            "origin": _normalized_origin(ref),
+            "source_refs": [ref],
+        }
+        normalized_alternatives.append(normalized_alternative)
         seen_values.add(normalized_value)
 
     if len(normalized_alternatives) > 2:
         counts["truncated"] += len(normalized_alternatives) - 2
         normalized_alternatives = normalized_alternatives[:2]
     return normalized_alternatives
+
+
+def _normalized_origin(source_ref: dict | None) -> str:
+    return "document" if source_ref else "derived"
+
+
+def _field_value_at_path(case_data: dict, field_path: str) -> dict | None:
+    current = case_data
+    for part in field_path.split("."):
+        if isinstance(current, list) and part.isdigit():
+            index = int(part)
+            if index >= len(current):
+                return None
+            current = current[index]
+        elif isinstance(current, dict):
+            current = current.get(part)
+        else:
+            return None
+    return current if isinstance(current, dict) else None
+
+
+def _initialize_source_locations(obj) -> None:
+    if isinstance(obj, dict):
+        if "value" in obj and isinstance(obj.get("source_ref"), dict):
+            obj["source_ref"].setdefault("locations", [])
+            for alternative in obj.get("alternatives") or []:
+                if isinstance(alternative, dict) and isinstance(alternative.get("source_ref"), dict):
+                    alternative["source_ref"].setdefault("locations", [])
+            return
+        for value in obj.values():
+            _initialize_source_locations(value)
+    elif isinstance(obj, list):
+        for item in obj:
+            _initialize_source_locations(item)
+
+
+def _attach_source_locations(case_data: dict, source_locations) -> None:
+    """Attach the scope-level location list to its FieldValue source_refs."""
+    _initialize_source_locations(case_data)
+    attached = 0
+    ignored = 0
+    for item in source_locations if isinstance(source_locations, list) else []:
+        if not isinstance(item, dict):
+            ignored += 1
+            continue
+        field_value = _field_value_at_path(case_data, str(item.get("field_path") or ""))
+        alternative_index = item.get("alternative_index")
+        if field_value is None or not isinstance(alternative_index, int):
+            ignored += 1
+            continue
+        if alternative_index == -1:
+            source_ref = field_value.get("source_ref")
+        else:
+            alternatives = field_value.get("alternatives") or []
+            source_ref = (
+                alternatives[alternative_index].get("source_ref")
+                if 0 <= alternative_index < len(alternatives)
+                and isinstance(alternatives[alternative_index], dict)
+                else None
+            )
+        if not isinstance(source_ref, dict):
+            ignored += 1
+            continue
+        location = {
+            key: value
+            for key, value in item.items()
+            if key not in {"field_path", "alternative_index"}
+        }
+        source_ref["locations"].append(location)
+        attached += 1
+    logger.info(
+        "gemini_metric event=source_locations_attached attached=%d ignored=%d",
+        attached,
+        ignored,
+    )
 
 
 def _unflatten_field_values(obj, alternative_counts: dict[str, int] | None = None):
@@ -906,7 +937,11 @@ def _unflatten_field_values(obj, alternative_counts: dict[str, int] | None = Non
         if "value" in obj and "source_ref" in obj and "source_refs" not in obj:
             ref = _normalize_source_ref(obj.get("source_ref"))
             source_refs = [ref] if ref else []
-            result = {"value": obj.get("value"), "source_refs": source_refs}
+            result = {
+                "value": obj.get("value"),
+                "origin": _normalized_origin(ref),
+                "source_refs": source_refs,
+            }
             alternatives = _normalize_alternatives(
                 obj.get("value"),
                 obj.get("alternatives"),
@@ -939,6 +974,7 @@ def _build_extraction_result(parsed: dict) -> ExtractionResult:
     case_data と field_metadata.source_refs[] に分ける。
     """
     raw_case_data = parsed.get("case_data", {})
+    _attach_source_locations(raw_case_data, parsed.pop("source_locations", []))
     if _uses_raw_source_refs(raw_case_data):
         raise ValueError("Gemini response must use source_ref, not source_refs")
     alternative_filter_counts = {
@@ -1105,6 +1141,10 @@ def extract_scoped(
         case_id=case_id,
         scope=scope,
     )
+    # Scoped responses attach before section merge. The build-stage call is
+    # the equivalent path for the legacy non-scoped response.
+    case_data = raw.get("case_data", raw)
+    _attach_source_locations(case_data, raw.pop("source_locations", []))
     logger.info(
         "gemini_metric event=scope_complete %s",
         json.dumps(

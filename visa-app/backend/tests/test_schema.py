@@ -7,6 +7,7 @@ from extractors.schema import (
     SCOPE_SCHEMAS,
     SOURCE_REF_SCHEMA,
     _fv,
+    to_response_json_schema,
 )
 
 
@@ -108,3 +109,87 @@ def test_review_schema_is_not_field_value_wrapped():
     review_schema = SCOPE_SCHEMAS["review"]
     assert review_schema["properties"]["missing_items"]["type"] == "ARRAY"
     assert "value" not in review_schema["properties"]["expected_route"]
+
+
+def test_response_json_schema_uses_lowercase_types_and_defs():
+    schema = to_response_json_schema(SCOPE_SCHEMAS["applicant_identity"])
+
+    assert schema["type"] == "object"
+    assert schema["properties"]["applicant"]["type"] == "object"
+    assert schema["properties"]["applicant"]["properties"]["name_roman"] == {
+        "$ref": "#/$defs/fieldValueString",
+    }
+    assert schema["$defs"]["fieldValueString"]["properties"]["source_ref"] == {
+        "$ref": "#/$defs/sourceRef",
+    }
+
+
+def test_response_json_schema_keeps_locations_only_at_root():
+    schema = to_response_json_schema(SCOPE_SCHEMAS["applicant_identity"])
+
+    assert "source_locations" in schema["properties"]
+    assert "source_locations" in schema["required"]
+    assert schema["properties"]["source_locations"]["items"] == {
+        "$ref": "#/$defs/sourceLocation",
+    }
+    assert "locations" not in schema["$defs"]["sourceRef"]["properties"]
+    assert schema["$defs"]["sourceRef"]["required"] == [
+        "document_id",
+        "page",
+        "text_quote",
+        "confidence",
+    ]
+
+
+def test_response_json_schema_source_location_contract():
+    schema = to_response_json_schema(SCOPE_SCHEMAS["applicant_identity"])
+    location = schema["$defs"]["sourceLocation"]
+
+    assert location["required"] == ["field_path", "alternative_index", "type"]
+    assert location["properties"]["type"]["enum"] == [
+        "pdf_bbox",
+        "xlsx_cell",
+        "docx_block",
+    ]
+    assert location["properties"]["bbox"] == {"$ref": "#/$defs/pdfBbox"}
+    assert schema["$defs"]["pdfBbox"]["required"] == [
+        "y_min",
+        "x_min",
+        "y_max",
+        "x_max",
+    ]
+
+
+def test_response_json_schema_preserves_typed_field_values():
+    schema = to_response_json_schema(SCOPE_SCHEMAS["entry_plan"])
+    family = schema["properties"]["applicant"]["properties"]["family"]["properties"]
+
+    assert family["has_accompanying_members"] == {
+        "$ref": "#/$defs/fieldValueBoolean",
+    }
+    assert schema["$defs"]["fieldValueBoolean"]["properties"]["value"] == {
+        "type": "boolean",
+    }
+
+
+def test_response_json_schema_review_does_not_add_source_locations():
+    schema = to_response_json_schema(SCOPE_SCHEMAS["review"])
+
+    assert schema["type"] == "object"
+    assert "source_locations" not in schema["properties"]
+    assert "$defs" not in schema
+    assert schema["properties"]["expected_route"] == {
+        "anyOf": [
+            {"type": "string"},
+            {"type": "null"},
+        ]
+    }
+
+
+def test_response_json_schema_does_not_mutate_canonical_schema():
+    to_response_json_schema(SCOPE_SCHEMAS["applicant_identity"])
+
+    source_ref = FIELD_VALUE_SCHEMA["properties"]["source_ref"]
+    assert source_ref is SOURCE_REF_SCHEMA
+    assert "locations" in SOURCE_REF_SCHEMA["properties"]
+    assert "locations" in SOURCE_REF_SCHEMA["required"]

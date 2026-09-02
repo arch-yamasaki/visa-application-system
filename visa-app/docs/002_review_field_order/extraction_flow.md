@@ -58,7 +58,7 @@ Gemini の通常画面フローは `backend/main.py` の `/cases/{case_id}/extra
 | XLS/XLSX | backend 側でテキスト抽出して渡す |
 | PNG/JPG/JPEG | Gemini に画像として渡す |
 
-bbox locator はPDF由来の `source_refs` に対して事前実行します。`ENABLE_BBOX_LOCATOR=false` を明示した場合だけ無効化します。
+XLSX / DOCX はviewerと同じanchor IDを付けてテキスト化します。Geminiは値の `source_ref` と同一応答の `source_locations[]` を返し、backendは `field_path` / `alternative_index` で単純結合したうえでID・PDF page・bbox範囲だけを検証します。文字一致や追加Gemini APIによる位置補完は行いません。
 
 ## 4. scope 抽出
 
@@ -104,8 +104,8 @@ bbox locator はPDF由来の `source_refs` に対して事前実行します。`
 
 | 段階 | `case_data` の形 | 根拠の持ち方 | 主に見る人 |
 |---|---|---|---|
-| Gemini出力直後 | `{ value, source }` 付き | 各fieldの中に source がある | backend |
-| 正規化後 | `{ value, source_refs }` 付き | 各fieldの中に source_refs がある | backend |
+| Gemini出力直後 | `{ value, source_ref }` 付き + scope直下 `source_locations[]` | 値と位置を同一応答で分離して持つ | backend |
+| 正規化後 | `{ value, source_refs }` 付き | 各fieldの中に source_refs と結合済みlocationがある | backend |
 | Firestore保存後 | value-only | `field_metadata` に分離 | レビュー画面、人間 |
 | Chrome拡張向け | application rows | mapping と `field_metadata` を参照可能 | 拡張、RASENS入力 |
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
-import type { PDFDocumentProxy, RenderTask, TextItem } from 'pdfjs-dist/types/src/display/api'
+import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist/types/src/display/api'
 import { useViewerStore } from '../../store/viewerStore'
 import type { SourceRef } from '../../types/caseData'
 import {
@@ -23,11 +23,10 @@ const CONTENT_MARGIN = 16
 interface Props {
   url: string
   page: number
-  highlightText: string | null
   sourceRef?: SourceRef | null
 }
 
-export default function PdfViewer({ url, page, highlightText, sourceRef }: Props) {
+export default function PdfViewer({ url, page, sourceRef }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const highlightRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -159,7 +158,7 @@ export default function PdfViewer({ url, page, highlightText, sourceRef }: Props
     overlay.style.width = `${viewport.width}px`
     overlay.style.height = `${viewport.height}px`
 
-    // ambiguous は単一確定にせず、保存された候補位置を「候補」スタイルで全て見せる。
+    // 複数位置は単一確定にせず、保存された位置を全て見せる。
     // not_found や status なしの場合、legacy top-level bbox は別経路(Gemini bbox)由来の根拠なので表示してよい。
     const anchorStatus = sourceRef?.anchor?.status
     const bbox =
@@ -172,14 +171,14 @@ export default function PdfViewer({ url, page, highlightText, sourceRef }: Props
       anchorStatus === 'ambiguous'
         ? (sourceRef?.anchor?.candidates ?? [])
             .map((candidate, index) => ({ candidate, index }))
-            .filter(({ candidate }) => (candidate.page ?? sourceRef?.page ?? pageNum) === pageNum)
+            .filter(({ candidate }) => candidate.bbox && (candidate.page ?? sourceRef?.page ?? pageNum) === pageNum)
         : []
     const scrollKey = `${pageNum}:${
       bbox
         ? JSON.stringify(bbox)
         : candidateEntries.length
           ? `${JSON.stringify(candidateEntries)}:${activeCandidateIndex}`
-          : highlightText ?? ''
+          : ''
     }`
     // ズームによる再描画では highlight へ再スクロールしない
     const shouldScroll = scrollKey !== lastScrollKeyRef.current
@@ -194,7 +193,7 @@ export default function PdfViewer({ url, page, highlightText, sourceRef }: Props
         const div = appendBboxDiv(
           overlay,
           viewport,
-          candidate.bbox,
+          candidate.bbox!,
           index === activeCandidateIndex ? 'candidate-active' : 'candidate',
         )
         if (index === activeCandidateIndex) activeDiv = div
@@ -203,11 +202,8 @@ export default function PdfViewer({ url, page, highlightText, sourceRef }: Props
         const target = activeDiv ?? (overlay.firstElementChild as HTMLElement | null)
         target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       }
-    } else if (highlightText?.trim()) {
-      const textContent = await pdfPage.getTextContent()
-      highlightTextOnCanvas(overlay, textContent.items as TextItem[], viewport, highlightText.trim(), shouldScroll)
     }
-  }, [highlightText, sourceRef, activeCandidateIndex])
+  }, [sourceRef, activeCandidateIndex])
 
   useEffect(() => {
     if (!pdfDoc || scale === null) return
@@ -287,17 +283,19 @@ export default function PdfViewer({ url, page, highlightText, sourceRef }: Props
             <button
               onClick={() => goToCandidate((activeCandidateIndex - 1 + candidateCount) % candidateCount)}
               className="px-1.5 py-0.5 rounded-full hover:bg-amber-100"
-              title="前の候補へ"
+              aria-label="前の根拠位置へ"
+              title="前の根拠位置へ"
             >
               ←
             </button>
-            <span className="whitespace-nowrap">
-              候補 {Math.min(activeCandidateIndex + 1, candidateCount)}/{candidateCount}
+            <span className="whitespace-nowrap" aria-live="polite">
+              根拠 {Math.min(activeCandidateIndex + 1, candidateCount)}/{candidateCount}
             </span>
             <button
               onClick={() => goToCandidate((activeCandidateIndex + 1) % candidateCount)}
               className="px-1.5 py-0.5 rounded-full hover:bg-amber-100"
-              title="次の候補へ"
+              aria-label="次の根拠位置へ"
+              title="次の根拠位置へ"
             >
               →
             </button>
@@ -358,76 +356,4 @@ function appendBboxDiv(
   div.style.borderRadius = '2px'
   overlay.appendChild(div)
   return div
-}
-
-function normalizeText(s: string): string {
-  return s
-    .normalize('NFKC')
-    .replace(/\s+/g, '')
-    .replace(/[、。,.，．()（）]/g, '')
-    .toLowerCase()
-}
-
-function highlightTextOnCanvas(
-  overlay: HTMLElement,
-  items: TextItem[],
-  viewport: pdfjsLib.PageViewport,
-  quote: string,
-  shouldScroll: boolean,
-) {
-  const normalizedQuote = normalizeText(quote)
-
-  let fullText = ''
-  const itemRanges: { start: number; end: number; item: TextItem }[] = []
-  for (const item of items) {
-    if (!item.str) continue
-    const start = fullText.length
-    fullText += normalizeText(item.str)
-    itemRanges.push({ start, end: fullText.length, item })
-  }
-
-  // Try full match first, then partial match fallback
-  let matchIdx = fullText.indexOf(normalizedQuote)
-  let matchLen = normalizedQuote.length
-
-  if (matchIdx === -1 && normalizedQuote.length > 10) {
-    // Try progressively shorter prefixes (minimum 10 chars)
-    for (let len = normalizedQuote.length - 1; len >= 10; len--) {
-      const partial = normalizedQuote.slice(0, len)
-      const idx = fullText.indexOf(partial)
-      if (idx !== -1) {
-        matchIdx = idx
-        matchLen = len
-        break
-      }
-    }
-  }
-
-  if (matchIdx === -1) return
-
-  const matchEnd = matchIdx + matchLen
-  for (const { start, end, item } of itemRanges) {
-    if (end <= matchIdx || start >= matchEnd) continue
-    const tx = pdfjsLib.Util.transform(viewport.transform, item.transform)
-    const x = tx[4]
-    const y = tx[5]
-    const fontSize = Math.sqrt(tx[2] * tx[2] + tx[3] * tx[3])
-    const width = item.width * viewport.scale
-
-    const div = document.createElement('div')
-    div.style.position = 'absolute'
-    div.style.left = `${x}px`
-    div.style.top = `${y - fontSize}px`
-    div.style.width = `${width}px`
-    div.style.height = `${fontSize * 1.2}px`
-    div.style.backgroundColor = 'rgba(255, 160, 0, 0.45)'
-    div.style.border = '1px solid rgba(255, 140, 0, 0.7)'
-    div.style.borderRadius = '2px'
-    overlay.appendChild(div)
-  }
-
-  if (shouldScroll) {
-    const first = overlay.firstElementChild as HTMLElement | null
-    first?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  }
 }

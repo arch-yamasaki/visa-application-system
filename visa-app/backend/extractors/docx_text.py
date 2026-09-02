@@ -52,13 +52,20 @@ def extract_docx(file_bytes: bytes, document_id: str) -> OcrResult:
     doc = docx.Document(io.BytesIO(file_bytes))
     parts = []
     # 段落
+    paragraph_index = 0
     for para in doc.paragraphs:
-        if para.text.strip():
-            parts.append(para.text)
+        text = para.text.strip()
+        if text:
+            parts.append(f"[p-{paragraph_index}] {text}")
+            paragraph_index += 1
     # テーブル
-    for table in doc.tables:
-        for row in table.rows:
-            cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+    for table_index, table in enumerate(doc.tables):
+        for row_index, row in enumerate(table.rows):
+            cells = [
+                f"[t-{table_index}-r-{row_index}-c-{col_index}] {cell.text.strip()}"
+                for col_index, cell in enumerate(row.cells)
+                if cell.text.strip()
+            ]
             if cells:
                 parts.append("\t".join(cells))
     text = "\n".join(parts)

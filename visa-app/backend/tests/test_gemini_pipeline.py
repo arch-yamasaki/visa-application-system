@@ -3,7 +3,7 @@
 from extractors.document_models import PreparedDocuments
 from extractors.gemini_pipeline import (
     _enrich_manifest_documents,
-    attach_bboxes,
+    attach_source_anchors,
 )
 from extractors.types import ExtractionResult
 
@@ -22,7 +22,7 @@ def test_enrich_manifest_documents_adds_prepared_page_bounds_without_mutation():
     assert "page_count" not in manifest[0]
 
 
-def test_attach_bboxes_resolves_office_anchors_without_pdfs():
+def test_attach_source_anchors_resolves_office_locations_without_pdfs():
     result = ExtractionResult(
         case_data={},
         display_case_data={},
@@ -35,6 +35,7 @@ def test_attach_bboxes_resolves_office_anchors_without_pdfs():
                         "page": 1,
                         "text_quote": "260000",
                         "confidence": 0.9,
+                        "locations": [{"type": "xlsx_cell", "anchor_id": "Sheet1!B2"}],
                     }
                 ]
             }
@@ -56,7 +57,7 @@ def test_attach_bboxes_resolves_office_anchors_without_pdfs():
         }
     )
 
-    updated = attach_bboxes(result, prepared, case_id="case_test")
+    updated = attach_source_anchors(result, prepared, case_id="case_test")
     ref = updated.field_metadata["employment.monthly_salary"]["source_refs"][0]
 
     assert ref["anchor"]["status"] == "resolved"
@@ -64,8 +65,7 @@ def test_attach_bboxes_resolves_office_anchors_without_pdfs():
     assert ref["anchor"]["cell"] == "B2"
 
 
-def test_attach_bboxes_keeps_deterministic_anchors_when_bbox_locator_disabled(monkeypatch):
-    monkeypatch.setenv("ENABLE_BBOX_LOCATOR", "false")
+def test_attach_source_anchors_leaves_legacy_ref_without_locations_unchanged():
     result = ExtractionResult(
         case_data={},
         display_case_data={},
@@ -99,9 +99,7 @@ def test_attach_bboxes_keeps_deterministic_anchors_when_bbox_locator_disabled(mo
         },
     )
 
-    updated = attach_bboxes(result, prepared, case_id="case_test")
+    updated = attach_source_anchors(result, prepared, case_id="case_test")
     ref = updated.field_metadata["applicant.name_roman"]["source_refs"][0]
 
-    assert ref["anchor"]["status"] == "resolved"
-    assert ref["anchor"]["type"] == "docx_block"
-    assert ref["anchor"]["paragraph_index"] == 0
+    assert "anchor" not in ref

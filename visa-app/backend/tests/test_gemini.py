@@ -6,10 +6,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from extractors.gemini import (
-    BBOX_MODEL_NAME,
     DEFAULT_GEMINI_MODEL,
     MODEL_NAME,
     _build_ocr_context,
+    _attach_source_locations,
     _call_gemini,
     _extract_field_metadata,
     _extract_display_values,
@@ -24,8 +24,6 @@ from extractors.gemini import (
     extract_pdf_direct,
     extract_text_only,
     extract_with_images,
-    get_bboxes_for_page,
-    select_anchor_cells,
 )
 from application_data import build_application_data
 from extractors.prompt_template import build_extraction_prompt, build_scoped_prompt
@@ -312,51 +310,15 @@ class TestCallGemini:
         assert call.kwargs["model"] == MODEL_NAME
         _assert_sampling_parameters_omitted(call.kwargs["config"])
 
-    @patch("extractors.gemini.types.Part.from_bytes")
-    @patch("extractors.gemini._get_client")
-    def test_bbox_call_uses_configured_model_without_sampling_parameters(
-        self, mock_get_client, mock_from_bytes,
-    ):
-        mock_client = MagicMock()
-        response = MagicMock()
-        response.text = '{"candidate": [0, 0, 100, 100]}'
-        mock_client.models.generate_content.return_value = response
-        mock_get_client.return_value = mock_client
-        mock_from_bytes.return_value = "image_part"
+    def test_uses_response_json_schema(self):
+        client = MagicMock()
+        client.models.generate_content.return_value = _mock_gemini_response({})
 
-        get_bboxes_for_page(
-            b"image",
-            {"candidate": {"field_path": "applicant.name_roman", "locator_text": "TANAKA"}},
-        )
+        _call_gemini(client, [], "prompt")
 
-        call = mock_client.models.generate_content.call_args
-        assert call.kwargs["model"] == BBOX_MODEL_NAME
-        _assert_sampling_parameters_omitted(call.kwargs["config"])
-
-    @patch("extractors.gemini._get_client")
-    def test_cell_selection_uses_configured_model_without_sampling_parameters(
-        self, mock_get_client,
-    ):
-        mock_client = MagicMock()
-        response = MagicMock()
-        response.text = '{"selection": null}'
-        mock_client.models.generate_content.return_value = response
-        mock_get_client.return_value = mock_client
-
-        select_anchor_cells(
-            "A1: TANAKA",
-            {
-                "selection": {
-                    "field_path": "applicant.name_roman",
-                    "text_quote": "TANAKA",
-                    "candidate_anchor_ids": ["A1"],
-                }
-            },
-        )
-
-        call = mock_client.models.generate_content.call_args
-        assert call.kwargs["model"] == BBOX_MODEL_NAME
-        _assert_sampling_parameters_omitted(call.kwargs["config"])
+        config = client.models.generate_content.call_args.kwargs["config"]
+        assert config.response_json_schema["type"] == "object"
+        assert config.response_schema is None
 
     def test_invalid_json_log_does_not_include_response_text(self, caplog):
         response = MagicMock()
@@ -379,6 +341,124 @@ class TestCallGemini:
         assert "Response head" not in caplog.text
 
 
+class TestAttachSourceLocations:
+    def test_attaches_primary_alternative_and_array_locations(self):
+        case_data = {
+            "applicant": {
+                "name_roman": {
+                    "value": "PRIMARY",
+                    "source_ref": {"document_id": "doc_pdf"},
+                    "alternatives": [
+                        {
+                            "value": "ALTERNATIVE",
+                            "source_ref": {"document_id": "doc_xlsx"},
+                        }
+                    ],
+                },
+                "education": [
+                    {
+                        "school_name": {
+                            "value": "SCHOOL",
+                            "source_ref": {"document_id": "doc_docx"},
+                        }
+                    }
+                ],
+            }
+        }
+        source_locations = [
+            {
+                "field_path": "applicant.name_roman",
+                "alternative_index": -1,
+                "type": "pdf_bbox",
+                "page": 1,
+                "bbox": {"y_min": 10, "x_min": 20, "y_max": 30, "x_max": 40},
+            },
+            {
+                "field_path": "applicant.name_roman",
+                "alternative_index": 0,
+                "type": "xlsx_cell",
+                "anchor_id": "Sheet1!B2",
+            },
+            {
+                "field_path": "applicant.education.0.school_name",
+                "alternative_index": -1,
+                "type": "docx_block",
+                "anchor_id": "p-0",
+            },
+        ]
+
+        _attach_source_locations(case_data, source_locations)
+
+        name = case_data["applicant"]["name_roman"]
+        school = case_data["applicant"]["education"][0]["school_name"]
+        assert name["source_ref"]["locations"] == [
+            {
+                "type": "pdf_bbox",
+                "page": 1,
+                "bbox": {"y_min": 10, "x_min": 20, "y_max": 30, "x_max": 40},
+            }
+        ]
+        assert name["alternatives"][0]["source_ref"]["locations"] == [
+            {"type": "xlsx_cell", "anchor_id": "Sheet1!B2"}
+        ]
+        assert school["source_ref"]["locations"] == [
+            {"type": "docx_block", "anchor_id": "p-0"}
+        ]
+
+    def test_ignores_unknown_path_and_initializes_empty_locations(self):
+        case_data = {"applicant": {"name_roman": _field_value("VALUE")}}
+
+        _attach_source_locations(
+            case_data,
+            [
+                {
+                    "field_path": "applicant.unknown",
+                    "alternative_index": -1,
+                    "type": "xlsx_cell",
+                    "anchor_id": "Sheet1!A1",
+                }
+            ],
+        )
+
+        assert case_data["applicant"]["name_roman"]["source_ref"]["locations"] == []
+
+    def test_keeps_locations_already_attached_by_a_scope(self):
+        field_value = _field_value("VALUE")
+        field_value["source_ref"]["locations"] = [
+            {"type": "xlsx_cell", "anchor_id": "Sheet1!B2"}
+        ]
+        case_data = {"applicant": {"name_roman": field_value}}
+
+        _attach_source_locations(case_data, [])
+
+        assert field_value["source_ref"]["locations"] == [
+            {"type": "xlsx_cell", "anchor_id": "Sheet1!B2"}
+        ]
+
+    def test_build_result_merges_top_level_locations_without_leaking_them(self):
+        parsed = {
+            "case_data": {
+                "applicant": {"name_roman": _field_value("VALUE")},
+            },
+            "review": {},
+            "source_locations": [
+                {
+                    "field_path": "applicant.name_roman",
+                    "alternative_index": -1,
+                    "type": "xlsx_cell",
+                    "anchor_id": "Sheet1!B2",
+                }
+            ],
+        }
+
+        result = _build_extraction_result(parsed)
+
+        assert result.field_metadata["applicant.name_roman"]["source_refs"][0]["locations"] == [
+            {"type": "xlsx_cell", "anchor_id": "Sheet1!B2"}
+        ]
+        assert "source_locations" not in result.case_data
+
+
 class TestExtractTextOnly:
     @patch("extractors.gemini._get_client")
     def test_returns_extraction_result_new_format(self, mock_get_client):
@@ -399,6 +479,7 @@ class TestExtractTextOnly:
         # field_metadata が自動生成されている
         assert "applicant.name_roman" in result.field_metadata
         assert result.field_metadata["applicant.name_roman"]["confidence"] == 0.95
+        assert result.field_metadata["applicant.name_roman"]["has_value"] is True
         mock_client.models.generate_content.assert_called_once()
 
     def test_rejects_raw_source_refs_format(self):
@@ -497,6 +578,30 @@ class TestExtractTextOnly:
         assert result.display_case_data["applicant"]["immigration_history"]["entries_count"] == 0
         assert result.field_metadata["applicant.immigration_history.has_entries"]["source_refs"] == []
         assert result.field_metadata["applicant.immigration_history.entries_count"]["source_refs"] == []
+
+    def test_build_extraction_result_marks_empty_string_as_no_value(self):
+        raw = {
+            "case_data": {
+                "applicant": {
+                    "name_roman": {
+                        "value": "",
+                        "origin": "document",
+                        "source_ref": {
+                            "document_id": "",
+                            "page": 0,
+                            "text_quote": "",
+                            "confidence": 0,
+                            "locations": [],
+                        },
+                    },
+                },
+            },
+            "review": {},
+        }
+
+        result = _build_extraction_result(raw)
+
+        assert result.field_metadata["applicant.name_roman"]["has_value"] is False
 
     @patch("extractors.gemini._get_client")
     def test_prompt_contains_ocr_text(self, mock_get_client):
@@ -668,7 +773,7 @@ class TestExtractAllScopes:
             result.field_metadata[path]["source_refs"][0]["anchor"] = {
                 "status": "resolved",
                 "type": "pdf_bbox",
-                "resolver_type": "pdf_text_layer",
+                "resolver_type": "source_ref_location",
                 "page": 1,
             }
 
@@ -772,6 +877,7 @@ class TestExtractAllScopes:
         name_meta = result.field_metadata["applicant.name_roman"]
         birth_meta = result.field_metadata["applicant.birth_date"]
         assert name_meta["source_refs"] == []
+        assert name_meta["has_value"] is True
         assert name_meta["alternatives"][0]["value"] == "TANAKA TARO"
         assert name_meta["alternatives"][0]["source_refs"][0]["document_id"] == "doc_p"
         assert birth_meta["alternatives"][0]["value"] == "1990-01-02"
@@ -1062,6 +1168,23 @@ class TestExtractFieldMetadata:
         result = _extract_field_metadata(case_data)
         assert result["applicant.name"]["confidence"] is None
 
+    def test_carries_origin(self):
+        case_data = {
+            "applicant": {
+                "name_roman": {
+                    "value": "TANAKA TARO",
+                    "origin": "document",
+                    "source_refs": [
+                        {"document_id": "doc_p", "page": 1, "text_quote": "TANAKA TARO", "confidence": 0.95}
+                    ],
+                }
+            }
+        }
+
+        result = _extract_field_metadata(case_data)
+
+        assert result["applicant.name_roman"]["origin"] == "document"
+
     def test_carries_alternatives(self):
         case_data = {
             "employment": {
@@ -1108,12 +1231,66 @@ class TestUnflattenFieldValues:
         result = _unflatten_field_values(raw)
         assert result == {
             "value": "TANAKA TARO",
+            "origin": "document",
             "source_refs": [
                 {
                     "document_id": "doc_p",
                     "page": 1,
                     "text_quote": "TANAKA TARO",
                     "confidence": 0.95,
+                }
+            ],
+        }
+
+    def test_preserves_origin_and_locations(self):
+        raw = {
+            "value": "TANAKA TARO",
+            "origin": "document",
+            "source_ref": {
+                "document_id": "doc_p",
+                "page": "1",
+                "text_quote": "TANAKA TARO",
+                "confidence": "0.95",
+                "locations": [
+                    {
+                        "type": "pdf_bbox",
+                        "page": "1",
+                        "bbox": {
+                            "y_min": "100",
+                            "x_min": "200",
+                            "y_max": "130",
+                            "x_max": "260",
+                        },
+                    },
+                    {"type": "xlsx_cell", "anchor_id": "Applicant!B2"},
+                ],
+            },
+        }
+
+        result = _unflatten_field_values(raw)
+
+        assert result == {
+            "value": "TANAKA TARO",
+            "origin": "document",
+            "source_refs": [
+                {
+                    "document_id": "doc_p",
+                    "page": 1,
+                    "text_quote": "TANAKA TARO",
+                    "confidence": 0.95,
+                    "locations": [
+                        {
+                            "type": "pdf_bbox",
+                            "page": 1,
+                            "bbox": {
+                                "y_min": 100.0,
+                                "x_min": 200.0,
+                                "y_max": 130.0,
+                                "x_max": 260.0,
+                            },
+                        },
+                        {"type": "xlsx_cell", "anchor_id": "Applicant!B2"},
+                    ],
                 }
             ],
         }
@@ -1129,25 +1306,65 @@ class TestUnflattenFieldValues:
             },
         }
         result = _unflatten_field_values(raw)
-        assert result == {"value": "", "source_refs": []}
+        assert result == {"value": "", "origin": "derived", "source_refs": []}
+
+    def test_marks_nonempty_inferred_string_without_valid_ref_as_derived(self):
+        raw = {
+            "value": "TANAKA TARO",
+            "source_ref": {
+                "document_id": "",
+                "page": 0,
+                "text_quote": "",
+                "confidence": 0,
+                "locations": [],
+            },
+        }
+
+        result = _unflatten_field_values(raw)
+
+        assert result == {
+            "value": "TANAKA TARO",
+            "origin": "derived",
+            "source_refs": [],
+        }
+
+    def test_marks_typed_default_without_valid_ref_as_derived(self):
+        raw = {
+            "value": False,
+            "source_ref": {
+                "document_id": "",
+                "page": 0,
+                "text_quote": "",
+                "confidence": 0,
+                "locations": [],
+            },
+        }
+
+        result = _unflatten_field_values(raw)
+
+        assert result == {"value": False, "origin": "derived", "source_refs": []}
 
     def test_normalizes_alternatives(self):
         raw = {
             "value": "250000",
+            "origin": "document",
             "source_ref": {
                 "document_id": "doc_offer",
                 "page": 1,
                 "text_quote": "Monthly salary 250000",
                 "confidence": 0.95,
+                "locations": [],
             },
             "alternatives": [
                 {
                     "value": "230000",
+                    "origin": "document",
                     "source_ref": {
                         "document_id": "doc_resume",
                         "page": "2",
                         "text_quote": "Salary 230000",
                         "confidence": "0.82",
+                        "locations": [],
                     },
                 }
             ],
@@ -1158,12 +1375,14 @@ class TestUnflattenFieldValues:
         assert result["alternatives"] == [
             {
                 "value": "230000",
+                "origin": "document",
                 "source_refs": [
                     {
                         "document_id": "doc_resume",
                         "page": 2,
                         "text_quote": "Salary 230000",
                         "confidence": 0.82,
+                        "locations": [],
                     }
                 ],
             }
@@ -1223,6 +1442,7 @@ class TestUnflattenFieldValues:
         assert result["alternatives"] == [
             {
                 "value": "first",
+                "origin": "document",
                 "source_refs": [
                     {
                         "document_id": "doc_first",
