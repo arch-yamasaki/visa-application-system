@@ -173,6 +173,19 @@ def _country_keys(value: Any) -> set[str]:
     keys = {alias for label, alias in japanese_aliases.items() if _contains_label_token(v, label)}
 
     nationality_aliases = {
+        "bgd": "bangladesh",
+        "chn": "china",
+        "idn": "indonesia",
+        "ind": "india",
+        "jpn": "japan",
+        "kor": "korea",
+        "mmr": "myanmar",
+        "nep": "nepal",
+        "npl": "nepal",
+        "pak": "pakistan",
+        "phl": "philippines",
+        "tha": "thailand",
+        "vnm": "vietnam",
         "nepali": "nepal",
         "japanese": "japan",
         "chinese": "china",

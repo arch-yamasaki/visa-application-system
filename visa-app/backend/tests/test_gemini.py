@@ -277,6 +277,8 @@ class TestBuildPrompt:
         assert prompt.count("## RASENS選択肢") == 1
         assert "根拠資料から予定業務を分類できる場合だけ" in prompt
         assert "分類できない場合は既存契約どおりvalueを空文字" in prompt
+        assert "日本語部分だけの出力は禁止" in prompt
+        assert "ラベル全体を一字一句そのまま" in prompt
         assert "建築・土木・測量技術 Architecture, civil engineering, surveying techniques" in prompt
         assert "情報処理・通信技術 Information processing, communications technology" in prompt
 
@@ -284,8 +286,11 @@ class TestBuildPrompt:
         prompt = build_extraction_prompt(_CASE_META, _DOCUMENTS)
 
         assert "現在の職業・身分として明記された値だけを使うこと" in prompt
+        assert "Occupation、Profession、Job title等の欄があればその値を優先" in prompt
         assert "学位、資格、採用後の予定業務、職種区分から推測せず" in prompt
         assert "旅券や身分事項書類の出生地欄を優先" in prompt
+        assert "その欄に書かれた表記をそのまま使うこと" in prompt
+        assert "別欄の国名追加は禁止" in prompt
         assert "本国住所・現住所・会社所在地を代用せず" in prompt
         assert "本国の現住所・居住地として明記された値を優先" in prompt
 
@@ -312,7 +317,8 @@ class TestBuildPrompt:
         prompt = build_scoped_prompt("applicant_identity", _CASE_META, _DOCUMENTS)
 
         assert "出生地欄を優先" in prompt
-        assert "国名と都市・地域名が資料上で確認できる場合" in prompt
+        assert "その欄に書かれた表記をそのまま使ってください" in prompt
+        assert "別欄の国名追加は禁止" in prompt
         assert "本国住所・現住所・会社所在地を代用しない" in prompt
         assert "本国の現住所・居住地として明記された値を優先" in prompt
         assert "出生地を代用しない" in prompt
@@ -323,6 +329,8 @@ class TestBuildPrompt:
         assert "## RASENS選択肢" in prompt
         assert "根拠資料から予定業務を分類できる場合だけ" in prompt
         assert "分類できない場合は既存契約どおりvalueを空文字" in prompt
+        assert "日本語部分だけの出力は禁止" in prompt
+        assert "内定後の職務内容・役職・配属業務を根拠に分類" in prompt
         assert "建築・土木・測量技術 Architecture, civil engineering, surveying techniques" in prompt
         assert "情報処理・通信技術 Information processing, communications technology" in prompt
         assert "- 選択してください" not in prompt
@@ -331,6 +339,12 @@ class TestBuildPrompt:
         prompt = build_scoped_prompt("applicant_identity", _CASE_META, _DOCUMENTS)
 
         assert "## RASENS選択肢" not in prompt
+
+    def test_employment_history_prompt_keeps_month_precision(self):
+        prompt = build_scoped_prompt("employment_history", _CASE_META, _DOCUMENTS)
+
+        assert "年月まで分かる場合は `YYYY-MM`" in prompt
+        assert "日まで明記されていない場合に `-01` 等の日付を補完しない" in prompt
 
 
 # ---------- _build_ocr_context ------------------------------------------

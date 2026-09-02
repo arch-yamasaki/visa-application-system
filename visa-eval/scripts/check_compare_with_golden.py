@@ -96,6 +96,8 @@ def check_case_data_normalizes_equivalent_values(tmp_path: Path) -> None:
         ("applicant.family.has_accompanying_members", "無 No", "false"),
         ("applicant.family.has_accompanying_members", "有 Yes", True),
         ("applicant.family.has_accompanying_members", "No", False),
+        ("applicant.nationality_region", "NEP", "Nepal"),
+        ("applicant.nationality_region", "NPL", "NEPAL"),
         ("applicant.nationality_region", "NEPAL", "Nepal"),
         ("applicant.nationality_region", "NEPAL", "ネパール Nepal"),
         ("applicant.nationality_region", "ネパール", "Nepal"),
