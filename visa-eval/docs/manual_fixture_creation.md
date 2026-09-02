@@ -10,7 +10,7 @@
 - 入力ファイルの実ファイル名は、原則として元名のままにします。
 - Gemini に渡すファイルは `input/document_manifest.json` で明示します。
 - RASENS出力済み申請書などの正解監査資料は `output/` に置き、Gemini には渡しません。
-- `expected/` は golden 作成後に使います。fixture作成直後は空でも構いません。
+- 既存の `expected/` は旧goldenとして変更しません。新しいgoldenは `expected_verified/` に作ります。
 
 ## ディレクトリ構成
 
@@ -27,7 +27,8 @@ visa-eval/test_cases_from_raw/<case_id>/<applicant_id>/
     output_manifest.json
     rasens_application/
       ...RASENS入力済み申請書PDF...
-  expected/
+  expected/                  # 既存の旧goldenがある場合だけ。そのまま保存
+  expected_verified/         # 新しいgolden。fixture作成直後は空でよい
 ```
 
 ## 申請書PDFを分ける理由
@@ -58,12 +59,12 @@ fixture本体では元ファイル名を維持します。`prepare_blind_eval_ru
 ```json
 {
   "document_id": "submitted_application_attachments",
-  "path": "visa-eval/test_cases_from_raw/gijinkoku_a_company_round1/amit_tamang/input/submitted_application_attachments/TAMANG AMIT様.pdf",
-  "file_name": "TAMANG AMIT様.pdf",
+  "path": "visa-eval/test_cases_from_raw/gijinkoku_a_company_round1/applicant_001/input/submitted_application_attachments/APPLICANT_001.pdf",
+  "file_name": "APPLICANT_001.pdf",
   "extension": "pdf",
   "document_role": "submitted_application_bundle",
   "use_as_input": true,
-  "origin_path": "visa-eval/raw/申請書類/A社（１回目申請）/TAMANG AMIT様.pdf",
+  "origin_path": "visa-eval/raw/申請書類/CLIENT_A/applicant_001.pdf",
   "origin_pages": "11-20",
   "derivation_type": "page_split"
 }
@@ -74,12 +75,12 @@ fixture本体では元ファイル名を維持します。`prepare_blind_eval_ru
 ```json
 {
   "document_id": "rasens_application_output",
-  "path": "visa-eval/test_cases_from_raw/gijinkoku_a_company_round1/amit_tamang/output/rasens_application/TAMANG AMIT様.pdf",
-  "file_name": "TAMANG AMIT様.pdf",
+  "path": "visa-eval/test_cases_from_raw/gijinkoku_a_company_round1/applicant_001/output/rasens_application/APPLICANT_001.pdf",
+  "file_name": "APPLICANT_001.pdf",
   "document_role": "submitted_application_rasens_output",
   "use_as_input": false,
   "purpose": "golden_audit",
-  "origin_path": "visa-eval/raw/申請書類/A社（１回目申請）/TAMANG AMIT様.pdf",
+  "origin_path": "visa-eval/raw/申請書類/CLIENT_A/applicant_001.pdf",
   "origin_pages": "1-10",
   "derivation_type": "page_split"
 }
@@ -109,10 +110,10 @@ visa-app/backend/.venv/bin/python visa-eval/scripts/prepare_blind_eval_run.py \
 
 ## Golden 作成は別工程
 
-fixture作成では、`expected/*.golden.json` を無理に作りません。
+fixture作成では、goldenを無理に作りません。
 まず入力資料と正解監査資料を分け、blind run / Gemini bytes eval が動く状態にします。
 
-golden 作成では、`output/rasens_application/` と入力資料を見ながら、人が `expected/case_data.golden.json` を作ります。
+golden 作成では、`output/rasens_application/` と入力資料を見ながら、人が `expected_verified/case_data.golden.json` と `golden_manifest.json` を作ります。既存の `expected/` は変更しません。
 詳しい進め方は `../../visa-app/docs/008_eval_workflow/README.md` を参照します。
 
 Gemini 実行結果は fixture の中に置きません。`visa-eval/eval_runs/<run_id>/<case_id>/` に出します。

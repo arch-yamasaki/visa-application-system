@@ -15,6 +15,9 @@
 
 source_ref、bbox、Office anchor、retry loop の実装計画は `../007_source_refs_schema_migration/` に置きます。
 この `008_eval_workflow/` は、evalの走らせ方と結果の読み方だけを扱います。
+goldenの役割分けとactive fixtureの最新監査結果は [`docs/shared/017_data_verification_and_revision/README.md`](../../../docs/shared/017_data_verification_and_revision/README.md) にまとめます。
+
+8 fixture・315採点項目による2026-09-02時点の最新結果は、[`visa-eval/docs/accuracy_report_20260902.md`](../../../visa-eval/docs/accuracy_report_20260902.md) を参照してください。現在の主結果は259/315 = 82.2%、抽出漏れ0、extra 34です。以下の初期fixtureに関する数値は、評価方法を整備する前の履歴説明です。
 
 ## 現時点の重要な発見
 
@@ -37,9 +40,9 @@ expected/case_data.golden.json
 
 | Case | 暫定の機械比較一致率 |
 |---|---:|
-| `amit_tamang` | 70.6% (36/51) |
-| `kushang_subba_limbu` | 69.8% (37/53) |
-| `sanjay_gautam` | 70.6% (36/51) |
+| fixture 1 | 70.6% (36/51) |
+| fixture 2 | 69.8% (37/53) |
+| legacy fixture | 70.6% (36/51) |
 
 この数字も最終的なモデル品質ではありません。
 golden不足と比較正規化不足が混ざっています。
@@ -145,9 +148,12 @@ visa-eval/test_cases_from_raw/<case_id>/<applicant_id>/
     output_manifest.json
     rasens_application/
   expected/
-    case_data.golden.json
+    case_data.golden.json          # 既存の旧golden。変更しない
     application_data.golden.json   # legacy/reference。MVPの正本ではない
     review.golden.json             # 残すがMVP gateではない
+  expected_verified/
+    case_data.golden.json          # 新しい比較用の値。レビュー後は旧goldenと異なることがある
+    golden_manifest.json           # fieldごとの採点scopeと確認状態
 
 visa-eval/eval_runs/<run_id>/<case_id>/
   case_data.json
@@ -157,18 +163,19 @@ visa-eval/eval_runs/<run_id>/<case_id>/
   comparison_application_data.md
 ```
 
-MVPの正本はこれだけです。
+新しい検証で参照する値ファイルと採点条件はこの2つです。値ファイルは旧goldenとは別管理で、manifestが確認済み範囲と採点対象を示します。
 
 ```text
-expected/case_data.golden.json
+expected_verified/case_data.golden.json
+expected_verified/golden_manifest.json
 ```
 
-`application_data.golden.json` はMVP採点の正本にしません。
+既存の `expected/case_data.golden.json` は旧データとして変更しません。`application_data.golden.json` はMVP採点の正本にしません。
 比較時に expected / generated の `case_data` から backend generator で rows を生成します。
 
 ```text
 eval_runs/<run_id>/<case_id>/case_data.json
-expected/case_data.golden.json
+expected_verified/case_data.golden.json
 
 expected case_data -> backend generator -> expected application_data rows
 generated case_data -> backend generator -> generated application_data rows
@@ -222,7 +229,7 @@ generated case_data -> backend generator -> generated application_data rows
 
 - self-compare を通常比較フローに入れない。
 - 実評価では必ず `eval_runs/<run_id>/<case_id>` を `--generated` に指定する。
-- Geminiやblind agentに `expected/` を渡さない。
+- Geminiやblind agentに `expected/` と `expected_verified/` を渡さない。
 - restricted fixture と eval run output は git に入れない。
 
 受け入れ条件:
@@ -237,10 +244,10 @@ generated case_data -> backend generator -> generated application_data rows
 
 | Case | 理由 |
 |---|---|
-| `amit_tamang` | A社基本ケース |
-| `kushang_subba_limbu` | 同じ会社資料で申請人差分を確認 |
+| fixture 1 | 基本ケース |
+| fixture 2 | 同じ会社資料で申請人差分を確認 |
 
-`sanjay_gautam` は、manifest上の `submitted_application_pdf` が別人の申請書類束に見えるため、Phase 1 から外します。
+`legacy fixture` は、manifest上の `submitted_application_pdf` が別人の申請書類束に見えるため、Phase 1 から外します。
 家族・在日親族パターンは、正しい submitted application PDF が確認できたケースを後で追加します。
 
 優先して確認する section:
@@ -311,7 +318,7 @@ visa-app/backend/.venv/bin/python visa-eval/scripts/run_gemini_bytes_eval.py \
 
 visa-app/backend/.venv/bin/python visa-eval/scripts/compare_with_golden.py \
   --generated visa-eval/eval_runs/<run_id>/<case_id> \
-  --expected <fixture_dir>/expected \
+  --expected <fixture_dir>/expected_verified \
   --targets case_data
 ```
 

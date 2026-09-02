@@ -8,7 +8,7 @@ AIブラインド実行の作業ディレクトリ。`test_cases_from_raw/` か�
 
 ```bash
 visa-app/backend/.venv/bin/python visa-eval/scripts/prepare_blind_eval_run.py \
-  visa-eval/test_cases_from_raw/gijinkoku_a_company_round1/amit_tamang
+  visa-eval/test_cases_from_raw/<case_id>/<applicant_id>
 ```
 
 タイムスタンプ付きの run ディレクトリが生成される。
@@ -18,7 +18,7 @@ visa-app/backend/.venv/bin/python visa-eval/scripts/prepare_blind_eval_run.py \
 ```bash
 # 1. blind run を作成
 visa-app/backend/.venv/bin/python visa-eval/scripts/prepare_blind_eval_run.py \
-  visa-eval/test_cases_from_raw/gijinkoku_a_company_round1/amit_tamang
+  visa-eval/test_cases_from_raw/<case_id>/<applicant_id>
 
 # 2. codex exec で AI 抽出を実行
 codex exec \
@@ -32,7 +32,7 @@ visa-app/backend/.venv/bin/python visa-eval/scripts/build_application_data.py \
   visa-eval/blind_runs_from_test_cases/<run_id>/generated/application_data.json
 ```
 
-`<run_id>` は `prepare_blind_eval_run.py` が出力するディレクトリ名（例: `20260512_114953_gijinkoku_a_company_round1__amit_tamang`）に置き換える。
+`<run_id>` は `prepare_blind_eval_run.py` が出力するディレクトリ名に置き換える。
 
 ## 実行後のファイル構成
 
@@ -60,14 +60,14 @@ AI 実行完了後、まず比較スクリプトで差分種別を確認し、�
 
 1. `generated/run_notes.md` を読む
 2. `generated/review.json` を読む
-3. `generated/case_data.json` と `expected/case_data.golden.json` を比較
+3. `generated/case_data.json` と `expected_verified/case_data.golden.json` の採点対象を比較
 4. `generated/field_metadata.json` を根拠レビュー用に確認
 5. 必要なときだけ `application_data` を `case_data` から生成して確認する
 
 ```bash
 visa-app/backend/.venv/bin/python visa-eval/scripts/compare_with_golden.py \
   --generated visa-eval/blind_runs_from_test_cases/<run_id>/generated \
-  --expected visa-eval/test_cases_from_raw/<case_id>/<applicant_id>/expected \
+  --expected visa-eval/test_cases_from_raw/<case_id>/<applicant_id>/expected_verified \
   --targets case_data
 ```
 

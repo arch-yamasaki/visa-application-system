@@ -12,6 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 
 from google import genai
+from google.genai import errors as genai_errors
 from google.genai import types
 
 logger = logging.getLogger(__name__)
@@ -60,6 +61,8 @@ MODEL_NAME = os.environ.get("GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
 BBOX_MODEL_NAME = os.environ.get("GEMINI_BBOX_MODEL", DEFAULT_GEMINI_MODEL)
 GEMINI_HTTP_TIMEOUT_MS = int(os.environ.get("GEMINI_HTTP_TIMEOUT_MS", "300000"))
 GEMINI_THINKING_LEVEL = os.environ.get("GEMINI_THINKING_LEVEL", "LOW").upper()
+GEMINI_MAX_ATTEMPTS = 3
+_GEMINI_RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 PASSPORT_IDENTITY_MIN_CONFIDENCE = 0.8
 PASSPORT_IDENTITY_FIELDS = {
     "name_roman": ("applicant.name_roman", "氏名（ローマ字）"),
@@ -81,6 +84,60 @@ _ENGLISH_MONTHS = {
 }
 
 _SENTINEL = object()  # Default marker for _call_gemini schema parameter
+
+_SEX_INTERNAL_VALUES = {
+    "male": "male",
+    "m": "male",
+    "man": "male",
+    "男": "male",
+    "男性": "male",
+    "男male": "male",
+    "male男": "male",
+    "female": "female",
+    "f": "female",
+    "woman": "female",
+    "女": "female",
+    "女性": "female",
+    "女female": "female",
+    "female女": "female",
+}
+
+_MARITAL_STATUS_INTERNAL_VALUES = {
+    "single": "single",
+    "unmarried": "single",
+    "none": "single",
+    "no": "single",
+    "n": "single",
+    "無": "single",
+    "なし": "single",
+    "無し": "single",
+    "未婚": "single",
+    "独身": "single",
+    "無single": "single",
+    "single無": "single",
+    "married": "married",
+    "yes": "married",
+    "y": "married",
+    "有": "married",
+    "あり": "married",
+    "既婚": "married",
+    "有married": "married",
+    "married有": "married",
+}
+
+JOB_CATEGORY_ARCHITECTURE = "建築・土木・測量技術 Architecture, civil engineering, surveying techniques"
+JOB_CATEGORY_MANAGEMENT = "管理業務（経営者を除く） Management work (excluding executives)"
+_JOB_CATEGORY_ALIAS_TEXTS = {
+    JOB_CATEGORY_ARCHITECTURE: JOB_CATEGORY_ARCHITECTURE,
+    "建築・土木・測量技術": JOB_CATEGORY_ARCHITECTURE,
+    "Architecture, civil engineering, surveying techniques": JOB_CATEGORY_ARCHITECTURE,
+    "建築技術者": JOB_CATEGORY_ARCHITECTURE,
+    "建築・土木系エンジニア": JOB_CATEGORY_ARCHITECTURE,
+    JOB_CATEGORY_MANAGEMENT: JOB_CATEGORY_MANAGEMENT,
+    "管理業務（経営者を除く）": JOB_CATEGORY_MANAGEMENT,
+    "Management work (excluding executives)": JOB_CATEGORY_MANAGEMENT,
+    "Management work": JOB_CATEGORY_MANAGEMENT,
+}
 
 
 
@@ -114,6 +171,56 @@ def _thinking_config() -> types.ThinkingConfig | None:
         logger.warning("Unknown GEMINI_THINKING_LEVEL=%s; thinking_config disabled", GEMINI_THINKING_LEVEL)
         return None
     return types.ThinkingConfig(thinking_level=level)
+
+
+def _gemini_error_status(exc: Exception) -> int | None:
+    code = getattr(exc, "code", None)
+    if isinstance(code, int):
+        return code
+    status_code = getattr(exc, "status_code", None)
+    if isinstance(status_code, int):
+        return status_code
+    response = getattr(exc, "response", None)
+    response_status = getattr(response, "status_code", None)
+    return response_status if isinstance(response_status, int) else None
+
+
+def _is_retryable_gemini_error(exc: Exception) -> bool:
+    status = _gemini_error_status(exc)
+    if status in _GEMINI_RETRYABLE_STATUS_CODES:
+        return True
+    if isinstance(exc, genai_errors.APIError):
+        return False
+    if isinstance(exc, (TimeoutError, ConnectionError)):
+        return True
+    class_name = type(exc).__name__.lower()
+    return "timeout" in class_name or "connection" in class_name
+
+
+def _log_gemini_request_error(
+    event: str,
+    exc: Exception,
+    attempt: int,
+    *,
+    scope: str | None,
+    started_at: float,
+) -> None:
+    logger.warning(
+        "gemini_metric event=%s %s",
+        event,
+        json.dumps(
+            {
+                "attempt": attempt,
+                "elapsed_ms": round((time.monotonic() - started_at) * 1000),
+                "error_type": type(exc).__name__,
+                "model": MODEL_NAME,
+                "scope": scope,
+                "status": _gemini_error_status(exc),
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        ),
+    )
 
 
 def get_bboxes_for_page(
@@ -233,6 +340,8 @@ def _call_gemini(
         schema: JSON Schema for response_schema. Pass None to disable schema.
                 Defaults to _SENTINEL which uses the legacy EXTRACTION_SCHEMA.
     """
+    # Retry is limited to structured extraction calls through this helper.
+    # Bbox/cell auxiliary direct calls intentionally keep their simple behavior.
     config_kwargs = dict(
         response_mime_type="application/json",
         max_output_tokens=65536,
@@ -266,29 +375,35 @@ def _call_gemini(
             sort_keys=True,
         ),
     )
-    try:
-        response = client.models.generate_content(
-            model=MODEL_NAME,
-            contents=[*contents, prompt],
-            config=types.GenerateContentConfig(**config_kwargs),
-        )
-    except Exception as exc:
-        logger.warning(
-            "gemini_metric event=request_failed %s",
-            json.dumps(
-                {
-                    "run_id": run_id,
-                    "case_id": case_id,
-                    "scope": scope,
-                    "model": MODEL_NAME,
-                    "elapsed_ms": round((time.monotonic() - started_at) * 1000),
-                    "error_type": type(exc).__name__,
-                },
-                ensure_ascii=False,
-                sort_keys=True,
-            ),
-        )
-        raise
+    for attempt in range(1, GEMINI_MAX_ATTEMPTS + 1):
+        try:
+            response = client.models.generate_content(
+                model=MODEL_NAME,
+                contents=[*contents, prompt],
+                config=types.GenerateContentConfig(**config_kwargs),
+            )
+            break
+        except Exception as exc:
+            retryable = _is_retryable_gemini_error(exc)
+            has_attempt_left = attempt < GEMINI_MAX_ATTEMPTS
+            if retryable and has_attempt_left:
+                _log_gemini_request_error(
+                    "request_retry",
+                    exc,
+                    attempt,
+                    scope=scope,
+                    started_at=started_at,
+                )
+                time.sleep(1.0 * (2 ** (attempt - 1)))
+                continue
+            _log_gemini_request_error(
+                "request_failed",
+                exc,
+                attempt,
+                scope=scope,
+                started_at=started_at,
+            )
+            raise
     elapsed_ms = round((time.monotonic() - started_at) * 1000)
     logger.info(
         "gemini_metric event=request_complete %s",
@@ -299,6 +414,7 @@ def _call_gemini(
                 "scope": scope,
                 "model": MODEL_NAME,
                 "elapsed_ms": elapsed_ms,
+                "attempt": attempt,
             },
             ensure_ascii=False,
             sort_keys=True,
@@ -789,16 +905,255 @@ def _validate_passport_identity_authority(
         )
 
 
-def _normalize_corporate_number(case_data: dict) -> None:
-    """法人番号からハイフン・スペースを除去。"""
+def _normalized_text_key(value) -> str:
+    text = unicodedata.normalize("NFKC", str(value or "")).strip().casefold()
+    return re.sub(r"[\s/_・（）()]+", "", text)
+
+
+_JOB_CATEGORY_ALIASES = {
+    _normalized_text_key(alias): normalized
+    for alias, normalized in _JOB_CATEGORY_ALIAS_TEXTS.items()
+}
+
+
+def _field_value_value(field_value) -> object:
+    return field_value.get("value") if isinstance(field_value, dict) else None
+
+
+def _field_value_has_non_empty_value(field_value) -> bool:
+    value = _field_value_value(field_value)
+    return value is not None and str(value).strip() != ""
+
+
+def _field_value_has_source_refs(field_value) -> bool:
+    if not isinstance(field_value, dict):
+        return False
+    source_refs = field_value.get("source_refs")
+    return isinstance(source_refs, list) and bool(source_refs)
+
+
+def _retain_field_value_as_alternative(field_value: dict) -> None:
+    """Keep an unaccepted value as a review candidate without inventing evidence."""
+    value = field_value.get("value")
+    if value is None or value == "":
+        return
+    source_refs = field_value.get("source_refs")
+    if not isinstance(source_refs, list) or not source_refs:
+        return
+
+    retained = {"value": value, "source_refs": copy.deepcopy(source_refs)}
+    alternatives = field_value.get("alternatives")
+    new_alternatives = [retained]
+    if isinstance(alternatives, list):
+        for alternative in alternatives:
+            if not isinstance(alternative, dict):
+                continue
+            if _normalize_alternative_value(alternative.get("value")) == _normalize_alternative_value(value):
+                continue
+            new_alternatives.append(copy.deepcopy(alternative))
+            if len(new_alternatives) >= 2:
+                break
+    field_value["alternatives"] = new_alternatives
+
+
+def _clear_field_value_for_review(field_value: dict) -> None:
+    _retain_field_value_as_alternative(field_value)
+    field_value["value"] = ""
+    field_value["source_refs"] = []
+
+
+def _replace_field_value_with_candidate(field_value: dict, value, source_refs: list | None = None) -> None:
+    _retain_field_value_as_alternative(field_value)
+    field_value["value"] = value
+    field_value["source_refs"] = copy.deepcopy(source_refs) if isinstance(source_refs, list) else []
+
+
+def _review_list(review: dict, key: str) -> list:
+    current = review.get(key)
+    if isinstance(current, list):
+        return current
+    current = []
+    review[key] = current
+    return current
+
+
+def _add_review_issue(review: dict, message: str, *, missing_item: str | None = None) -> None:
+    _review_list(review, "validation_errors").append(message)
+    if missing_item:
+        _review_list(review, "missing_items").append(missing_item)
+    review["expected_route"] = "needs_review"
+
+
+def _normalize_internal_enum_field(case_data: dict, path: tuple[str, ...], aliases: dict[str, str]) -> None:
+    current = case_data
+    for key in path[:-1]:
+        current = current.get(key) if isinstance(current, dict) else None
+        if not isinstance(current, dict):
+            return
+    field_value = current.get(path[-1])
+    if not isinstance(field_value, dict):
+        return
+    value = field_value.get("value")
+    key = _normalized_text_key(value)
+    normalized = aliases.get(key)
+    if normalized:
+        field_value["value"] = normalized
+
+
+def _normalize_internal_enums(case_data: dict) -> None:
+    _normalize_internal_enum_field(
+        case_data,
+        ("applicant", "sex"),
+        _SEX_INTERNAL_VALUES,
+    )
+    _normalize_internal_enum_field(
+        case_data,
+        ("applicant", "marital_status"),
+        _MARITAL_STATUS_INTERNAL_VALUES,
+    )
+
+
+def _normalize_corporate_number(case_data: dict, review: dict) -> None:
+    """Accept only 13-digit corporate numbers after removing symbols."""
     employer = case_data.get("employer", {})
+    if not isinstance(employer, dict):
+        return
     cn = employer.get("corporate_number")
-    if isinstance(cn, dict):  # FieldValue形式
-        v = cn.get("value", "")
-        if v:
-            cn["value"] = re.sub(r'[\s\-]', '', v)
-    elif isinstance(cn, str):
-        employer["corporate_number"] = re.sub(r'[\s\-]', '', cn)
+    if not isinstance(cn, dict):
+        if isinstance(cn, str):
+            digits = re.sub(r"\D", "", unicodedata.normalize("NFKC", cn))
+            employer["corporate_number"] = digits if len(digits) == 13 else ""
+        return
+
+    raw_value = cn.get("value")
+    if raw_value is None or str(raw_value).strip() == "":
+        return
+    digits = re.sub(r"\D", "", unicodedata.normalize("NFKC", str(raw_value)))
+    has_corporate_number = employer.get("has_corporate_number")
+    if len(digits) == 13:
+        cn["value"] = digits
+        if isinstance(has_corporate_number, dict):
+            _replace_field_value_with_candidate(
+                has_corporate_number,
+                True,
+                cn.get("source_refs") if isinstance(cn.get("source_refs"), list) else [],
+            )
+        return
+
+    _clear_field_value_for_review(cn)
+    if isinstance(has_corporate_number, dict):
+        _replace_field_value_with_candidate(has_corporate_number, False, [])
+    _add_review_issue(
+        review,
+        "法人番号は記号除去後に13桁でないため、自動確定できません。12桁値は補完せず空欄にしました。",
+        missing_item="13桁の法人番号を確認してください。",
+    )
+
+
+def _normalize_full_iso_date(value) -> str | None:
+    raw = unicodedata.normalize("NFKC", str(value or "")).strip()
+    if not raw:
+        return None
+    match = re.fullmatch(
+        r"(\d{4})\s*(?:[-/.]|年)\s*(\d{1,2})\s*(?:[-/.]|月)\s*(\d{1,2})\s*(?:日)?",
+        raw,
+    )
+    if not match:
+        return None
+    year, month, day = (int(part) for part in match.groups())
+    try:
+        return date(year, month, day).isoformat()
+    except ValueError:
+        return None
+
+
+def _normalize_joining_date(case_data: dict, review: dict) -> None:
+    employment = case_data.get("employment", {})
+    if not isinstance(employment, dict):
+        return
+    joining_date = employment.get("joining_date")
+    if not isinstance(joining_date, dict) or not _field_value_has_non_empty_value(joining_date):
+        return
+
+    normalized = _normalize_full_iso_date(joining_date.get("value"))
+    if normalized:
+        joining_date["value"] = normalized
+        return
+
+    _clear_field_value_for_review(joining_date)
+    _add_review_issue(
+        review,
+        "入社日はYYYY-MM-DDの完全な日付として確認できないため、自動で日付補完せず空欄にしました。",
+        missing_item="入社日の年月日を確認してください。",
+    )
+
+
+def _align_has_position(case_data: dict, review: dict) -> None:
+    employment = case_data.get("employment", {})
+    if not isinstance(employment, dict):
+        return
+    has_position = employment.get("has_position")
+    position_title = employment.get("position_title")
+    if not isinstance(has_position, dict):
+        return
+    title_present = _field_value_has_non_empty_value(position_title)
+    title_refs = (
+        position_title.get("source_refs")
+        if isinstance(position_title, dict) and isinstance(position_title.get("source_refs"), list)
+        else []
+    )
+    has_refs = _field_value_has_source_refs(has_position)
+
+    if has_position.get("value") is False and title_present:
+        if has_refs and title_refs:
+            _replace_field_value_with_candidate(has_position, True, title_refs)
+            _add_review_issue(
+                review,
+                "役職なしの根拠と役職名の根拠が矛盾しているため、自動確定できません。",
+                missing_item="役職の有無と役職名を確認してください。",
+            )
+            return
+        if title_refs:
+            _replace_field_value_with_candidate(has_position, True, title_refs)
+            return
+        _clear_field_value_for_review(position_title)
+        return
+
+    if title_present and has_position.get("value") is not True:
+        _replace_field_value_with_candidate(has_position, True, title_refs)
+        return
+
+    if not title_present and has_position.get("value") is not False:
+        if has_refs:
+            _add_review_issue(
+                review,
+                "役職ありの根拠がありますが役職名を確認できないため、自動確定できません。",
+                missing_item="役職名を確認してください。",
+            )
+        _replace_field_value_with_candidate(has_position, False, [])
+
+
+def _normalize_job_category_primary(case_data: dict) -> None:
+    employment = case_data.get("employment", {})
+    if not isinstance(employment, dict):
+        return
+    job_category = employment.get("job_category_primary")
+    if not isinstance(job_category, dict):
+        return
+    key = _normalized_text_key(job_category.get("value"))
+    if not key:
+        return
+    normalized = _JOB_CATEGORY_ALIASES.get(key)
+    if normalized:
+        job_category["value"] = normalized
+
+
+def _apply_targeted_case_data_normalizations(case_data: dict, review: dict) -> None:
+    _normalize_internal_enums(case_data)
+    _normalize_corporate_number(case_data, review)
+    _normalize_joining_date(case_data, review)
+    _align_has_position(case_data, review)
+    _normalize_job_category_primary(case_data)
 
 
 def _map_field_metadata(
@@ -950,9 +1305,12 @@ def _build_extraction_result(parsed: dict) -> ExtractionResult:
     raw_case_data = _unflatten_field_values(raw_case_data, alternative_filter_counts)
     _log_alternative_filter_counts(alternative_filter_counts)
     parsed["case_data"] = raw_case_data
+    review = parsed.get("review")
+    if not isinstance(review, dict):
+        review = {}
+        parsed["review"] = review
 
-    # 法人番号の正規化（ハイフン・スペース除去）
-    _normalize_corporate_number(raw_case_data)
+    _apply_targeted_case_data_normalizations(raw_case_data, review)
 
     if not _is_new_format(raw_case_data):
         raise ValueError("Gemini response case_data must use FieldValue objects with source_ref")

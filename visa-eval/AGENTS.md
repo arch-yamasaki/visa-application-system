@@ -12,7 +12,8 @@ visa-eval/
       scenario.json
       input/document_manifest.json
       output/output_manifest.json
-      expected/         # golden: case_dataが正本。golden作成前は空でもよい
+      expected/         # 既存の旧golden。変更しない
+      expected_verified/  # 新しい比較用の値ファイル + golden_manifest.json
   eval_runs/            # Gemini bytes eval の実行結果 — git管理外 (README.mdのみ管理)
   blind_runs_from_test_cases/  # ブラインド実行ワークスペース — git管理外
   eval_config/
@@ -29,7 +30,7 @@ visa-eval/
 - `docs/AIブラインド抽出実行手順.md`: goldenを見せずにAI抽出を実行する手順
 - `docs/fixture_contract.md`: fixture入出力とCodex/Gemini評価フローの契約
 - `../visa-app/docs/008_eval_workflow/README.md`: evalの進め方、golden確認、Gemini bytes eval結果の解釈
-- `eval_config/suites/single_smoke.json`: 旧13ケース拡張用の参考スイート。現行はAmit/Kushangの2ケースを優先
+- `eval_config/suites/single_smoke.json`: 旧13ケース拡張用の参考スイート。現行fixtureは8ケースで、全件 `expected_verified` 確認済み
 - `eval_config/prompts/blind_single_case_prompt.md`: AI抽出時のプロンプトテンプレート
 
 ## PII・gitルール
@@ -42,14 +43,14 @@ visa-eval/
 
 1. `visa-eval/scripts/prepare_blind_eval_run.py` でCodex用ブラインド実行ディレクトリを作成
 2. Codex/AIエージェントで `blind_runs_from_test_cases/<run_id>/` 内の資料から `case_data.json`, `field_metadata.json`, `review.json` を抽出
-3. `expected/case_data.golden.json` と比較して精度を検証
+3. `expected_verified/case_data.golden.json` のうちmanifestで確認済みの抽出項目と比較
 4. 必要な場合だけ `application_data` を補助確認する
 
 Geminiを評価する場合は、自由操作させず `visa-eval/scripts/run_gemini_bytes_eval.py` で指定ファイルだけをbytesとして backend の scoped Gemini 抽出pipelineへ渡す。GCS/Firestoreは不要。通常フローは次の2コマンド。`application_data` は比較時に `case_data` から生成する。
 
 ```bash
 visa-app/backend/.venv/bin/python visa-eval/scripts/run_gemini_bytes_eval.py <fixture_dir> --run-id <run_id>
-visa-app/backend/.venv/bin/python visa-eval/scripts/compare_with_golden.py --generated visa-eval/eval_runs/<run_id>/<case_id> --expected <fixture_dir>/expected --targets case_data
+visa-app/backend/.venv/bin/python visa-eval/scripts/compare_with_golden.py --generated visa-eval/eval_runs/<run_id>/<case_id> --expected <fixture_dir>/expected_verified --targets case_data
 ```
 
 ### codex exec によるローカル実行例
@@ -57,7 +58,7 @@ visa-app/backend/.venv/bin/python visa-eval/scripts/compare_with_golden.py --gen
 ```bash
 # 1. blind run を作成
 visa-app/backend/.venv/bin/python visa-eval/scripts/prepare_blind_eval_run.py \
-  visa-eval/test_cases_from_raw/gijinkoku_a_company_round1/amit_tamang
+  visa-eval/test_cases_from_raw/<case_id>/<applicant_id>
 
 # 2. codex exec で AI 抽出を実行
 codex exec \

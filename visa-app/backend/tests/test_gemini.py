@@ -4,6 +4,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
+from google.genai import errors as genai_errors
 
 from extractors.gemini import (
     BBOX_MODEL_NAME,
@@ -146,6 +147,18 @@ def _field_value(value, quote=None, confidence=0.95):
     }
 
 
+def _field_value_without_ref(value):
+    return {
+        "value": value,
+        "source_ref": {
+            "document_id": "",
+            "page": 0,
+            "text_quote": "",
+            "confidence": 0,
+        },
+    }
+
+
 def _passport_candidate(document_id="doc_p", page=1, confidence=0.95):
     return {
         "document_id": document_id,
@@ -254,6 +267,12 @@ class TestBuildPrompt:
         assert "JSON boolean" in prompt
         assert "JSON number" in prompt
         assert "空文字やnullは使わない" in prompt
+        assert "12桁" in prompt
+        assert "完全な日付" in prompt
+        assert "applicant.occupation" in prompt
+        assert "employment.job_category_primary" in prompt
+        assert "建築・土木・測量技術 Architecture, civil engineering, surveying techniques" in prompt
+        assert "管理業務（経営者を除く） Management work (excluding executives)" in prompt
 
     def test_scoped_prompt_accepts_new_scope(self):
         prompt = build_scoped_prompt("applicant_identity", _CASE_META, _DOCUMENTS)
@@ -262,6 +281,15 @@ class TestBuildPrompt:
         assert "applicant.birth_date.value" in prompt
         assert "YYYY-MM-DD" in prompt
         assert "source_ref.text_quote" in prompt
+        assert "内部契約で指定したfield" in prompt
+
+    def test_scoped_prompt_separates_current_occupation_from_planned_job_category(self):
+        identity_prompt = build_scoped_prompt("applicant_identity", _CASE_META, _DOCUMENTS)
+        employment_prompt = build_scoped_prompt("employment", _CASE_META, _DOCUMENTS)
+
+        assert "申請人の現在の職業・身分" in identity_prompt
+        assert "予定業務の職種区分" in employment_prompt
+        assert "position_title" in employment_prompt
 
 
 # ---------- _build_ocr_context ------------------------------------------
@@ -311,6 +339,89 @@ class TestCallGemini:
         call = client.models.generate_content.call_args
         assert call.kwargs["model"] == MODEL_NAME
         _assert_sampling_parameters_omitted(call.kwargs["config"])
+
+    @patch("extractors.gemini.time.sleep")
+    def test_retries_retryable_error_until_success(self, mock_sleep):
+        client = MagicMock()
+        client.models.generate_content.side_effect = [
+            genai_errors.ServerError(
+                503,
+                {"error": {"status": "UNAVAILABLE", "message": "temporary body"}},
+            ),
+            _mock_gemini_response({}),
+        ]
+
+        result = _call_gemini(client, [], "prompt")
+
+        assert result == {}
+        assert client.models.generate_content.call_count == 2
+        mock_sleep.assert_called_once_with(1.0)
+
+    @patch("extractors.gemini.time.sleep")
+    def test_retries_429_until_success(self, mock_sleep):
+        client = MagicMock()
+        client.models.generate_content.side_effect = [
+            genai_errors.ClientError(
+                429,
+                {"error": {"status": "RESOURCE_EXHAUSTED", "message": "rate limited"}},
+            ),
+            _mock_gemini_response({}),
+        ]
+
+        result = _call_gemini(client, [], "prompt")
+
+        assert result == {}
+        assert client.models.generate_content.call_count == 2
+        mock_sleep.assert_called_once_with(1.0)
+
+    @patch("extractors.gemini.time.sleep")
+    def test_retryable_error_stops_after_three_attempts(self, mock_sleep):
+        client = MagicMock()
+        client.models.generate_content.side_effect = genai_errors.ServerError(
+            503,
+            {"error": {"status": "UNAVAILABLE", "message": "temporary body"}},
+        )
+
+        with pytest.raises(genai_errors.ServerError):
+            _call_gemini(client, [], "prompt")
+
+        assert client.models.generate_content.call_count == 3
+        assert [call.args[0] for call in mock_sleep.call_args_list] == [1.0, 2.0]
+
+    @patch("extractors.gemini.time.sleep")
+    def test_non_retryable_error_raises_without_retry(self, mock_sleep):
+        client = MagicMock()
+        client.models.generate_content.side_effect = genai_errors.ClientError(
+            403,
+            {"error": {"status": "PERMISSION_DENIED", "message": "do not log body"}},
+        )
+
+        with pytest.raises(genai_errors.ClientError):
+            _call_gemini(client, [], "prompt")
+
+        assert client.models.generate_content.call_count == 1
+        mock_sleep.assert_not_called()
+
+    @patch("extractors.gemini.time.sleep")
+    def test_retry_logs_do_not_include_error_body(self, mock_sleep, caplog):
+        client = MagicMock()
+        client.models.generate_content.side_effect = [
+            genai_errors.ServerError(
+                503,
+                {"error": {"status": "UNAVAILABLE", "message": "SECRET BODY"}},
+            ),
+            _mock_gemini_response({}),
+        ]
+
+        with caplog.at_level("WARNING", logger="extractors.gemini"):
+            _call_gemini(client, [], "prompt")
+
+        assert "SECRET BODY" not in caplog.text
+        assert "attempt" in caplog.text
+        assert "ServerError" in caplog.text
+        assert "503" in caplog.text
+        assert "scope" in caplog.text
+        assert "elapsed_ms" in caplog.text
 
     @patch("extractors.gemini.types.Part.from_bytes")
     @patch("extractors.gemini._get_client")
@@ -377,6 +488,7 @@ class TestCallGemini:
 
         assert "TANAKA TARO" not in caplog.text
         assert "Response head" not in caplog.text
+        assert client.models.generate_content.call_count == 1
 
 
 class TestExtractTextOnly:
@@ -461,6 +573,241 @@ class TestExtractTextOnly:
         assert result.display_case_data["employer"]["has_corporate_number"] is True
         assert result.case_data["applicant"]["immigration_history"]["entries_count"]["value"] == 0
         assert result.field_metadata["applicant.immigration_history.entries_count"]["confidence"] == 0.95
+
+    def test_build_extraction_result_normalizes_internal_identity_values_with_sources(self):
+        raw = {
+            "case_data": {
+                "applicant": {
+                    "sex": _field_value("男 Male", "男 Male"),
+                    "marital_status": _field_value("無 Single", "無 Single"),
+                },
+            },
+            "review": {},
+        }
+
+        result = _build_extraction_result(raw)
+
+        assert result.display_case_data["applicant"]["sex"] == "male"
+        assert result.display_case_data["applicant"]["marital_status"] == "single"
+        assert result.field_metadata["applicant.sex"]["source_refs"][0]["text_quote"] == "男 Male"
+        assert result.field_metadata["applicant.marital_status"]["source_refs"][0]["text_quote"] == "無 Single"
+
+    def test_build_extraction_result_accepts_only_thirteen_digit_corporate_number(self):
+        raw = {
+            "case_data": {
+                "employer": {
+                    "has_corporate_number": _field_value(False, "法人番号"),
+                    "corporate_number": _field_value("123-4567 8901 23", "123-4567 8901 23"),
+                },
+            },
+            "review": {},
+        }
+
+        result = _build_extraction_result(raw)
+
+        assert result.display_case_data["employer"]["corporate_number"] == "1234567890123"
+        assert result.display_case_data["employer"]["has_corporate_number"] is True
+        assert result.field_metadata["employer.corporate_number"]["source_refs"][0]["text_quote"] == "123-4567 8901 23"
+
+    def test_build_extraction_result_withholds_twelve_digit_corporate_number(self):
+        raw = {
+            "case_data": {
+                "employer": {
+                    "has_corporate_number": _field_value(True, "法人番号"),
+                    "corporate_number": _field_value("123-4567 8901 2", "123-4567 8901 2"),
+                },
+            },
+            "review": {"validation_errors": [], "missing_items": [], "findings": []},
+        }
+
+        result = _build_extraction_result(raw)
+
+        assert result.display_case_data["employer"]["corporate_number"] == ""
+        assert result.display_case_data["employer"]["has_corporate_number"] is False
+        corporate_meta = result.field_metadata["employer.corporate_number"]
+        has_corporate_number_meta = result.field_metadata["employer.has_corporate_number"]
+        assert corporate_meta["source_refs"] == []
+        assert corporate_meta["alternatives"][0]["value"] == "123-4567 8901 2"
+        assert corporate_meta["alternatives"][0]["source_refs"][0]["text_quote"] == "123-4567 8901 2"
+        assert has_corporate_number_meta["source_refs"] == []
+        assert has_corporate_number_meta["alternatives"][0]["value"] is True
+        assert has_corporate_number_meta["alternatives"][0]["source_refs"][0]["text_quote"] == "法人番号"
+        assert result.review["expected_route"] == "needs_review"
+        assert any("13桁" in error for error in result.review["validation_errors"])
+
+    def test_build_extraction_result_normalizes_full_joining_date(self):
+        raw = {
+            "case_data": {
+                "employment": {
+                    "joining_date": _field_value("2026/4/5", "2026/4/5"),
+                },
+            },
+            "review": {},
+        }
+
+        result = _build_extraction_result(raw)
+
+        assert result.display_case_data["employment"]["joining_date"] == "2026-04-05"
+        assert result.field_metadata["employment.joining_date"]["source_refs"][0]["text_quote"] == "2026/4/5"
+
+    def test_build_extraction_result_withholds_month_only_joining_date(self):
+        raw = {
+            "case_data": {
+                "employment": {
+                    "joining_date": _field_value("2026-04", "2026-04"),
+                },
+            },
+            "review": {"validation_errors": [], "missing_items": [], "findings": []},
+        }
+
+        result = _build_extraction_result(raw)
+
+        assert result.display_case_data["employment"]["joining_date"] == ""
+        joining_meta = result.field_metadata["employment.joining_date"]
+        assert joining_meta["source_refs"] == []
+        assert joining_meta["alternatives"][0]["value"] == "2026-04"
+        assert any("日付補完せず" in error for error in result.review["validation_errors"])
+
+    def test_build_extraction_result_routes_position_conflict_to_review(self):
+        raw = {
+            "case_data": {
+                "employment": {
+                    "has_position": _field_value(False, "役職 無"),
+                    "position_title": _field_value("Project Manager", "Project Manager"),
+                },
+            },
+            "review": {"validation_errors": [], "missing_items": [], "findings": []},
+        }
+
+        result = _build_extraction_result(raw)
+
+        assert result.display_case_data["employment"]["has_position"] is True
+        assert result.display_case_data["employment"]["position_title"] == "Project Manager"
+        assert result.field_metadata["employment.has_position"]["source_refs"][0]["text_quote"] == "Project Manager"
+        assert result.field_metadata["employment.has_position"]["alternatives"][0]["value"] is False
+        assert result.field_metadata["employment.has_position"]["alternatives"][0]["source_refs"][0]["text_quote"] == "役職 無"
+        assert result.review["expected_route"] == "needs_review"
+        assert any("役職なしの根拠と役職名の根拠" in error for error in result.review["validation_errors"])
+
+    def test_build_extraction_result_derives_has_position_true_when_false_has_no_source(self):
+        raw = {
+            "case_data": {
+                "employment": {
+                    "has_position": _field_value_without_ref(False),
+                    "position_title": _field_value("Project Manager", "Project Manager"),
+                },
+            },
+            "review": {},
+        }
+
+        result = _build_extraction_result(raw)
+
+        assert result.display_case_data["employment"]["has_position"] is True
+        assert result.display_case_data["employment"]["position_title"] == "Project Manager"
+        assert result.field_metadata["employment.has_position"]["source_refs"][0]["text_quote"] == "Project Manager"
+
+    def test_build_extraction_result_clears_unsupported_position_title_without_refs(self):
+        raw = {
+            "case_data": {
+                "employment": {
+                    "has_position": _field_value(False, "役職 無"),
+                    "position_title": _field_value_without_ref("Project Manager"),
+                },
+            },
+            "review": {},
+        }
+
+        result = _build_extraction_result(raw)
+
+        assert result.display_case_data["employment"]["has_position"] is False
+        assert result.display_case_data["employment"]["position_title"] == ""
+        assert result.field_metadata["employment.position_title"]["source_refs"] == []
+
+    def test_build_extraction_result_aligns_has_position_true_from_title(self):
+        raw = {
+            "case_data": {
+                "employment": {
+                    "has_position": _field_value_without_ref(""),
+                    "position_title": _field_value("Project Manager", "Project Manager"),
+                },
+            },
+            "review": {},
+        }
+
+        result = _build_extraction_result(raw)
+
+        assert result.display_case_data["employment"]["has_position"] is True
+        assert result.display_case_data["employment"]["position_title"] == "Project Manager"
+        assert result.field_metadata["employment.has_position"]["source_refs"][0]["text_quote"] == "Project Manager"
+
+    def test_build_extraction_result_normalizes_fixture_job_category_labels(self):
+        raw = {
+            "case_data": {
+                "employment": {
+                    "job_category_primary": _field_value("建築技術者", "建築技術者"),
+                },
+            },
+            "review": {},
+        }
+
+        result = _build_extraction_result(raw)
+
+        assert (
+            result.display_case_data["employment"]["job_category_primary"]
+            == "建築・土木・測量技術 Architecture, civil engineering, surveying techniques"
+        )
+        assert result.field_metadata["employment.job_category_primary"]["source_refs"][0]["text_quote"] == "建築技術者"
+
+    def test_build_extraction_result_normalizes_management_job_category_label(self):
+        raw = {
+            "case_data": {
+                "employment": {
+                    "job_category_primary": _field_value("Management work", "Management work"),
+                },
+            },
+            "review": {},
+        }
+
+        result = _build_extraction_result(raw)
+
+        assert (
+            result.display_case_data["employment"]["job_category_primary"]
+            == "管理業務（経営者を除く） Management work (excluding executives)"
+        )
+        assert result.field_metadata["employment.job_category_primary"]["source_refs"][0]["text_quote"] == "Management work"
+
+    def test_build_extraction_result_does_not_normalize_ambiguous_job_category_label(self):
+        raw = {
+            "case_data": {
+                "employment": {
+                    "job_category_primary": _field_value("技術者", "技術者"),
+                },
+            },
+            "review": {},
+        }
+
+        result = _build_extraction_result(raw)
+
+        assert result.display_case_data["employment"]["job_category_primary"] == "技術者"
+
+    def test_build_extraction_result_clears_has_position_source_when_deriving_false(self):
+        raw = {
+            "case_data": {
+                "employment": {
+                    "has_position": _field_value(True, "役職 有"),
+                    "position_title": _field_value("", ""),
+                },
+            },
+            "review": {"validation_errors": [], "missing_items": [], "findings": []},
+        }
+
+        result = _build_extraction_result(raw)
+
+        assert result.display_case_data["employment"]["has_position"] is False
+        assert result.field_metadata["employment.has_position"]["source_refs"] == []
+        assert result.field_metadata["employment.has_position"]["alternatives"][0]["value"] is True
+        assert result.field_metadata["employment.has_position"]["alternatives"][0]["source_refs"][0]["text_quote"] == "役職 有"
+        assert result.review["expected_route"] == "needs_review"
 
     def test_build_extraction_result_allows_typed_default_without_source_ref(self):
         raw = {
