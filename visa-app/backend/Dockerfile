@@ -20,6 +20,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/main.py .
 COPY backend/auth.py .
 COPY backend/application_data.py .
+COPY backend/rasens_definitions.py .
 COPY backend/data/ data/
 COPY backend/extractors/ extractors/
 COPY --from=frontend-build /build/dist/ static/

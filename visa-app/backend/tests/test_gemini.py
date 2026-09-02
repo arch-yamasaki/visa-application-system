@@ -271,6 +271,24 @@ class TestBuildPrompt:
         assert "applicant.occupation" in prompt
         assert "employment.job_category_primary" in prompt
 
+    def test_legacy_prompt_includes_rasens_job_category_options_once(self):
+        prompt = build_extraction_prompt(_CASE_META, _DOCUMENTS)
+
+        assert prompt.count("## RASENS選択肢") == 1
+        assert "根拠資料から予定業務を分類できる場合だけ" in prompt
+        assert "分類できない場合は既存契約どおりvalueを空文字" in prompt
+        assert "建築・土木・測量技術 Architecture, civil engineering, surveying techniques" in prompt
+        assert "情報処理・通信技術 Information processing, communications technology" in prompt
+
+    def test_legacy_prompt_separates_identity_authority_rules(self):
+        prompt = build_extraction_prompt(_CASE_META, _DOCUMENTS)
+
+        assert "現在の職業・身分として明記された値だけを使うこと" in prompt
+        assert "学位、資格、採用後の予定業務、職種区分から推測せず" in prompt
+        assert "旅券や身分事項書類の出生地欄を優先" in prompt
+        assert "本国住所・現住所・会社所在地を代用せず" in prompt
+        assert "本国の現住所・居住地として明記された値を優先" in prompt
+
     def test_scoped_prompt_accepts_new_scope(self):
         prompt = build_scoped_prompt("applicant_identity", _CASE_META, _DOCUMENTS)
         assert "source_ref" in prompt
@@ -285,8 +303,34 @@ class TestBuildPrompt:
         employment_prompt = build_scoped_prompt("employment", _CASE_META, _DOCUMENTS)
 
         assert "申請人の現在の職業・身分" in identity_prompt
+        assert "現在の職業・身分として明記された値だけを使い" in identity_prompt
+        assert "学位、資格、採用後の予定業務、職種区分から推測しない" in identity_prompt
         assert "予定業務の職種区分" in employment_prompt
         assert "position_title" in employment_prompt
+
+    def test_scoped_prompt_separates_birth_place_from_home_country_address(self):
+        prompt = build_scoped_prompt("applicant_identity", _CASE_META, _DOCUMENTS)
+
+        assert "出生地欄を優先" in prompt
+        assert "国名と都市・地域名が資料上で確認できる場合" in prompt
+        assert "本国住所・現住所・会社所在地を代用しない" in prompt
+        assert "本国の現住所・居住地として明記された値を優先" in prompt
+        assert "出生地を代用しない" in prompt
+
+    def test_employment_prompt_includes_rasens_job_category_options(self):
+        prompt = build_scoped_prompt("employment", _CASE_META, _DOCUMENTS)
+
+        assert "## RASENS選択肢" in prompt
+        assert "根拠資料から予定業務を分類できる場合だけ" in prompt
+        assert "分類できない場合は既存契約どおりvalueを空文字" in prompt
+        assert "建築・土木・測量技術 Architecture, civil engineering, surveying techniques" in prompt
+        assert "情報処理・通信技術 Information processing, communications technology" in prompt
+        assert "- 選択してください" not in prompt
+
+    def test_job_category_options_are_only_in_employment_prompt(self):
+        prompt = build_scoped_prompt("applicant_identity", _CASE_META, _DOCUMENTS)
+
+        assert "## RASENS選択肢" not in prompt
 
 
 # ---------- _build_ocr_context ------------------------------------------

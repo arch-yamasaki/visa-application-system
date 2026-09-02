@@ -3,6 +3,10 @@
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from rasens_definitions import select_option_texts_for_canonical_id
+
+JOB_CATEGORY_PRIMARY_PATH = "employment.job_category_primary"
+
 _TEMPLATE = """\
 あなたは日本の在留資格申請の構造化データ抽出AIです。
 
@@ -16,6 +20,8 @@ _TEMPLATE = """\
 {document_descriptions}
 
 ## 指示
+
+{rasens_select_options}
 
 提供された書類から以下の3つのJSONオブジェクトを含む単一のJSONを出力してください。
 
@@ -179,10 +185,10 @@ case_data のキーも必ず canonical v2 path とすること。旧path互換�
 - `employer.corporate_number`: 法人番号は13桁の数字のみ（ハイフン・スペース等の記号は除去）。記号除去後に13桁でない場合は補完せず空文字にし、reviewへ記録すること。12桁の会社法人等番号を13桁へ補完してはいけない。
 - `applicant.sex`: 内部値は `male` または `female` にすること。原文の「男 Male」「女 Female」等は source_ref.text_quote に残し、valueだけ内部値へ正規化すること。
 - `applicant.marital_status`: 内部値は `single` または `married` にすること。原文の「無 Single」「有 Married」等は source_ref.text_quote に残し、valueだけ内部値へ正規化すること。
-- `applicant.occupation`: 現在の職業・身分を抽出すること。採用後の予定業務や職種区分をここへ入れないこと。
+- `applicant.occupation`: 申請人の現在の職業・身分として明記された値だけを使うこと。学位、資格、採用後の予定業務、職種区分から推測せず、予定業務の職種区分は `employment.job_category_primary` に出力すること。
 - `applicant.name_roman`: 旅券の顔写真側の身分事項欄(VIZ)にある氏名を、姓→名の順で半角英字大文字スペース区切りにすること。例: `BHANDARI ASHWIN`。MRZだけを正本にしないこと。
-- `applicant.birth_place`: 出生地だけを抽出し、本国住所や現住所と取り違えないこと。国名と都市・地域名が資料上で確認できる場合は `国名 都市・地域名` の順にすること。資料にない住所要素は補わないこと。
-- `applicant.home_country_address`: 本国の現住所・居住地を抽出し、出生地や日本の勤務先住所と取り違えないこと。資料にない住所要素は補わないこと。
+- `applicant.birth_place`: 旅券や身分事項書類の出生地欄を優先すること。国名と都市・地域名が資料上で確認できる場合は `国名 都市・地域名` の順にすること。本国住所・現住所・会社所在地を代用せず、資料にない国名・住所要素を補わないこと。
+- `applicant.home_country_address`: 履歴書、申請人情報、住所欄などで本国の現住所・居住地として明記された値を優先すること。出生地や日本の勤務先住所を代用せず、資料にない住所要素を補わないこと。
 - `applicant.japan_contact.postal_code`, `applicant.japan_contact.phone`, `applicant.japan_contact.mobile`, `employer.postal_code`, `employer.phone`, `employer.employment_insurance_office_number`: 半角数字のみ。ハイフン、空白、括弧は除去すること。
 - `employer.employment_insurance_office_number`: 労働保険番号ではなく、11桁の雇用保険適用事業所番号を抽出すること。14桁の労働保険番号しかない場合は空文字にし、この欄へ転記しないこと。
 - `employer.name`: 日本の所属機関について日本語の商号・法人名が資料にある場合は、その漢字・かな表記を優先すること。英訳名を作らないこと。
@@ -192,7 +198,7 @@ case_data のキーも必ず canonical v2 path とすること。旧path互換�
 - `applicant.employment_history`: 職歴がある場合だけ最大3件まで出力すること。いなければ `has_employment_history` は `false`、配列は空にすること。会社名の現地語表記は `company_name_local` を使うこと。
 - `applicant.employment_history[].company_name_local`: RASENSの「漢字表記」欄に入る値なので、漢字を含む勤務先名が分かる場合だけ出力し、英字のみ・現地文字のみの場合は空文字にすること。
 - `employment.joining_date`: valueは `YYYY-MM-DD` の完全な日付だけにすること。年月だけ、月だけ、年だけしか分からない場合は日付を補完せず空文字にし、reviewへ記録すること。
-- `employment.job_category_primary`: 申請先で従事予定の業務について、RASENSの職種区分ラベルを正確に入れること。申請人の現在職業 `applicant.occupation` と混ぜないこと。
+- `employment.job_category_primary`: 根拠資料から申請先で従事予定の業務を分類できる場合だけ、RASENSの職種区分ラベルを正確に入れること。分類不能なら空文字とし、reviewに記録すること。申請人の現在職業 `applicant.occupation` と混ぜないこと。
 - `employment.has_position`: `employment.position_title` が非空なら `true`、空なら `false` に揃えること。
 - `applicant.education[].level`: RASENSで選ぶ学歴区分（大学、大学院等）を入れること。学校名や学位名の原文を混ぜないこと。
 - `applicant.education[].level_detail`: 学歴区分だけでは足りない補足が原資料に明記されている場合だけ入れること。`level` の別表記を重複して入れないこと。
@@ -239,8 +245,13 @@ _SCOPE_INSTRUCTIONS: dict[str, str] = {
         "source_refのdocument_idとpageを必ず同じ候補ページにしてください。"
         "`applicant.name_roman` は姓→名の順で半角英字大文字スペース区切りにし、"
         "例として `BHANDARI ASHWIN` の形式にしてください。"
-        "`applicant.birth_place` は出生地、`applicant.home_country_address` は本国の現住所として区別し、"
-        "資料にない住所要素を補わないでください。"
+        "`applicant.birth_place` は旅券や身分事項書類の出生地欄を優先し、"
+        "本国住所・現住所・会社所在地を代用しないでください。"
+        "`applicant.home_country_address` は履歴書、申請人情報、住所欄などで"
+        "本国の現住所・居住地として明記された値を優先し、出生地を代用しないでください。"
+        "`applicant.occupation` は申請人の現在の職業・身分として明記された値だけを使い、"
+        "学位、資格、採用後の予定業務、職種区分から推測しないでください。"
+        "資料にない住所要素や職業名を補わないでください。"
         "`applicant.birth_date.value` は原本が `02 JAN 1990` 等の表記でも必ず"
         "`1990-01-02` のようなYYYY-MM-DDに正規化し、source_ref.text_quoteは"
         "日付の英字月や区切り記号を含め原文のまま変更しないでください。"
@@ -343,10 +354,11 @@ NG: `{"value": "YAMADA TARO", "source_ref": {"document_id": "", "page": 0, "text
 - 生年月日（`applicant.birth_date`）: valueは必ず4桁年の`YYYY-MM-DD`。原本が`DD MMM YYYY`、`DD-MMM-YYYY`等でもvalueだけ正規化し、source_ref.text_quoteは原文表記をそのまま引用すること。2桁年や解釈が曖昧な数値日付を推測しないこと。
 - 法人番号（`employer.corporate_number`）: 13桁の数字のみ。ハイフン・スペース等の記号は除去すること。記号除去後に13桁でなければ空文字にし、12桁を補完してはいけない。
 - 氏名（`applicant.name_roman`）: 旅券VIZの表記を優先し、姓→名の順で半角英字大文字スペース区切り。例: `BHANDARI ASHWIN`。
-- 出生地（`applicant.birth_place`）と本国住所（`applicant.home_country_address`）: 出生地と現住所を取り違えず、資料にない住所要素を補わないこと。
+- 出生地（`applicant.birth_place`）: 旅券や身分事項書類の出生地欄を優先する。国名と都市・地域名が資料上で確認できる場合は `国名 都市・地域名` の順にする。本国住所・現住所・会社所在地を代用せず、資料にない国名・住所要素を補わないこと。
 - 性別（`applicant.sex`）: valueは `male` または `female`。原文の「男 Male」「女 Female」等は source_ref.text_quote に残すこと。
 - 配偶者の有無（`applicant.marital_status`）: valueは `single` または `married`。原文の「無 Single」「有 Married」等は source_ref.text_quote に残すこと。
-- 職業（`applicant.occupation`）: 申請人の現在の職業・身分。予定業務の職種区分は `employment.job_category_primary` に出力し、ここに混ぜないこと。
+- 職業（`applicant.occupation`）: 申請人の現在の職業・身分として明記された値だけを使う。学位、資格、採用後の予定業務、職種区分から推測せず、予定業務の職種区分は `employment.job_category_primary` に出力すること。
+- 本国住所（`applicant.home_country_address`）: 履歴書、申請人情報、住所欄などで本国の現住所・居住地として明記された値を優先する。出生地や日本の勤務先住所を代用せず、資料にない住所要素を補わないこと。
 - 郵便番号・電話番号・雇用保険適用事業所番号: 半角数字のみ。ハイフン・空白・括弧を除去すること。
 - 査証申請予定地（`entry_plan.visa_application_location`）: 国名ではなく在外公館所在地の都市名。ネパールは `Kathmandu`。
 - 雇用保険適用事業所番号（`employer.employment_insurance_office_number`）: 11桁だけを出力する。14桁の労働保険番号は転記しないこと。
@@ -357,7 +369,7 @@ NG: `{"value": "YAMADA TARO", "source_ref": {"document_id": "", "page": 0, "text
 - 契約形態（`employment.contract_type`）: 雇用、委任、請負、その他のいずれかで出力すること。Offer Letter等の雇用契約は雇用とする。
 - 入社日（`employment.joining_date`）: valueは `YYYY-MM-DD` の完全な日付のみ。年月・年だけしか分からない場合に `01` 日付を補完しないこと。
 - 役職（`employment.has_position`, `employment.position_title`）: 役職がある場合だけ `has_position=true` かつ `position_title` 非空にすること。`has_position=false` の場合は `position_title` を空にすること。役職名が資料にない場合は職種や業務内容を役職名として作らないこと。
-- 職種（`employment.job_category_primary`）: 予定業務のRASENS職種区分を正確な選択肢ラベルで出力すること。申請人の現在職業 `applicant.occupation` とは別物として扱うこと。
+- 職種（`employment.job_category_primary`）: 根拠資料から予定業務を分類できる場合だけ、RASENS職種区分を正確な選択肢ラベルで出力すること。分類不能なら空文字とし、reviewに記録すること。申請人の現在職業 `applicant.occupation` とは別物として扱うこと。
 - 就労予定期間（`employment.employment_period_type`, `employment.employment_period_years`, `employment.employment_period_months`）: 今日の日付と雇用開始日・契約終了日から推測する。明確な終了日がなければ `有期`、年数 `1`、月数 `0` を基本とする。
 - 所属機関の主たる業種（`employer.industry_primary`）: RASENSの選択肢に合う日本語名を優先し、建設会社なら `建設業`、不動産会社なら `不動産・物品賃貸業`、IT/ソフトウェア会社なら `情報通信業` とする。
 - 上陸予定港（`entry_plan.planned_port`）: 勤務先所在地から推測し、東京圏は羽田または成田、中部圏は中部国際、関西圏は関西国際、北海道は新千歳、中国地方は広島、九州は福岡を基本とする。
@@ -413,6 +425,23 @@ def _today_jst() -> str:
     return datetime.now(ZoneInfo("Asia/Tokyo")).date().isoformat()
 
 
+def _job_category_primary_options() -> tuple[str, ...]:
+    return select_option_texts_for_canonical_id(JOB_CATEGORY_PRIMARY_PATH)
+
+
+def _format_job_category_options() -> str:
+    options = _job_category_primary_options()
+    lines = [
+        "## RASENS選択肢",
+        f"`{JOB_CATEGORY_PRIMARY_PATH}` は、根拠資料から予定業務を分類できる場合だけ、以下の完全一致ラベルから1つ選ぶこと。",
+        "分類できない場合は既存契約どおりvalueを空文字、source_refを空値にし、reviewに記録すること。",
+        "短縮、言い換え、独自ラベルは禁止。分類できる場合、valueには下記ラベルをそのまま出力すること。",
+        "",
+    ]
+    lines.extend(f"- {option}" for option in options)
+    return "\n".join(lines)
+
+
 def build_scoped_prompt(
     scope: str,
     case_meta: dict,
@@ -457,6 +486,10 @@ def build_scoped_prompt(
     parts.append("## 指示")
     parts.append(instruction + "\n")
 
+    if scope == "employment":
+        parts.append(_format_job_category_options())
+        parts.append("")
+
     if scope == "review" and extra_context:
         import json as _json
         parts.append("## 抽出済みデータ（照合対象）")
@@ -490,4 +523,5 @@ def build_extraction_prompt(
         target_status=case_context.get("target_status", "unknown"),
         today=_today_jst(),
         document_descriptions=doc_text,
+        rasens_select_options=_format_job_category_options(),
     )

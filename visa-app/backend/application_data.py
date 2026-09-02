@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import os
-import json
 import copy
 import re
 import unicodedata
 from decimal import Decimal, InvalidOperation
-from pathlib import Path
 from typing import Any
+
+from rasens_definitions import (
+    default_form_definitions_path,
+    default_mapping_path,
+    load_default_form_definitions,
+    load_default_mapping,
+    load_json,
+)
 
 
 EMPTY_STRINGS = {"unknown", "not_applicable", "n/a", "na"}
@@ -529,48 +535,6 @@ def visible(case_data: dict[str, Any], mapping_item: dict[str, Any]) -> bool:
         if operator == "!=" and actual == expected:
             return False
     return True
-
-
-BACKEND_DIR = Path(__file__).resolve().parent
-WORKSPACE_DIR = BACKEND_DIR.parents[1] if len(BACKEND_DIR.parents) > 1 else BACKEND_DIR
-
-
-def load_json(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def default_mapping_path() -> Path:
-    env_path = os.environ.get("RASENS_MAPPING_PATH")
-    if env_path:
-        return Path(env_path)
-    workspace_path = WORKSPACE_DIR / "rasens-autofill/data/mappings/rasens_offer_mapping_v2.json"
-    if workspace_path.exists():
-        return workspace_path
-    return BACKEND_DIR / "data/mappings/rasens_offer_mapping_v2.json"
-
-
-def default_form_definitions_path() -> Path | None:
-    env_path = os.environ.get("RASENS_FORM_DEFINITIONS_PATH")
-    if env_path:
-        return Path(env_path)
-    workspace_path = WORKSPACE_DIR / "rasens-autofill/data/form_definitions/rasens_offer_fields.json"
-    if workspace_path.exists():
-        return workspace_path
-    backend_path = BACKEND_DIR / "data/form_definitions/rasens_offer_fields.json"
-    if backend_path.exists():
-        return backend_path
-    return None
-
-
-def load_default_mapping() -> dict[str, Any]:
-    return load_json(default_mapping_path())
-
-
-def load_default_form_definitions() -> dict[str, Any]:
-    path = default_form_definitions_path()
-    if path is None:
-        return {}
-    return load_json(path)
 
 
 def _field_controls(
